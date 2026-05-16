@@ -1,0 +1,94 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+
+type UserStatus = "active" | "invited" | "disabled";
+
+type Props = {
+  userId: string;
+  status: UserStatus;
+  isSuperAdmin: boolean;
+  isSelf: boolean;
+};
+
+export function UserActions({ userId, status, isSuperAdmin, isSelf }: Props) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  async function patch(body: Record<string, unknown>) {
+    setError(null);
+    const res = await fetch(`/api/super-admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setError(json.error ?? `Request failed (${res.status})`);
+      return;
+    }
+    startTransition(() => router.refresh());
+  }
+
+  const canDisable = status === "active" && !isSelf;
+  const canEnable = status === "disabled";
+  const canRevokeSuperAdmin = isSuperAdmin && !isSelf;
+  const canGrantSuperAdmin = !isSuperAdmin;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {canDisable && (
+        <button
+          type="button"
+          onClick={() => patch({ status: "disabled" })}
+          disabled={pending}
+          className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"
+        >
+          Disable
+        </button>
+      )}
+      {canEnable && (
+        <button
+          type="button"
+          onClick={() => patch({ status: "active" })}
+          disabled={pending}
+          className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"
+        >
+          Enable
+        </button>
+      )}
+      {canGrantSuperAdmin && (
+        <button
+          type="button"
+          onClick={() => patch({ isSuperAdmin: true })}
+          disabled={pending}
+          className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"
+        >
+          Make super admin
+        </button>
+      )}
+      {canRevokeSuperAdmin && (
+        <button
+          type="button"
+          onClick={() => patch({ isSuperAdmin: false })}
+          disabled={pending}
+          className="rounded-md border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+        >
+          Revoke super admin
+        </button>
+      )}
+      {isSelf && (
+        <span className="text-xs italic text-[var(--muted-foreground)]">
+          (you)
+        </span>
+      )}
+      {error && (
+        <span className="text-xs text-red-600" role="alert">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
