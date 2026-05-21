@@ -8,11 +8,10 @@ type UserStatus = "active" | "invited" | "disabled";
 type Props = {
   userId: string;
   status: UserStatus;
-  isSuperAdmin: boolean;
   isSelf: boolean;
 };
 
-export function UserActions({ userId, status, isSuperAdmin, isSelf }: Props) {
+export function UserActions({ userId, status, isSelf }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -34,8 +33,6 @@ export function UserActions({ userId, status, isSuperAdmin, isSelf }: Props) {
 
   const canDisable = status === "active" && !isSelf;
   const canEnable = status === "disabled";
-  const canRevokeSuperAdmin = isSuperAdmin && !isSelf;
-  const canGrantSuperAdmin = !isSuperAdmin;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -57,26 +54,6 @@ export function UserActions({ userId, status, isSuperAdmin, isSelf }: Props) {
           className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"
         >
           Enable
-        </button>
-      )}
-      {canGrantSuperAdmin && (
-        <button
-          type="button"
-          onClick={() => patch({ isSuperAdmin: true })}
-          disabled={pending}
-          className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"
-        >
-          Make super admin
-        </button>
-      )}
-      {canRevokeSuperAdmin && (
-        <button
-          type="button"
-          onClick={() => patch({ isSuperAdmin: false })}
-          disabled={pending}
-          className="rounded-md border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-        >
-          Revoke super admin
         </button>
       )}
       {isSelf && (

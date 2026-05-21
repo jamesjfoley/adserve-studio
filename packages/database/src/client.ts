@@ -28,9 +28,13 @@ export const db = drizzle(queryClient, { schema });
 /**
  * Execute a callback within a tenant's RLS context.
  *
- * This sets the `app.current_tenant` session variable before running
- * the callback, which activates PostgreSQL Row-Level Security policies.
- * The variable is scoped to the transaction, so it automatically resets.
+ * Sets `app.current_tenant_id` for the duration of a transaction. The
+ * tenant_isolation policy on every tenant-scoped table checks this
+ * value to restrict visible rows. SET LOCAL auto-resets on commit/rollback.
+ *
+ * NOTE: as of Task 8 the policies are configured but the app DATABASE_URL
+ * still connects as a Postgres superuser in dev, which bypasses RLS. See
+ * docs/02-rls.md for the production switchover.
  *
  * Usage:
  *   const contacts = await withTenant(tenantId, async (tx) => {
@@ -44,11 +48,26 @@ export async function withTenant<T>(
   callback: (tx: typeof db) => Promise<T>
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    // Set the tenant context for this transaction
-    // SET LOCAL is scoped to the current transaction only
     await tx.execute(
-      `SET LOCAL app.current_tenant = '${tenantId}'`
+      `SET LOCAL app.current_tenant_id = '${tenantId}'`
     );
+    return callback(tx as unknown as typeof db);
+  });
+}
+
+/**
+ * Execute a callback with the RLS bypass flag set, so that policies on
+ * tenant-scoped tables allow access across all tenants. Use ONLY for
+ * super admin code paths where cross-tenant visibility is required
+ * (e.g. /super-admin pages and APIs).
+ *
+ * The bypass is scoped to the transaction via SET LOCAL.
+ */
+export async function withSuperAdminBypass<T>(
+  callback: (tx: typeof db) => Promise<T>
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(`SET LOCAL app.bypass_rls = 'on'`);
     return callback(tx as unknown as typeof db);
   });
 }

@@ -63,6 +63,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     isSuperAdmin?: unknown;
   };
 
+  // Role separation: super admin status is not editable via this endpoint.
+  // Super admin accounts are provisioned separately, not promoted from
+  // (or demoted to) tenant users.
+  if (isSuperAdmin !== undefined) {
+    return NextResponse.json(
+      {
+        error:
+          "Super admin status is not editable. Super admin accounts are provisioned separately.",
+      },
+      { status: 400 }
+    );
+  }
+
   const updates: Record<string, unknown> = { updatedAt: new Date() };
 
   if (status !== undefined) {
@@ -80,16 +93,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     updates.status = status;
   }
 
-  if (isSuperAdmin !== undefined) {
-    if (typeof isSuperAdmin !== "boolean") {
-      return NextResponse.json(
-        { error: "Field 'isSuperAdmin' must be a boolean" },
-        { status: 400 }
-      );
-    }
-    updates.isSuperAdmin = isSuperAdmin;
-  }
-
   if (Object.keys(updates).length === 1) {
     return NextResponse.json(
       { error: "No updatable fields provided" },
@@ -98,19 +101,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   // Self-protection: prevent self-lockout
-  if (id === self.id) {
-    if (updates.status === "disabled") {
-      return NextResponse.json(
-        { error: "You cannot disable your own account" },
-        { status: 403 }
-      );
-    }
-    if (updates.isSuperAdmin === false) {
-      return NextResponse.json(
-        { error: "You cannot revoke your own super admin access" },
-        { status: 403 }
-      );
-    }
+  if (id === self.id && updates.status === "disabled") {
+    return NextResponse.json(
+      { error: "You cannot disable your own account" },
+      { status: 403 }
+    );
   }
 
   const [updated] = await db

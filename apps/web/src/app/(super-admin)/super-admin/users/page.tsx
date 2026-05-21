@@ -172,7 +172,6 @@ export default async function UsersListPage({
                     <UserActions
                       userId={u.id}
                       status={u.status}
-                      isSuperAdmin={u.isSuperAdmin}
                       isSelf={isSelf}
                     />
                   </td>

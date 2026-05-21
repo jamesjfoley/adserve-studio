@@ -9,11 +9,12 @@ import {
   index,
   primaryKey,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   tenantStatusEnum,
   userStatusEnum,
   membershipStatusEnum,
+  invitationStatusEnum,
 } from "./enums";
 import { modules } from "./modules";
 
@@ -29,6 +30,11 @@ export const tenants = pgTable(
     slug: text("slug").notNull().unique(),
     status: tenantStatusEnum("status").notNull().default("active"),
     settings: jsonb("settings").notNull().default({}),
+    // Profile fields (Task 5)
+    contactEmail: text("contact_email"),
+    phone: text("phone"),
+    address: text("address"),
+    logoUrl: text("logo_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -238,6 +244,62 @@ export const tenantMembershipsRelations = relations(
       fields: [tenantMemberships.invitedBy],
       references: [users.id],
       relationName: "inviter",
+    }),
+  })
+);
+
+// ============================================================
+// Tenant invitations (pending Clerk invites)
+// ============================================================
+
+export const tenantInvitations = pgTable(
+  "tenant_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "restrict" }),
+    invitedBy: uuid("invited_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    clerkInvitationId: text("clerk_invitation_id"),
+    status: invitationStatusEnum("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Only one pending invitation per (tenant, email). Accepted/revoked/expired
+    // rows are kept for history and don't block new pending invites.
+    uniqueIndex("idx_invitations_tenant_email_pending")
+      .on(table.tenantId, table.email)
+      .where(sql`status = 'pending'`),
+    index("idx_invitations_tenant").on(table.tenantId),
+    index("idx_invitations_status").on(table.status),
+  ]
+);
+
+export const tenantInvitationsRelations = relations(
+  tenantInvitations,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [tenantInvitations.tenantId],
+      references: [tenants.id],
+    }),
+    role: one(roles, {
+      fields: [tenantInvitations.roleId],
+      references: [roles.id],
+    }),
+    inviter: one(users, {
+      fields: [tenantInvitations.invitedBy],
+      references: [users.id],
     }),
   })
 );

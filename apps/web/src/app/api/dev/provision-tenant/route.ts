@@ -39,6 +39,18 @@ export async function GET() {
     throw err;
   }
 
+  // Role separation: super admin accounts must never belong to a tenant.
+  // Refuse to provision a tenant when the calling user is a super admin.
+  if (user.isSuperAdmin) {
+    return NextResponse.json(
+      {
+        error:
+          "Super admin accounts cannot be added to tenants. Sign in with a separate non-super-admin account to provision a tenant.",
+      },
+      { status: 403 }
+    );
+  }
+
   const client = await clerkClient();
   const clerkOrg = await client.organizations.getOrganization({
     organizationId: orgId,
