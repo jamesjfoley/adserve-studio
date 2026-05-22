@@ -19,6 +19,12 @@ FROM node:20-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
 
+# NEXT_PUBLIC_* env vars must be present at build time — Next.js inlines them
+# into the client bundle. Runtime injection (via ECS task secrets) is too late.
+# Pass with: docker build --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
