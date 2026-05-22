@@ -2,6 +2,7 @@
 # Stage 1: Install dependencies
 # ============================================================
 FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
 
