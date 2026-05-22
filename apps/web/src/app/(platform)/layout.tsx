@@ -5,10 +5,10 @@ import {
   Building2,
   TrendingUp,
   LayoutDashboard,
-  Settings,
   Shield,
 } from "lucide-react";
 import { getSuperAdminOrNull } from "@/lib/super-admin";
+import { getTenantAdminContextOrNull } from "@/lib/tenant-admin";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -17,17 +17,18 @@ const navigation = [
   { name: "Deals", href: "/crm/deals", icon: TrendingUp },
 ];
 
-const adminNavigation = [
-  { name: "Users & roles", href: "/admin/users", icon: Shield },
-  { name: "Settings", href: "/admin/settings", icon: Settings },
-];
-
 export default async function PlatformLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const superAdmin = await getSuperAdminOrNull();
+  // Role separation: getSuperAdminOrNull and getTenantAdminContextOrNull
+  // are mutually exclusive at the data layer (Task 0 + Task 2), so at most
+  // one of these is non-null for any user.
+  const [superAdmin, tenantAdminCtx] = await Promise.all([
+    getSuperAdminOrNull(),
+    getTenantAdminContextOrNull(),
+  ]);
 
   return (
     <div className="flex h-screen">
@@ -60,26 +61,24 @@ export default async function PlatformLayout({
           </div>
         )}
 
+        {tenantAdminCtx && (
+          <div className="border-b border-[var(--border)] p-3">
+            <Link
+              href="/admin"
+              className="flex items-center gap-3 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 transition-colors"
+            >
+              <Shield className="h-4 w-4" />
+              Admin
+            </Link>
+          </div>
+        )}
+
         {/* Main navigation */}
         <nav className="flex-1 space-y-1 p-3">
           <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
             CRM
           </p>
           {navigation.map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)] transition-colors"
-            >
-              <item.icon className="h-4 w-4 text-[var(--muted-foreground)]" />
-              {item.name}
-            </Link>
-          ))}
-
-          <p className="mb-2 mt-6 px-3 text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-            Admin
-          </p>
-          {adminNavigation.map((item) => (
             <Link
               key={item.name}
               href={item.href}

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { db, migrationClient } from "../client";
 import { modules, permissions } from "../schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 async function seed() {
   console.log("🌱 Seeding database...\n");
@@ -37,6 +37,7 @@ async function seed() {
 
   const platformPerms = [
     { moduleId: null, resource: "tenant", action: "admin", description: "Full tenant administration" },
+    { moduleId: null, resource: "admin", action: "access", description: "Access the tenant admin panel" },
     { moduleId: null, resource: "users", action: "read", description: "View tenant users" },
     { moduleId: null, resource: "users", action: "admin", description: "Invite, edit, remove users" },
     { moduleId: null, resource: "roles", action: "read", description: "View roles" },
@@ -48,14 +49,28 @@ async function seed() {
     { moduleId: null, resource: "audit", action: "read", description: "View audit log" },
   ];
 
+  // The unique index idx_permissions_unique(module_id, resource, action) uses
+  // Postgres's default NULLS DISTINCT semantics, so it does NOT prevent
+  // duplicate rows when module_id IS NULL. Use an explicit existence check
+  // here so re-running the seed is truly idempotent for platform permissions.
   for (const perm of platformPerms) {
-    await db
-      .insert(permissions)
-      .values(perm)
-      .onConflictDoNothing();
+    const [existing] = await db
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(
+        and(
+          isNull(permissions.moduleId),
+          eq(permissions.resource, perm.resource),
+          eq(permissions.action, perm.action)
+        )
+      )
+      .limit(1);
+    if (!existing) {
+      await db.insert(permissions).values(perm);
+    }
   }
 
-  console.log(`  ✓ ${platformPerms.length} platform permissions created\n`);
+  console.log(`  ✓ ${platformPerms.length} platform permissions ensured\n`);
 
   // ========================================
   // CRM module permissions

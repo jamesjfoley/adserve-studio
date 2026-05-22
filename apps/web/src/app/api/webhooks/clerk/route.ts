@@ -5,6 +5,7 @@ import {
   tenants,
   users,
   tenantMemberships,
+  tenantInvitations,
   roles,
   permissions,
   rolePermissions,
@@ -232,6 +233,20 @@ export async function POST(req: NextRequest) {
             joinedAt: new Date(),
           })
           .onConflictDoNothing();
+
+        // If this user joined via a tenant_invitations row we created
+        // (Task 3 invite flow), mark that row accepted so it disappears
+        // from the pending list.
+        await db
+          .update(tenantInvitations)
+          .set({ status: "accepted", updatedAt: new Date() })
+          .where(
+            and(
+              eq(tenantInvitations.tenantId, tenant.id),
+              eq(tenantInvitations.email, user.email),
+              eq(tenantInvitations.status, "pending")
+            )
+          );
 
         break;
       }

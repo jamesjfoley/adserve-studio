@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { db, users } from "@adserve/database";
+import { db, users, tenantMemberships } from "@adserve/database";
 import { eq } from "drizzle-orm";
 
 export type SuperAdminUser = typeof users.$inferSelect;
@@ -16,6 +16,17 @@ export async function getSuperAdminOrNull(): Promise<SuperAdminUser | null> {
     .where(eq(users.authProviderId, userId));
 
   if (!user || !user.isSuperAdmin) return null;
+
+  // Role separation: a super admin account must never belong to a tenant.
+  // If a record somehow has both is_super_admin and a tenant membership,
+  // refuse to treat it as a super admin until the data is cleaned up.
+  const [membership] = await db
+    .select({ id: tenantMemberships.id })
+    .from(tenantMemberships)
+    .where(eq(tenantMemberships.userId, user.id))
+    .limit(1);
+  if (membership) return null;
+
   return user;
 }
 

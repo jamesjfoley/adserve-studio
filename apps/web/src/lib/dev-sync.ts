@@ -24,6 +24,9 @@ export async function syncCurrentUser(): Promise<SyncedUser> {
     [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
     primaryEmail;
 
+  // Role separation: do not touch is_super_admin from this dev endpoint.
+  // New rows default to is_super_admin = false; the conflict update only
+  // refreshes profile fields. Super admin accounts are provisioned separately.
   const [record] = await db
     .insert(users)
     .values({

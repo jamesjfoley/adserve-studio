@@ -18,6 +18,13 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "suspended",
 ]);
 
+export const invitationStatusEnum = pgEnum("invitation_status", [
+  "pending",
+  "accepted",
+  "revoked",
+  "expired",
+]);
+
 export const moduleStatusEnum = pgEnum("module_status", [
   "active",
   "coming_soon",
