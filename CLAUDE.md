@@ -81,7 +81,7 @@ Headline decisions:
 - **Initial deployment uses existing Clerk dev keys** (production Clerk instance is deferred).
 - **Docker builds run only in GitHub Actions** — Docker Desktop is not installed locally. Local "test the Docker build" checklist items (steps 3–4) will be executed by pushing a branch and letting CI build, not by `docker build` on this machine.
 
-The plan has a **22-step execution checklist** (lines 577–605 of the plan). We are not starting until I'm told which step is next.
+The plan has a **23-step execution checklist** (lines 577–605 of the plan). We are not starting until I'm told which step is next.
 
 ## Existing docs
 

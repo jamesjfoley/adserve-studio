@@ -321,7 +321,7 @@ Set these in your GitHub repo (Settings → Secrets and variables → Actions):
 | `AWS_REGION` | `eu-west-2` |
 | `AWS_ACCOUNT_ID` | Your AWS account ID |
 | `ECR_REPOSITORY` | `adserve-studio` |
-| `ECS_CLUSTER` | Cluster name (created by Express Mode on first deploy, or specify one) |
+| `ECS_CLUSTER` | Cluster name. Must exist before first deploy — see Step 8. Recommend `adserve-prod`. |
 | `EXECUTION_ROLE_ARN` | ARN of `ecsTaskExecutionRole` |
 | `INFRASTRUCTURE_ROLE_ARN` | ARN of `ecsInfrastructureRoleForExpressServices` |
 | `PRIVATE_SUBNET_IDS` | Comma-separated private subnet IDs |
@@ -332,6 +332,22 @@ Set these in your GitHub repo (Settings → Secrets and variables → Actions):
 | Secret | Value |
 |---|---|
 | `AWS_DEPLOY_ROLE_ARN` | ARN of `GitHubActionsECSDeployRole`. (Cannot use the `GITHUB_` prefix — reserved by GitHub for built-in env vars.) |
+
+### Step 8 — ECS cluster
+
+The `aws-actions/amazon-ecs-deploy-express-service` action **assumes the cluster already exists** — it does not create one. The first deploy fails with `Cluster not found` if this step is skipped.
+
+```bash
+aws ecs create-cluster \
+  --cluster-name adserve-prod \
+  --tags key=Project,value=adserve-studio
+```
+
+Notes:
+
+- Tag syntax for `aws ecs` is lowercase `key`/`value` (different from `aws ec2`, which uses `Key`/`Value`).
+- The cluster itself is free — only running tasks cost money. Adding it doesn't change the cost meter.
+- No capacity providers are needed. Express Mode handles the Fargate launch internally. You could attach `FARGATE` + `FARGATE_SPOT` later if you want to opt into Spot pricing, but it's not required.
 
 ---
 
@@ -599,20 +615,21 @@ This is the order of operations for the first deployment:
 10. [ ] Store secrets in Secrets Manager — 5 secrets with `adserve/` prefix (Step 5)
 11. [ ] Set up GitHub OIDC provider and deploy role (Step 6)
 12. [ ] Set GitHub repository variables and secrets (Step 7)
+13. [ ] Create the ECS cluster (Step 8) — the Express Mode action does NOT auto-create it
 
 **First deployment:**
-13. [ ] Add the GitHub Actions workflow file
-14. [ ] Push to `main` — first deployment creates the ECS Express Mode service
-15. [ ] After deployment: note the ECS service security group, add inbound rule to RDS SG for port 5432
-16. [ ] Run the database migration task (schema push + seed + RLS script)
-17. [ ] Verify the app is accessible at the AWS-provided domain
-18. [ ] Configure the Clerk webhook endpoint
-19. [ ] Test: sign in, create a tenant via dev endpoint, verify the full flow
+14. [ ] Add the GitHub Actions workflow file
+15. [ ] Push to `main` — first deployment creates the ECS Express Mode service
+16. [ ] After deployment: note the ECS service security group, add inbound rule to RDS SG for port 5432
+17. [ ] Run the database migration task (schema push + seed + RLS script)
+18. [ ] Verify the app is accessible at the AWS-provided domain
+19. [ ] Configure the Clerk webhook endpoint
+20. [ ] Test: sign in, create a tenant via dev endpoint, verify the full flow
 
 **Polish (when ready):**
-20. [ ] Set up custom domain with ACM certificate
-21. [ ] Complete the `withTenant()` / `withSuperAdminBypass()` query refactor (44 sites)
-22. [ ] Enable RDS credential rotation in Secrets Manager
+21. [ ] Set up custom domain with ACM certificate
+22. [ ] Complete the `withTenant()` / `withSuperAdminBypass()` query refactor (44 sites)
+23. [ ] Enable RDS credential rotation in Secrets Manager
 
 ---
 
