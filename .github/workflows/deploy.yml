@@ -1,67 +1,96 @@
-name: Deploy
+name: Deploy to ECS Express Mode
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-env:
-  AWS_REGION: eu-west-2
-  ECR_REPOSITORY: adserve-studio
-  ECS_CLUSTER: adserve-production
-
-# Only allow one deploy at a time
+# One deploy at a time. Don't cancel in-flight deploys mid-rollout.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   deploy:
     name: Build & deploy
     runs-on: ubuntu-latest
-    # Only deploy from main branch, not PRs
+    # Only deploy on direct push to main (not PRs).
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image
+      - name: Build, tag, and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker build \
+            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" \
+            -t $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:$IMAGE_TAG \
+            .
+          docker tag $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:$IMAGE_TAG $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:latest
+          docker push $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:latest
 
-      - name: Deploy to ECS
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          # Update the ECS Express Mode service with the new image
-          # This command will be refined once we set up the CDK stack
-          aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service adserve-web \
-            --force-new-deployment
-
-      - name: Wait for deployment
-        run: |
-          aws ecs wait services-stable \
-            --cluster $ECS_CLUSTER \
-            --services adserve-web
+      - name: Deploy to ECS Express Mode
+        uses: aws-actions/amazon-ecs-deploy-express-service@v1
+        with:
+          service-name: adserve-studio
+          cluster: ${{ vars.ECS_CLUSTER }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          execution-role-arn: ${{ vars.EXECUTION_ROLE_ARN }}
+          infrastructure-role-arn: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          container-port: '3000'
+          cpu: '512'
+          memory: '1024'
+          subnets: ${{ vars.PRIVATE_SUBNET_IDS }}
+          # security-groups intentionally omitted on first deploy.
+          # ECS Express Mode auto-creates the service SG. Step 15 will:
+          #   1. Read the SG ID from the running service.
+          #   2. Update vars.ECS_SECURITY_GROUP_ID with that value.
+          #   3. Authorize 5432 ingress from it on adserve-rds-sg.
+          # If a future deploy needs to pin the SG explicitly, add:
+          #   security-groups: ${{ vars.ECS_SECURITY_GROUP_ID }}
+          health-check-path: '/api/health'
+          min-task-count: '1'
+          max-task-count: '4'
+          auto-scaling-metric: 'AVERAGE_CPU'
+          auto-scaling-target-value: '70'
+          log-group: '/ecs/adserve-studio'
+          log-stream-prefix: 'web'
+          environment-variables: |
+            [
+              {"name": "NODE_ENV", "value": "production"}
+            ]
+          # Runtime secrets — the task execution role reads these at task start.
+          # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is NOT here — it's baked into the
+          # client bundle via the docker --build-arg above (Next.js inlines
+          # NEXT_PUBLIC_* at build time; runtime injection wouldn't reach the
+          # browser).
+          secrets: |
+            [
+              {"name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/database-url-nIrNYH"},
+              {"name": "CLERK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-secret-key-gtyEbe"},
+              {"name": "CLERK_WEBHOOK_SECRET", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-webhook-secret-rT5wow"}
+            ]
+          tags: |
+            [
+              {"key": "Project", "value": "adserve-studio"},
+              {"key": "Environment", "value": "production"}
+            ]
