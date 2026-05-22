@@ -19,21 +19,36 @@ import { eq, and } from "drizzle-orm";
 //
 // Set up in Clerk Dashboard → Webhooks:
 //   URL: https://your-domain.com/api/webhooks/clerk
-//   Events: organization.created, organizationMembership.created, user.created, user.updated
+//   Events: organization.created, organizationMembership.created,
+//           user.created, user.updated, user.deleted
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const headerPayload = Object.fromEntries(req.headers);
 
-  // In production, verify the webhook signature using Svix.
-  // For now, we'll process the events directly.
-  // TODO: Add CLERK_WEBHOOK_SECRET to .env and verify here.
+  // Verify the Svix signature before processing anything. This endpoint is
+  // (or will be) publicly reachable; without verification, anyone could
+  // post forged events and create tenants / users.
+  const secret = process.env.CLERK_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error("CLERK_WEBHOOK_SECRET is not configured");
+    return NextResponse.json(
+      { error: "Webhook not configured" },
+      { status: 500 }
+    );
+  }
 
   let event: any;
   try {
-    event = JSON.parse(body);
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    const wh = new Webhook(secret);
+    // svix.verify reads the three svix-* headers from this object,
+    // checks the signature against the raw body, and returns the parsed
+    // payload. It throws on missing headers, bad signature, or stale
+    // timestamp (replay protection).
+    event = wh.verify(body, headerPayload);
+  } catch (err) {
+    console.error("Clerk webhook signature verification failed:", err);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const eventType = event.type as string;
@@ -68,6 +83,34 @@ export async function POST(req: NextRequest) {
               avatarUrl: image_url,
             },
           });
+
+        break;
+      }
+
+      // ================================================
+      // A Clerk user was deleted
+      //
+      // No deleted_at column on the users table, so this is a hard delete.
+      // FK cascades take care of:
+      //   - tenant_memberships.user_id  → ON DELETE CASCADE (removed)
+      //   - tenant_invitations.invited_by → ON DELETE SET NULL
+      // ================================================
+      case "user.deleted": {
+        const { id } = event.data;
+        if (!id) break;
+
+        const removed = await db
+          .delete(users)
+          .where(eq(users.authProviderId, id))
+          .returning({ id: users.id, email: users.email });
+
+        if (removed.length === 0) {
+          console.log(`user.deleted: Clerk user ${id} had no matching local row`);
+        } else {
+          console.log(
+            `user.deleted: removed local user ${removed[0].id} (${removed[0].email}) for Clerk id ${id}`
+          );
+        }
 
         break;
       }
