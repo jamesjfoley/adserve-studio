@@ -331,7 +331,7 @@ Set these in your GitHub repo (Settings → Secrets and variables → Actions):
 
 | Secret | Value |
 |---|---|
-| `GITHUB_ACTIONS_ROLE_ARN` | ARN of `GitHubActionsECSDeployRole` |
+| `AWS_DEPLOY_ROLE_ARN` | ARN of `GitHubActionsECSDeployRole`. (Cannot use the `GITHUB_` prefix — reserved by GitHub for built-in env vars.) |
 
 ---
 
@@ -427,7 +427,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.GITHUB_ACTIONS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Login to Amazon ECR
