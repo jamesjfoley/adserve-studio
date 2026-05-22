@@ -25,6 +25,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
   test-database:
     name: Database migrations
