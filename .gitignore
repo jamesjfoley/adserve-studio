@@ -20,6 +20,9 @@ out/
 *.swo
 .DS_Store
 
+# Claude Code local session state
+.claude/
+
 # Logs
 *.log
 npm-debug.log*
