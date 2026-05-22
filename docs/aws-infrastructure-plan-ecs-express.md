@@ -148,7 +148,7 @@ aws iam create-role \
 
 aws iam attach-role-policy \
   --role-name ecsInfrastructureRoleForExpressServices \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleForExpressGatewayServices
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
 ```
 
 Note: If you use the ECS console for the first deployment, it can create these roles automatically via the "Create new role" dropdown.
