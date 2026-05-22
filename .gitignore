@@ -23,6 +23,9 @@ out/
 # Claude Code local session state
 .claude/
 
+# Local-only generated state (e.g. AWS resource ID captures)
+*.local
+
 # Logs
 *.log
 npm-debug.log*

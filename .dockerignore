@@ -1,0 +1,40 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Dependencies — copied from the deps stage instead
+node_modules
+.pnpm-store
+
+# Build outputs
+.next
+.turbo
+dist
+out
+
+# Environment files — secrets come from Secrets Manager
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Logs / coverage
+*.log
+coverage
+
+# Local Docker state
+docker-compose.yml
+postgres_data
+redis_data
+
+# Project docs / Claude
+.claude
+docs
+CLAUDE.md
+README.md
