@@ -439,7 +439,15 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:$IMAGE_TAG .
+          # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be passed at build time —
+          # Next.js inlines NEXT_PUBLIC_* into the client bundle during
+          # 'next build'. Runtime injection (via ECS task secrets) never
+          # reaches the browser JS. The key is non-sensitive (ships to the
+          # browser anyway), so it lives in GitHub Variables, not Secrets.
+          docker build \
+            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" \
+            -t $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:$IMAGE_TAG \
+            .
           docker tag $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:$IMAGE_TAG $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:latest
           docker push $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:$IMAGE_TAG
           docker push $ECR_REGISTRY/${{ vars.ECR_REPOSITORY }}:latest
@@ -461,11 +469,13 @@ jobs:
             [
               {"name": "NODE_ENV", "value": "production"}
             ]
+          # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is NOT in this list — it's
+          # baked into the client bundle via the docker --build-arg above.
+          # Runtime secrets only.
           secrets: |
             [
               {"name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:secret:adserve/database-url"},
               {"name": "CLERK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:secret:adserve/clerk-secret-key"},
-              {"name": "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "valueFrom": "arn:aws:secretsmanager:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:secret:adserve/clerk-publishable-key"},
               {"name": "CLERK_WEBHOOK_SECRET", "valueFrom": "arn:aws:secretsmanager:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:secret:adserve/clerk-webhook-secret"}
             ]
           tags: |
