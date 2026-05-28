@@ -59,8 +59,16 @@ export {
   getDefaultLayout,
   generateDefaultLayoutConfig,
   validateLayoutConfig,
+  LayoutError,
   type CreateLayoutInput,
+  type UpdateLayoutConfigArgs,
+  type DeleteLayoutArgs,
+  type GetDefaultLayoutArgs,
+  type GenerateDefaultLayoutConfigArgs,
+  type ValidateLayoutConfigArgs,
   type LayoutType,
+  type LayoutValidationError,
+  type LayoutValidationResult,
 } from "./layout-engine";
 
 // ============================================================
