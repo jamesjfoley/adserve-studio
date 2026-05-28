@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CloudTrail trail capturing management events for the AdServe AWS
+  account. Minimum viable configuration: single-region (eu-west-2),
+  management events only (no data events), default encryption.
+
+  Required for AWS service events (like Secrets Manager rotation
+  notifications) to reach EventBridge — without a trail, those events
+  exist only in the 90-day "event history" and do not forward to
+  EventBridge rules.
+
+  Cost: ~$2 per month for S3 storage of management events at our
+  current rate of activity. Management events themselves are free
+  for the first copy.
+
+Parameters:
+  TrailName:
+    Type: String
+    Default: adserve-management-trail
+  BucketName:
+    Type: String
+    Default: adserve-cloudtrail-logs-181194339452
+    Description: S3 bucket name (must be globally unique; account ID suffix is the convention here)
+
+Resources:
+  # ----------------------------------------------------------------
+  # S3 bucket for CloudTrail logs. 90-day retention, no public access.
+  # ----------------------------------------------------------------
+  LogsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+
+  LogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LogsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal: { Service: cloudtrail.amazonaws.com }
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt LogsBucket.Arn
+            Condition:
+              StringEquals:
+                "aws:SourceArn": !Sub "arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}"
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal: { Service: cloudtrail.amazonaws.com }
+            Action: s3:PutObject
+            Resource: !Sub "${LogsBucket.Arn}/AWSLogs/${AWS::AccountId}/*"
+            Condition:
+              StringEquals:
+                "s3:x-amz-acl": bucket-owner-full-control
+                "aws:SourceArn": !Sub "arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}"
+
+  # ----------------------------------------------------------------
+  # The trail itself. IsLogging true → capturing immediately on create.
+  # ----------------------------------------------------------------
+  Trail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: LogsBucketPolicy
+    Properties:
+      TrailName: !Ref TrailName
+      S3BucketName: !Ref LogsBucket
+      IsLogging: true
+      IsMultiRegionTrail: false
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: false
+      EventSelectors:
+        - ReadWriteType: All
+          IncludeManagementEvents: true
+
+Outputs:
+  TrailArn:
+    Value: !GetAtt Trail.Arn
+  LogsBucket:
+    Value: !Ref LogsBucket
