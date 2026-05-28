@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Webhook } from "svix";
-import { db } from "@adserve/database";
+import { db, withSuperAdminBypass } from "@adserve/database";
 import {
   tenants,
   users,
@@ -121,114 +121,116 @@ export async function POST(req: NextRequest) {
       case "organization.created": {
         const { id, name, slug, created_by } = event.data;
 
-        // Create the tenant
-        const [tenant] = await db
-          .insert(tenants)
-          .values({
-            name,
-            slug: slug || id,
-            status: "active",
-            settings: {
-              clerkOrgId: id,
-              timezone: "Europe/London",
-              locale: "en-GB",
-              currency: "GBP",
-            },
-          })
-          .returning();
+        await withSuperAdminBypass(async (tx) => {
+          // Create the tenant
+          const [tenant] = await tx
+            .insert(tenants)
+            .values({
+              name,
+              slug: slug || id,
+              status: "active",
+              settings: {
+                clerkOrgId: id,
+                timezone: "Europe/London",
+                locale: "en-GB",
+                currency: "GBP",
+              },
+            })
+            .returning();
 
-        // Create default roles
-        const [ownerRole] = await db
-          .insert(roles)
-          .values({
+          // Create default roles
+          const [ownerRole] = await tx
+            .insert(roles)
+            .values({
+              tenantId: tenant.id,
+              name: "Owner",
+              slug: "owner",
+              description: "Full access. Can manage billing and delete tenant.",
+              isSystem: true,
+            })
+            .returning();
+
+          const [adminRole] = await tx
+            .insert(roles)
+            .values({
+              tenantId: tenant.id,
+              name: "Admin",
+              slug: "admin",
+              description: "Full access except tenant deletion and billing.",
+              isSystem: true,
+            })
+            .returning();
+
+          await tx.insert(roles).values({
             tenantId: tenant.id,
-            name: "Owner",
-            slug: "owner",
-            description: "Full access. Can manage billing and delete tenant.",
+            name: "Member",
+            slug: "member",
+            description: "Access to assigned modules. Cannot manage users or schema.",
             isSystem: true,
-          })
-          .returning();
-
-        const [adminRole] = await db
-          .insert(roles)
-          .values({
-            tenantId: tenant.id,
-            name: "Admin",
-            slug: "admin",
-            description: "Full access except tenant deletion and billing.",
-            isSystem: true,
-          })
-          .returning();
-
-        await db.insert(roles).values({
-          tenantId: tenant.id,
-          name: "Member",
-          slug: "member",
-          description: "Access to assigned modules. Cannot manage users or schema.",
-          isSystem: true,
-        });
-
-        // Assign all permissions to owner role
-        const allPerms = await db.select().from(permissions);
-        if (allPerms.length > 0) {
-          await db.insert(rolePermissions).values(
-            allPerms.map((p) => ({
-              roleId: ownerRole.id,
-              permissionId: p.id,
-            }))
-          );
-        }
-
-        // Assign non-tenant-admin permissions to admin role
-        const adminPerms = allPerms.filter(
-          (p) => !(p.resource === "tenant" && p.action === "admin")
-        );
-        if (adminPerms.length > 0) {
-          await db.insert(rolePermissions).values(
-            adminPerms.map((p) => ({
-              roleId: adminRole.id,
-              permissionId: p.id,
-            }))
-          );
-        }
-
-        // Enable the CRM module by default
-        const [crmModule] = await db
-          .select()
-          .from(modules)
-          .where(eq(modules.slug, "crm"));
-
-        if (crmModule) {
-          await db.insert(tenantModules).values({
-            tenantId: tenant.id,
-            moduleId: crmModule.id,
-            enabled: true,
           });
-        }
 
-        // Create the owner's membership (if we know who created the org)
-        if (created_by) {
-          const [creator] = await db
-            .select()
-            .from(users)
-            .where(eq(users.authProviderId, created_by));
-
-          if (creator) {
-            await db
-              .insert(tenantMemberships)
-              .values({
-                tenantId: tenant.id,
-                userId: creator.id,
+          // Assign all permissions to owner role
+          const allPerms = await tx.select().from(permissions);
+          if (allPerms.length > 0) {
+            await tx.insert(rolePermissions).values(
+              allPerms.map((p) => ({
                 roleId: ownerRole.id,
-                status: "active",
-                joinedAt: new Date(),
-              })
-              .onConflictDoNothing();
+                permissionId: p.id,
+              }))
+            );
           }
-        }
 
-        // TODO: Call install_crm_schema() to set up default CRM entity types
-        // This will be done once we have the TypeScript version of that function
+          // Assign non-tenant-admin permissions to admin role
+          const adminPerms = allPerms.filter(
+            (p) => !(p.resource === "tenant" && p.action === "admin")
+          );
+          if (adminPerms.length > 0) {
+            await tx.insert(rolePermissions).values(
+              adminPerms.map((p) => ({
+                roleId: adminRole.id,
+                permissionId: p.id,
+              }))
+            );
+          }
+
+          // Enable the CRM module by default
+          const [crmModule] = await tx
+            .select()
+            .from(modules)
+            .where(eq(modules.slug, "crm"));
+
+          if (crmModule) {
+            await tx.insert(tenantModules).values({
+              tenantId: tenant.id,
+              moduleId: crmModule.id,
+              enabled: true,
+            });
+          }
+
+          // Create the owner's membership (if we know who created the org)
+          if (created_by) {
+            const [creator] = await tx
+              .select()
+              .from(users)
+              .where(eq(users.authProviderId, created_by));
+
+            if (creator) {
+              await tx
+                .insert(tenantMemberships)
+                .values({
+                  tenantId: tenant.id,
+                  userId: creator.id,
+                  roleId: ownerRole.id,
+                  status: "active",
+                  joinedAt: new Date(),
+                })
+                .onConflictDoNothing();
+            }
+          }
+
+          // TODO: Call install_crm_schema() to set up default CRM entity types
+          // This will be done once we have the TypeScript version of that function
+        });
 
         break;
       }
@@ -239,57 +241,59 @@ export async function POST(req: NextRequest) {
       case "organizationMembership.created": {
         const { organization, public_user_data, role } = event.data;
 
-        // Find the tenant
-        const [tenant] = await db
-          .select()
-          .from(tenants)
-          .where(eq(tenants.slug, organization.slug));
+        await withSuperAdminBypass(async (tx) => {
+          // Find the tenant
+          const [tenant] = await tx
+            .select()
+            .from(tenants)
+            .where(eq(tenants.slug, organization.slug));
 
-        if (!tenant) break;
+          if (!tenant) return;
 
-        // Find the user
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.authProviderId, public_user_data.user_id));
+          // Find the user
+          const [user] = await tx
+            .select()
+            .from(users)
+            .where(eq(users.authProviderId, public_user_data.user_id));
 
-        if (!user) break;
+          if (!user) return;
 
-        // Map Clerk role to our role (admin → admin, member → member)
-        const roleSlug = role === "admin" ? "admin" : "member";
-        const [memberRole] = await db
-          .select()
-          .from(roles)
-          .where(
-            and(eq(roles.tenantId, tenant.id), eq(roles.slug, roleSlug))
-          );
+          // Map Clerk role to our role (admin → admin, member → member)
+          const roleSlug = role === "admin" ? "admin" : "member";
+          const [memberRole] = await tx
+            .select()
+            .from(roles)
+            .where(
+              and(eq(roles.tenantId, tenant.id), eq(roles.slug, roleSlug))
+            );
 
-        if (!memberRole) break;
+          if (!memberRole) return;
 
-        await db
-          .insert(tenantMemberships)
-          .values({
-            tenantId: tenant.id,
-            userId: user.id,
-            roleId: memberRole.id,
-            status: "active",
-            joinedAt: new Date(),
-          })
-          .onConflictDoNothing();
+          await tx
+            .insert(tenantMemberships)
+            .values({
+              tenantId: tenant.id,
+              userId: user.id,
+              roleId: memberRole.id,
+              status: "active",
+              joinedAt: new Date(),
+            })
+            .onConflictDoNothing();
 
-        // If this user joined via a tenant_invitations row we created
-        // (Task 3 invite flow), mark that row accepted so it disappears
-        // from the pending list.
-        await db
-          .update(tenantInvitations)
-          .set({ status: "accepted", updatedAt: new Date() })
-          .where(
-            and(
-              eq(tenantInvitations.tenantId, tenant.id),
-              eq(tenantInvitations.email, user.email),
-              eq(tenantInvitations.status, "pending")
-            )
-          );
+          // If this user joined via a tenant_invitations row we created
+          // (Task 3 invite flow), mark that row accepted so it disappears
+          // from the pending list.
+          await tx
+            .update(tenantInvitations)
+            .set({ status: "accepted", updatedAt: new Date() })
+            .where(
+              and(
+                eq(tenantInvitations.tenantId, tenant.id),
+                eq(tenantInvitations.email, user.email),
+                eq(tenantInvitations.status, "pending")
+              )
+            );
+        });
 
         break;
       }
