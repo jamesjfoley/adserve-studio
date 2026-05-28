@@ -6,7 +6,53 @@ import * as schema from "./schema";
 // Base connection (for migrations and admin operations)
 // ============================================================
 
-const connectionString = process.env.DATABASE_URL!;
+/**
+ * DATABASE_URL accepts two formats:
+ *
+ * 1. Plain URL string — `postgresql://user:pass@host:5432/db?sslmode=require`.
+ *    Used in local dev and in any environment that injects the value
+ *    directly.
+ *
+ * 2. JSON blob — `{"engine":"postgres","host":"…","port":5432,
+ *    "username":"…","password":"…","dbname":"…","sslmode":"require"}`.
+ *    Produced by AWS Secrets Manager when the secret is rotated by the
+ *    `SecretsManagerRDSPostgreSQLRotation*` Lambda. The blob is injected
+ *    into the container as `DATABASE_URL` via ECS task definition.
+ *
+ * Exported so the parser can be unit-tested without instantiating a
+ * Drizzle client.
+ */
+export function resolveConnectionString(raw: string): string {
+  const trimmed = raw.trimStart();
+  if (!trimmed.startsWith("{")) return raw;
+
+  const blob = JSON.parse(trimmed) as {
+    host?: string;
+    port?: number | string;
+    username?: string;
+    password?: string;
+    dbname?: string;
+    sslmode?: string;
+  };
+  const need = (key: keyof typeof blob): string => {
+    const v = blob[key];
+    if (v === undefined || v === null || v === "") {
+      throw new Error(
+        `DATABASE_URL JSON is missing required field '${String(key)}'`
+      );
+    }
+    return String(v);
+  };
+  const user = encodeURIComponent(need("username"));
+  const pass = encodeURIComponent(need("password"));
+  const host = need("host");
+  const port = need("port");
+  const db = need("dbname");
+  const sslmode = blob.sslmode ?? "require";
+  return `postgresql://${user}:${pass}@${host}:${port}/${db}?sslmode=${sslmode}`;
+}
+
+const connectionString = resolveConnectionString(process.env.DATABASE_URL!);
 
 // Connection for migrations and seed scripts (no RLS)
 export const migrationClient = postgres(connectionString, { max: 1 });
