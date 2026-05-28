@@ -18,7 +18,10 @@ export {
   createTestMembership,
   deleteTestTenant,
   setupTestContext,
+  createTestEntityType,
+  getModuleBySlug,
   type TestTenant,
   type TestUser,
   type TestRole,
+  type TestEntityType,
 } from "./tenant";

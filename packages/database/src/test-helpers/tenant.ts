@@ -5,6 +5,8 @@ import {
   tenants,
   users,
 } from "../schema/tenants";
+import { modules } from "../schema/modules";
+import { entityTypes } from "../schema/schema-engine";
 import type { testDb } from "./transaction";
 
 /**
@@ -146,4 +148,58 @@ export async function deleteTestTenant(
   // FK ON DELETE CASCADE on tenant_id columns handles most cleanup;
   // this is just the top-level delete.
   await db.delete(tenants).where(eq(tenants.id, tenantId));
+}
+
+export interface TestEntityType {
+  id: string;
+  slug: string;
+  moduleId: string;
+}
+
+/**
+ * Look up a module by its slug (e.g. "crm"). The seed creates modules
+ * before any tests run, so within a test transaction we can read them.
+ */
+export async function getModuleBySlug(
+  tx: Tx,
+  slug: string
+): Promise<{ id: string; slug: string }> {
+  const [mod] = await tx
+    .select({ id: modules.id, slug: modules.slug })
+    .from(modules)
+    .where(eq(modules.slug, slug));
+  if (!mod) {
+    throw new Error(
+      `Test setup: module "${slug}" not found. Did you run pnpm db:seed?`
+    );
+  }
+  return mod;
+}
+
+/**
+ * Create a test entity type scoped to a tenant and a (seeded) module.
+ * Returns the inserted row's id + slug for use in subsequent inserts.
+ */
+export async function createTestEntityType(
+  tx: Tx,
+  args: {
+    tenantId: string;
+    moduleId: string;
+    slug?: string;
+    name?: string;
+  }
+): Promise<TestEntityType> {
+  const suffix = Date.now().toString(36);
+  const slug = args.slug ?? `test-entity-${suffix}`;
+  const [row] = await tx
+    .insert(entityTypes)
+    .values({
+      tenantId: args.tenantId,
+      moduleId: args.moduleId,
+      name: args.name ?? `Test Entity ${suffix}`,
+      slug,
+      description: "Created by test harness",
+    })
+    .returning();
+  return { id: row.id, slug: row.slug, moduleId: row.moduleId };
 }

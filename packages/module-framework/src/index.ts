@@ -41,8 +41,12 @@ export {
   deleteFieldDefinition,
   listFieldDefinitions,
   coerceFieldValue,
+  FieldDefinitionError,
   type CreateFieldDefinitionInput,
+  type UpdateFieldDefinitionArgs,
   type DeleteFieldDefinitionArgs,
+  type CoercionResult,
+  type FieldCoercionSpec,
 } from "./field-engine";
 
 // ============================================================

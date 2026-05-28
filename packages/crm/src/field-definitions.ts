@@ -131,7 +131,7 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     slug: "description",
     name: "Description",
     labels: { en: "Description" },
-    fieldType: "textarea",
+    fieldType: "long_text",
     displayOrder: 90,
   },
 ];
@@ -220,7 +220,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     slug: "notes",
     name: "Notes",
     labels: { en: "Notes" },
-    fieldType: "textarea",
+    fieldType: "long_text",
     displayOrder: 90,
   },
 ];
@@ -318,7 +318,7 @@ export const DEFAULT_LEAD_FIELDS: CrmFieldDefinitionSpec[] = [
     slug: "notes",
     name: "Notes",
     labels: { en: "Notes" },
-    fieldType: "textarea",
+    fieldType: "long_text",
     displayOrder: 80,
   },
 ];
@@ -381,7 +381,7 @@ export const DEFAULT_OPPORTUNITY_FIELDS: CrmFieldDefinitionSpec[] = [
     slug: "description",
     name: "Description",
     labels: { en: "Description" },
-    fieldType: "textarea",
+    fieldType: "long_text",
     displayOrder: 60,
   },
   {

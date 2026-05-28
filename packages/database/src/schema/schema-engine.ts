@@ -93,6 +93,9 @@ export const fieldDefinitions = pgTable(
     isSystem: boolean("is_system").notNull().default(false),
     defaultValue: jsonb("default_value"),
     options: jsonb("options").notNull().default({}),
+    // Locale-aware display labels. Phase 1 populates "en" only.
+    // UI reads labels[currentLocale] with fallback to labels.en, then name.
+    labels: jsonb("labels").notNull().default({}),
     displayOrder: integer("display_order").notNull().default(0),
     groupName: text("group_name"),
     description: text("description"),

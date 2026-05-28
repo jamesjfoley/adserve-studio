@@ -59,18 +59,12 @@ export type ActivityInsert = typeof activities.$inferInsert;
 // ============================================================
 
 /**
- * Field definition shape AFTER Task 0.2 lands the `labels jsonb` column
- * migration. Engine code and tests use this; once the migration runs and
- * the Drizzle schema is regenerated, this will collapse to a plain
- * re-export of `FieldDefinition`.
- *
- * TODO(task-0.2): replace this with `export type FieldDefinitionWithLabels = FieldDefinition`
- * once the column is added and `field_definitions.labels` is in the
- * Drizzle schema.
+ * Field definition with locale-aware labels. Task 0.2 added the `labels`
+ * column to the schema, so this is now a plain alias for the inferred
+ * row type — retained as a named export so consumers (engine code, CRM
+ * field-definition specs) don't have to switch import names.
  */
-export type FieldDefinitionWithLabels = FieldDefinition & {
-  labels: Record<string, string>;
-};
+export type FieldDefinitionWithLabels = FieldDefinition;
 
 // ============================================================
 // Structured JSONB shapes
@@ -127,22 +121,38 @@ export type ValidationAction =
 /**
  * The field types enum mirrors `packages/database/src/schema/enums.ts`'s
  * `fieldTypeEnum`. Re-declared as a TS union for use in stubs and
- * factories that don't have a Drizzle row to infer from.
+ * factories that don't have a Drizzle row to infer from. Keep in sync
+ * with the schema enum or insertion via the field engine will fail at
+ * the DB layer.
+ *
+ * Phase 1 handles a subset in coerceFieldValue:
+ *   text, long_text, number, currency, date, datetime, boolean, select,
+ *   multi_select, email, phone, url, relationship
+ *
+ * Phase 2+ types (user, file, image, json, computed, ai_generated) are
+ * valid schema values but not yet supported by the field engine; they
+ * coerce as opaque pass-through with no validation.
  */
 export type FieldType =
   | "text"
+  | "long_text"
   | "number"
   | "currency"
   | "date"
   | "datetime"
   | "boolean"
   | "select"
-  | "multiselect"
+  | "multi_select"
   | "email"
   | "phone"
   | "url"
-  | "textarea"
-  | "relationship";
+  | "relationship"
+  | "user"
+  | "file"
+  | "image"
+  | "json"
+  | "computed"
+  | "ai_generated";
 
 /**
  * A currency value as stored in `records.data` for currency-typed
