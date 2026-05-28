@@ -369,11 +369,15 @@ export type CoercionResult =
  * Shape the field-engine needs to coerce a value. Either pass a full
  * `FieldDefinitionWithLabels` row or construct a partial inline (handy
  * for tests).
+ *
+ * `options` is `unknown` rather than `Record<string, unknown>` so a
+ * raw Drizzle row (whose jsonb fields infer as `unknown`) is
+ * assignable without a cast. The body narrows internally.
  */
 export interface FieldCoercionSpec {
   fieldType: FieldType;
   isRequired?: boolean | null;
-  options?: Record<string, unknown> | null;
+  options?: unknown;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

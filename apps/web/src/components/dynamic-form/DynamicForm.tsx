@@ -1,0 +1,199 @@
+"use client";
+
+import { useId, useMemo, useState, type FormEvent } from "react";
+import {
+  coerceFieldValue,
+  type FieldDefinitionWithLabels,
+  type LayoutConfig,
+} from "@adserve/module-framework";
+import { cn } from "@/lib/utils";
+import { FieldRenderer } from "./field-renderer";
+
+export type DynamicFormMode = "create" | "edit" | "view";
+
+export interface DynamicFormProps {
+  layoutConfig: LayoutConfig;
+  fields: FieldDefinitionWithLabels[];
+  /** Initial data keyed by field slug. Null/undefined → create mode defaults. */
+  initialData: Record<string, unknown> | null;
+  mode: DynamicFormMode;
+  /**
+   * Called after successful client-side coercion. The argument is keyed
+   * by field slug, with values coerced to their declared types (numbers
+   * are numbers, not strings, etc.).
+   *
+   * The caller routes the data into the right place — system fields,
+   * custom fields, record_relationships for relationship-type slugs.
+   */
+  onSubmit?: (validated: Record<string, unknown>) => Promise<void> | void;
+  /** Optional async failure message to surface in the form footer. */
+  submitError?: string | null;
+  submitLabel?: string;
+  /** Locale for label resolution + value formatting. Defaults to "en". */
+  locale?: string;
+  className?: string;
+}
+
+interface InitialStateArgs {
+  fields: FieldDefinitionWithLabels[];
+  initialData: Record<string, unknown> | null;
+  mode: DynamicFormMode;
+}
+
+/**
+ * Build the initial form state, keyed by field slug:
+ *   - edit/view: pre-populate from initialData
+ *   - create: pre-populate from each field's defaultValue
+ */
+function buildInitialState({
+  fields,
+  initialData,
+  mode,
+}: InitialStateArgs): Record<string, unknown> {
+  const state: Record<string, unknown> = {};
+  for (const f of fields) {
+    if (mode === "create") {
+      state[f.slug] = f.defaultValue ?? null;
+    } else {
+      state[f.slug] = initialData?.[f.slug] ?? null;
+    }
+  }
+  return state;
+}
+
+export function DynamicForm({
+  layoutConfig,
+  fields,
+  initialData,
+  mode,
+  onSubmit,
+  submitError,
+  submitLabel,
+  locale = "en",
+  className,
+}: DynamicFormProps) {
+  const formId = useId();
+  const [state, setState] = useState<Record<string, unknown>>(() =>
+    buildInitialState({ fields, initialData, mode })
+  );
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  // Index fields by id for O(1) section→field lookup.
+  const fieldsById = useMemo(() => {
+    const m = new Map<string, FieldDefinitionWithLabels>();
+    for (const f of fields) m.set(f.id, f);
+    return m;
+  }, [fields]);
+
+  function setSlug(slug: string, next: unknown) {
+    setState((prev) => ({ ...prev, [slug]: next }));
+    // Clear the inline error for this field on every keystroke; the
+    // next submit re-validates.
+    if (errors[slug]) {
+      setErrors((prev) => {
+        const { [slug]: _omit, ...rest } = prev;
+        void _omit;
+        return rest;
+      });
+    }
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (mode === "view" || !onSubmit) return;
+
+    const newErrors: Record<string, string> = {};
+    const coerced: Record<string, unknown> = {};
+
+    for (const f of fields) {
+      const result = coerceFieldValue(f, state[f.slug]);
+      if (!result.ok) {
+        newErrors[f.slug] = result.error.message;
+      } else {
+        coerced[f.slug] = result.value;
+      }
+    }
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
+
+    setSubmitting(true);
+    try {
+      await onSubmit(coerced);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const isInteractive = mode !== "view";
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className={cn("space-y-8", className)}
+      noValidate
+      aria-busy={submitting}
+    >
+      {layoutConfig.sections.map((section, sIdx) => (
+        <section
+          key={`${section.title}-${sIdx}`}
+          aria-labelledby={`${formId}-section-${sIdx}`}
+        >
+          <h2
+            id={`${formId}-section-${sIdx}`}
+            className="text-sm font-semibold tracking-tight text-[var(--foreground)]"
+          >
+            {section.title}
+          </h2>
+          <div
+            className={cn(
+              "mt-3 grid gap-4",
+              section.columns === 1 && "grid-cols-1",
+              section.columns === 2 && "grid-cols-1 sm:grid-cols-2",
+              section.columns === 3 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            )}
+          >
+            {section.fieldIds.map((fieldId) => {
+              const field = fieldsById.get(fieldId);
+              if (!field) return null; // shouldn't happen — layout was validated
+              const inputId = `${formId}-${field.id}`;
+              return (
+                <FieldRenderer
+                  key={field.id}
+                  field={field}
+                  value={state[field.slug]}
+                  onChange={(next) => setSlug(field.slug, next)}
+                  mode={mode}
+                  error={errors[field.slug] ?? null}
+                  locale={locale}
+                  inputId={inputId}
+                />
+              );
+            })}
+          </div>
+        </section>
+      ))}
+
+      {submitError ? (
+        <p className="text-sm text-red-600" role="alert">
+          {submitError}
+        </p>
+      ) : null}
+
+      {isInteractive ? (
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {submitting
+              ? "Saving…"
+              : submitLabel ?? (mode === "create" ? "Create" : "Save changes")}
+          </button>
+        </div>
+      ) : null}
+    </form>
+  );
+}

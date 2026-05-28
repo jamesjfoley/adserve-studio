@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@adserve/database": "workspace:*",
+    "@adserve/module-framework": "workspace:^",
     "@anthropic-ai/sdk": "^0.39.0",
     "@clerk/nextjs": "^6.9.0",
     "clsx": "^2.1.0",
@@ -24,12 +25,17 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.4.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "^15.5.18",
+    "jsdom": "^29.1.1",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.7.0"
