@@ -1,7 +1,8 @@
 # AWS deployment status
 
 Snapshot of where the production AWS deployment stands at end of session
-2026-05-28. Reference plan: `docs/aws-infrastructure-plan-ecs-express.md`.
+2026-05-28 (final state — all 22 plan steps complete). Reference plan:
+`docs/aws-infrastructure-plan-ecs-express.md`.
 
 ## Quick reference
 
@@ -14,9 +15,12 @@ Snapshot of where the production AWS deployment stands at end of session
 | ECS cluster | `adserve-prod` (NOT `adserve`) |
 | ECS service | `adserve-studio` |
 | Region | `eu-west-2` |
-| Bastion EC2 instance | Terminated 2026-05-28 (was `i-0ee70c07b19b3d743`) |
-| Bastion SG | Deleted 2026-05-28 (was `sg-0cfd59b93f11c47de`) |
-| Last successful deploy | `26565477286` — GRANTs + withSuperAdminBypass wrap (commit `b4c1626`) |
+| Bastion EC2 instance | No standing bastion — spin up/tear down per-session (last spinup `i-05b482184743b756c` torn down 2026-05-28) |
+| RDS Security Group | `sg-012023b2c91d23bde` — ingress 5432 from ECS SG (`sg-0b8c4e804a9231980`) + rotation Lambda SG (`sg-00ab19854e010ad61`) only |
+| CloudTrail trail | `adserve-management-trail` — single-region, mgmt events. Required for Secrets Manager → EventBridge events. |
+| Rotation Lambdas | `adserve-rotate-app-secret`, `adserve-rotate-migrator-secret` (60-day schedule) |
+| Auto-redeploy Lambda | `adserve-rotation-redeploy` — fired by EventBridge rule `adserve-rotation-succeeded` |
+| Last successful deploy | commit `30a29f0` (CloudTrail template) — currently rolling task def `:13` |
 
 ## Checklist progress
 
@@ -29,9 +33,10 @@ Snapshot of where the production AWS deployment stands at end of session
 | 18 | Configure Clerk webhook endpoint | ✓ Complete — secret rotated to real `whsec_…`, description corrected, ECS task restarted, signature verification verified live |
 | 19 | End-to-end test (sign-up + create tenant) | ✓ Complete — see "Notes on step 19" below |
 | 20 | Custom domain + ACM cert | Deferred — `cloudfront.net` URL in use for now |
-| 21 | `withTenant()` / `withSuperAdminBypass()` query refactor (44 sites) | Deferred — tracked in memory `task_rls_production_switchover` |
-| 22 | RDS credential rotation in Secrets Manager | Plan approved, execution deferred — see `docs/aws-credential-rotation-plan.md` |
+| 21 | `withTenant()` / `withSuperAdminBypass()` query refactor (61 sites) | ✓ Complete — see "Notes on step 21" below |
+| 22 | RDS credential rotation in Secrets Manager | ✓ Complete — see "Notes on step 22" below |
 | — | GitHub Actions Node 24 readiness | ✓ Bumped checkout, setup-node, pnpm/action-setup, configure-aws-credentials to `@v6` — see "GitHub Actions" below |
+| — | CloudTrail trail (added as dependency of step 22) | ✓ Complete — `infra/cloudtrail/management-trail.yaml`, see "Notes on step 22" |
 
 ## Notes on step 16
 
@@ -143,36 +148,106 @@ Node-20 deprecation deadline:
 CI run `26567917576` and deploy run `26567917612` both passed cleanly on the
 bumped versions.
 
-## Step 22 — credential rotation plan (approved, execution deferred)
+## Notes on step 21
 
-Plan documented in `docs/aws-credential-rotation-plan.md`. **Option A
-approved**: JSON-reformat both `adserve/database-url` and
-`adserve/database-url-migrator` secrets, deploy AWS's
-`SecretsManagerRDSPostgreSQLRotationSingleUser` SAR template (one stack per
-secret), wire EventBridge → ECS auto-redeploy. 60-day schedule, app and
-migrator offset by 30 days. Master credential rotation (`adserve_master`)
-is already handled by RDS via the auto-created
-`rds!db-bbdf262a-…` secret.
+61 RLS query sites wrapped across 30 files. Every bare `db.*` call against
+the 14 RLS-protected tables in `apps/web/src/` now runs through either
+`withTenant()` or `withSuperAdminBypass()`. Required for the production
+switchover where `adserve_app` runs as NOSUPERUSER/NOBYPASSRLS.
 
-The 8-step execution sequence and confirmed parameters are in the plan
-doc — start there when this is picked up.
+Highlights:
+- 2 new helpers extracted to reduce duplication: `lib/role-permissions.ts`
+  (`validatePermissionsForTenant`) and `lib/super-admin-queries.ts`
+  (`loadTenantMembers`, `loadTenantModuleStates`).
+- 3 helpers refactored to take a `tx` argument so the caller owns the
+  wrapper: `lib/tenant-provision.ts:provisionTenant`,
+  `admin/roles/_lib/visible-permissions.ts:getVisiblePermissions`,
+  `admin/roles/[id]/route.ts:loadRole`.
+- `lib/auth.ts` removed as dead code (zero callers; superseded by
+  `lib/permissions.ts`).
+- 3 existing `db.transaction()` blocks flattened into the outer wrapper.
+- Settings PATCH race condition fixed in
+  `api/super-admin/tenants/[id]/route.ts`.
+- Outcome-union return pattern used in PATCH/DELETE handlers that need to
+  return per-error status codes from inside a transaction wrapper.
+
+Shipped in commit `0ba7c87`. Final grep confirms zero bare `db.*` calls
+remain against any RLS-protected table.
+
+## Notes on step 22
+
+Full credential rotation chain live and verified end-to-end. Plan and
+deployed-resource map are in `docs/aws-credential-rotation-plan.md`.
+
+| Resource | Identifier |
+|---|---|
+| Rotation Lambda (app) | `arn:aws:lambda:eu-west-2:181194339452:function:adserve-rotate-app-secret` |
+| Rotation Lambda (migrator) | `arn:aws:lambda:eu-west-2:181194339452:function:adserve-rotate-migrator-secret` |
+| Rotation Lambda SG | `sg-00ab19854e010ad61` (`adserve-rotation-lambda-sg`) |
+| EventBridge rule | `adserve-rotation-succeeded` |
+| Auto-redeploy Lambda | `arn:aws:lambda:eu-west-2:181194339452:function:adserve-rotation-redeploy` |
+| Auto-redeploy IAM role | `adserve-rotation-redeploy-role` (scoped to `ecs:UpdateService` on the single service) |
+| CloudFormation stacks | `adserve-rotation-app-secret`, `adserve-rotation-migrator-secret`, `adserve-rotation-event-redeploy` |
+| CloudTrail trail (dependency) | `adserve-management-trail` (S3 bucket `adserve-cloudtrail-logs-181194339452`) |
+| Schedule | `rate(60 days)` on both secrets — first rotation triggered 2026-05-28 |
+| Master credential | RDS-managed via `rds!db-bbdf262a-…` (already auto-rotating since step 4) |
+
+**Application changes:**
+- Secrets reformatted in place URL → JSON. Same ARNs (no ECS task definition
+  change needed).
+- `packages/database/src/client.ts` accepts either URL or JSON format via
+  exported `resolveConnectionString()`. Backward compatible for local dev.
+
+**CloudTrail trail is a hard dependency.** Discovered mid-execution that
+Secrets Manager `RotationSucceeded` events flow to EventBridge only via
+CloudTrail. Without a trail, the events live only in the 90-day "event
+history" and never reach EventBridge rules. Trail captures management
+events in `eu-west-2`, retains 90 days in S3. ~$2–3/month cost.
+
+**Schedule offset note.** The plan called for a 30-day offset between app
+and migrator rotations. To verify both chains in this session both rotations
+were triggered immediately, which aligned the schedules at T,T+60,T+120
+each. To re-establish the offset, run this at any point ≥30 days from
+today:
+
+```bash
+AWS_PROFILE=adserve-admin aws secretsmanager rotate-secret \
+  --secret-id adserve/database-url-migrator --region eu-west-2
+```
+
+That shifts migrator's clock to (rotation time)+60,+120,… while app stays
+on its current cadence.
+
+**Complications encountered:**
+1. First rotation attempt failed because `AWSPREVIOUS` still held the
+   pre-step-1 URL string and the SAR Lambda unconditionally JSON-parses it.
+   Fix: removed `AWSPREVIOUS` stage from both secrets; auto-retry then
+   succeeded. From the second rotation onwards, `AWSPREVIOUS` is JSON and
+   the issue cannot recur.
+2. The initial `client.ts` change crashed Docker build because
+   `process.env.DATABASE_URL` is undefined during Next.js page-data
+   collection in CI. Fixed in commit `64d93d4` by passing undefined
+   through unchanged.
+3. CloudTrail dependency wasn't in the plan; added during execution.
 
 ## Things you can rely on across the session boundary
 
-- **`origin/main` is fully up to date** with everything we've done in code. HEAD = `e3e4d71` (this status doc update will move it forward by one). Nothing uncommitted will be left when this commit lands.
-- **The bastion EC2 has been torn down** (2026-05-28). Instance `i-0ee70c07b19b3d743`, SG `sg-0cfd59b93f11c47de`, IAM role + instance profile `adserve-migrator-bastion-role`, and the RDS SG ingress entry for the bastion SG are all gone. The RDS SG (`sg-012023b2c91d23bde`) ingress now allows port 5432 only from the ECS service SG (`sg-0b8c4e804a9231980`). To do DB work in a future session, stand up a fresh bastion the same way as step 9 (the recipe is in `docs/aws-infrastructure-plan-ecs-express.md`). Don't add a permanent backdoor.
-- **AWS CLI auth note:** the `default` profile uses `aws login` (browser flow). The `adserve-admin` profile has static IAM keys and works directly — use `AWS_PROFILE=adserve-admin` for all CLI calls.
-- **CloudFront, ALB rule, secrets, ECS service, all task definitions and roles** are in the state described above. No teardown actions queued.
-- **RDS GRANTs and default privileges** for `adserve_app` are now in place. Any future `drizzle-kit push` against RDS (run as `adserve_migrator`) will create new tables with the grants already inherited — no manual GRANT needed per migration.
+- **Platform is in a steady operational state.** All 22 plan steps complete except step 20 (custom domain) which is deferred. Ready for Phase 3 (CRM module data plane).
+- **`origin/main` is fully up to date** with everything we've done in code.
+- **No standing bastion.** All bastion infra (EC2, SG, IAM role + instance profile) torn down 2026-05-28. RDS SG ingress on port 5432 allows only the ECS service SG (`sg-0b8c4e804a9231980`) and the rotation Lambda SG (`sg-00ab19854e010ad61`). To do DB work in a future session, spin up a fresh bastion the same way as step 9 (recipe in `docs/aws-infrastructure-plan-ecs-express.md`).
+- **AWS CLI auth.** Use `AWS_PROFILE=adserve-admin` for CLI calls. The `default` profile requires interactive browser-flow `aws login`.
+- **Credential rotation is live and self-healing.** Both DB secrets auto-rotate every 60 days. `RotationSucceeded` events fire an EventBridge rule that force-redeploys the ECS service so it picks up the new secret value within a few minutes. CloudTrail trail is the load-bearing dependency for that event delivery.
+- **Secret format is JSON, not URL string.** `packages/database/src/client.ts:resolveConnectionString` parses either; ECS task definitions inject the raw secret unchanged.
+- **`adserve_app` connects as NOSUPERUSER/NOBYPASSRLS in production.** Every tenant API route wraps queries in `withTenant()`; every super-admin path wraps in `withSuperAdminBypass()`. RLS enforces on RDS.
 - **DB has one real test tenant** (Katherine's Organization, owner `mrjamesfoley@gmail.com`). Safe to leave for ongoing tests; harmless to delete.
 
 ## Suggested next session start
 
-Steps 19 and the GitHub Actions Node 24 readiness are closed; step 22 has an approved plan ready to execute. Pick one of these:
+Platform foundation is complete. Step 20 (custom domain) is the only deferred plan item — everything else is in steady state. Reasonable next pieces of work:
 
-1. **Step 22 — execute the rotation plan** in `docs/aws-credential-rotation-plan.md`. All 8 steps, parameters confirmed. Touches infra and one ~5-line app change to `packages/database/src/client.ts`. Will trigger one immediate rotation to verify the chain end-to-end.
-2. **Step 20 — custom domain + ACM cert.** Currently on `d22lq47907kone.cloudfront.net`; needs a real domain + ACM cert + CloudFront alternate name + Clerk webhook endpoint update.
-3. **Step 21 — `withTenant()` / `withSuperAdminBypass()` query refactor.** Now load-bearing for any RLS-protected query path the app invokes; production RLS is real (verified in step 19). Tracked in memory `task_rls_production_switchover`; branch `claude/sad-shamir-e2a0ed` has the audit of ~44 sites.
-4. **Phase 3 work** — CRM module data plane, now that the platform foundation is live.
+1. **Phase 3 — CRM module data plane.** The platform is built to host this and Phase 2 is fully shipped. Pick up at `task_phase_2_complete` / `task_rls_production_switchover` memory entries for context.
+2. **Step 20 — custom domain + ACM cert.** Currently on `d22lq47907kone.cloudfront.net`. Needs a domain + ACM cert in us-east-1 + CloudFront alternate name + Clerk webhook endpoint update. Maybe 1–2 hours.
+3. **Re-establish rotation offset.** Run `aws secretsmanager rotate-secret --secret-id adserve/database-url-migrator --region eu-west-2` at any time ≥30 days from now (after 2026-06-27) to desynchronize the app/migrator rotation schedules. Optional hygiene.
+4. **Audit Phase 1/2 telemetry.** No alerts wired up yet — would be reasonable to add CloudWatch alarms on ECS task failures, rotation failures, and the auto-redeploy Lambda's errors.
 
-Browser smoke-test still recommended whichever path comes next: sign in at `https://d22lq47907kone.cloudfront.net`, confirm `/dashboard` and `/admin` load for the test tenant.
+Browser smoke-test recommended whichever path comes next: sign in at `https://d22lq47907kone.cloudfront.net`, confirm `/dashboard` and `/admin` load for the test tenant.

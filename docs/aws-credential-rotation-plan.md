@@ -1,11 +1,11 @@
-# RDS credential rotation plan (Step 22)
+# RDS credential rotation plan (Step 22) — EXECUTED 2026-05-28
 
-Plan for enabling automatic rotation of the two PostgreSQL credentials the
-app uses against the production RDS instance. Approved 2026-05-28;
-execution deferred to a future session.
+> **Status:** Plan executed end-to-end on 2026-05-28. Both DB secrets are
+> auto-rotating every 60 days with full EventBridge → ECS auto-redeploy
+> chain verified. Deployed resource map at the bottom of this doc.
 
 Reference plan: `docs/aws-infrastructure-plan-ecs-express.md` (step 22).
-Current state doc: `docs/aws-deployment-status.md`.
+Current state doc: `docs/aws-deployment-status.md` ("Notes on step 22").
 
 ## Current state (verified 2026-05-28)
 
@@ -94,3 +94,75 @@ When this is picked up, follow these in order. **Do not chain steps** — stop a
 - **The `adserve_master` secret.** Already enabled by RDS at provisioning time (`--manage-master-user-password`).
 - **CDK/Terraform layer.** Plain `aws cloudformation deploy` from local for two stacks; commit the templates to `infra/rotation/`. Don't introduce a full IaC framework just for this.
 - **Multi-user rotation upgrade path.** If traffic scale changes and the ~30s pool-reconnect window becomes unacceptable, this plan can be evolved to Option C by adding the `_a`/`_b` role pair. Tracked as a future consideration, not now.
+
+---
+
+## Executed 2026-05-28 — deployed resource map
+
+| Component | Identifier |
+|---|---|
+| App rotation Lambda | `arn:aws:lambda:eu-west-2:181194339452:function:adserve-rotate-app-secret` |
+| Migrator rotation Lambda | `arn:aws:lambda:eu-west-2:181194339452:function:adserve-rotate-migrator-secret` |
+| Lambda VPC config | private subnets `subnet-08907b065b8d35b83`, `subnet-070cbe70f61dc16e5` |
+| Rotation Lambda SG | `sg-00ab19854e010ad61` (`adserve-rotation-lambda-sg`) — egress only; RDS SG authorizes its ingress on 5432 |
+| App rotation IAM role | `adserve-rotation-app-secr-SecretsManagerRDSPostgreS-580jDXczdaUI` (created by SAR) + inline policy `AdserveDatabaseUrlSecretAccess` |
+| Migrator rotation IAM role | `adserve-rotation-migrator-SecretsManagerRDSPostgreS-aOfOxBAUQsk8` (created by SAR) + inline policy `AdserveDatabaseUrlMigratorSecretAccess` |
+| EventBridge rule | `adserve-rotation-succeeded` — matches `RotationSucceeded` on either secret ARN |
+| Auto-redeploy Lambda | `arn:aws:lambda:eu-west-2:181194339452:function:adserve-rotation-redeploy` |
+| Auto-redeploy IAM role | `adserve-rotation-redeploy-role` — only `ecs:UpdateService`/`DescribeServices` on `cluster/adserve-prod/service/adserve-studio` |
+| CloudFormation stacks | `adserve-rotation-app-secret`, `adserve-rotation-migrator-secret`, `adserve-rotation-event-redeploy` |
+| Templates | `infra/rotation/app-secret-rotation.yaml`, `infra/rotation/migrator-secret-rotation.yaml`, `infra/rotation/event-redeploy.yaml` |
+| Rotation schedule | `rate(60 days)` on both secrets; first rotation completed 2026-05-28 |
+| Secret format | JSON: `{engine, host, port, username, password, dbname, sslmode}` (was URL string pre-step-1) |
+| App-side parser | `packages/database/src/client.ts:resolveConnectionString` accepts both URL and JSON |
+
+### Hard dependency added during execution
+
+**CloudTrail trail** (`adserve-management-trail`, template
+`infra/cloudtrail/management-trail.yaml`, S3 bucket
+`adserve-cloudtrail-logs-181194339452`). Secrets Manager
+`RotationSucceeded` events reach EventBridge only via CloudTrail — without
+a trail, the events exist only in the 90-day "event history" and never
+match EventBridge rules. This was a surprise mid-execution; if a future
+session rebuilds rotation from scratch, deploy the trail first.
+
+### Schedule offset status
+
+The plan called for app and migrator to be staggered by 30 days. In this
+execution, both rotations were triggered immediately so the full chain
+could be verified — that aligned both schedules at T,T+60,T+120,….
+
+To re-establish the offset, run this one-liner at any point ≥30 days from
+2026-05-28 (i.e. after 2026-06-27):
+
+```bash
+AWS_PROFILE=adserve-admin aws secretsmanager rotate-secret \
+  --secret-id adserve/database-url-migrator --region eu-west-2
+```
+
+That shifts migrator's clock 30 days behind the app, achieving the
+intended offset for all future rotations.
+
+### Quirks worth remembering
+
+1. **`AWSPREVIOUS` must be JSON** for the SAR Lambda to work. The first
+   rotation attempt failed because the original URL string was still in
+   `AWSPREVIOUS` at the point rotation was first configured. Fix was to
+   drop the `AWSPREVIOUS` stage. From the second rotation onwards the
+   issue cannot recur because rotation only ever writes JSON.
+2. **`process.env.DATABASE_URL` is undefined at Next.js build time** in
+   the Docker build (no secrets injected during page-data collection).
+   `resolveConnectionString` must accept undefined and pass through.
+   Tested both code paths.
+3. **EventBridge has a ~5–15 min warm-up** between CloudTrail trail
+   creation and events flowing to rules. Don't trust the first rotation
+   trigger after creating the trail.
+
+### Verified end-to-end on 2026-05-28
+
+Triggered `rotate-secret` → rotation Lambda completed 4-step cycle in
+~3s → `RotationSucceeded` event fired → EventBridge matched → redeploy
+Lambda invoked `ecs update-service --force-new-deployment` → ECS rolled
+new task → new task picked up rotated secret → `/api/health` stayed 200
+throughout. Both secrets verified by connecting via `psql` through a
+temporary bastion using the post-rotation credentials.
