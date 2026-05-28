@@ -1,0 +1,241 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Production CloudWatch alarms for adserve-studio. Covers three failure
+  categories before Phase 3 adds traffic:
+    1. ECS task health (zero running tasks, sustained high CPU)
+    2. Credential rotation failures (any of the 3 rotation Lambdas erroring)
+    3. Application errors (>10 ERROR-level log lines in 5 minutes)
+
+  All alarms publish to one SNS topic `adserve-alerts`. Email
+  subscription is added manually after stack deploy.
+
+  PREREQUISITE: Container Insights must be enabled on the cluster for
+  the RunningTaskCount metric to publish. Enable with:
+    aws ecs update-cluster-settings --cluster adserve-prod \
+      --settings name=containerInsights,value=enabled --region eu-west-2
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: adserve-prod
+  ServiceName:
+    Type: String
+    Default: adserve-studio
+  AppRotationLambda:
+    Type: String
+    Default: adserve-rotate-app-secret
+  MigratorRotationLambda:
+    Type: String
+    Default: adserve-rotate-migrator-secret
+  RedeployLambda:
+    Type: String
+    Default: adserve-rotation-redeploy
+  EcsLogGroup:
+    Type: String
+    Default: /ecs/adserve-studio
+  AlertsTopicName:
+    Type: String
+    Default: adserve-alerts
+
+Resources:
+  # ----------------------------------------------------------------
+  # SNS topic — single destination for all alarms. Email subscription
+  # added manually post-deploy (intentionally not templated so creds
+  # / email don't end up in source control).
+  # ----------------------------------------------------------------
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref AlertsTopicName
+      DisplayName: AdServe production alerts
+
+  # ----------------------------------------------------------------
+  # 1a. ECS running task count drops to zero.
+  # Uses Container Insights' RunningTaskCount (requires
+  # containerInsights=enabled on the cluster — see prereq above).
+  # treatMissingData=breaching so loss of metrics also alarms.
+  # ----------------------------------------------------------------
+  EcsRunningTaskCountZero:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: adserve-ecs-running-task-count-zero
+      AlarmDescription: >
+        ECS service adserve-studio has zero running tasks. The site is
+        almost certainly returning 5xx through CloudFront — investigate
+        the ECS service events and the task's stop reason.
+      Namespace: ECS/ContainerInsights
+      MetricName: RunningTaskCount
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ClusterName
+        - Name: ServiceName
+          Value: !Ref ServiceName
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      ComparisonOperator: LessThanThreshold
+      Threshold: 1
+      TreatMissingData: breaching
+      AlarmActions:
+        - !Ref AlertsTopic
+      OKActions:
+        - !Ref AlertsTopic
+
+  # ----------------------------------------------------------------
+  # 1b. Sustained high CPU. Early warning before autoscaling kicks in
+  # at 70% (per the deploy config). Uses the default service-level
+  # CPUUtilization metric — does not require Container Insights.
+  # ----------------------------------------------------------------
+  EcsHighCpu:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: adserve-ecs-cpu-high
+      AlarmDescription: >
+        ECS service CPU utilization above 80% for 5+ minutes. Autoscaling
+        target is 70%, so this means scaling is failing to keep up or has
+        hit max-task-count (4).
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ClusterName
+        - Name: ServiceName
+          Value: !Ref ServiceName
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 5
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 80
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+      OKActions:
+        - !Ref AlertsTopic
+
+  # ----------------------------------------------------------------
+  # 2a-c. Each rotation-related Lambda gets its own errors alarm.
+  # Threshold is >=1 error in a 5-minute window — any error is
+  # actionable here since these run on a 60-day cadence and a failure
+  # silently leaves a half-rotated secret if not caught.
+  # ----------------------------------------------------------------
+  AppRotationLambdaErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: adserve-rotation-app-lambda-errors
+      AlarmDescription: >
+        Rotation Lambda for adserve/database-url is erroring. Likely
+        causes: AWSPREVIOUS in wrong format, RDS connectivity, or the
+        new password violating the GetRandomPassword exclude chars.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AppRotationLambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+      OKActions:
+        - !Ref AlertsTopic
+
+  MigratorRotationLambdaErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: adserve-rotation-migrator-lambda-errors
+      AlarmDescription: >
+        Rotation Lambda for adserve/database-url-migrator is erroring.
+        Same likely causes as the app rotation alarm.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MigratorRotationLambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+      OKActions:
+        - !Ref AlertsTopic
+
+  RedeployLambdaErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: adserve-rotation-redeploy-lambda-errors
+      AlarmDescription: >
+        Auto-redeploy Lambda is erroring. When this fails, rotations
+        complete but ECS tasks don't restart — they keep the old cached
+        password and start failing as their pool connections recycle.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref RedeployLambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+      OKActions:
+        - !Ref AlertsTopic
+
+  # ----------------------------------------------------------------
+  # 3. Application errors in the ECS task log.
+  # Metric filter creates a custom CloudWatch metric (AdServe/Errors)
+  # that increments per matching log line. The alarm then watches that.
+  # Pattern matches "ERROR" (uppercase, e.g. Postgres "ERROR:" lines)
+  # and "Error:" (Next.js console.error output and JS stack traces).
+  # ----------------------------------------------------------------
+  EcsErrorMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref EcsLogGroup
+      FilterName: adserve-ecs-error-lines
+      FilterPattern: '?ERROR ?"Error:"'
+      MetricTransformations:
+        - MetricName: ErrorLineCount
+          MetricNamespace: AdServe
+          MetricValue: "1"
+          DefaultValue: 0
+
+  EcsHighErrorRate:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: adserve-ecs-error-rate-high
+      AlarmDescription: >
+        ECS task logs show more than 10 ERROR-level entries in a
+        5-minute window. Usually a database connectivity issue, a
+        Clerk verification failure, or an unhandled exception in a
+        route handler.
+      Namespace: AdServe
+      MetricName: ErrorLineCount
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 10
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+      OKActions:
+        - !Ref AlertsTopic
+
+Outputs:
+  AlertsTopicArn:
+    Description: ARN of the SNS topic — subscribe email to this manually.
+    Value: !Ref AlertsTopic
+  SubscribeCommand:
+    Description: One-liner to subscribe an email to alerts.
+    Value: !Sub "aws sns subscribe --topic-arn ${AlertsTopic} --protocol email --notification-endpoint <your-email> --region ${AWS::Region}"

@@ -37,6 +37,7 @@ Snapshot of where the production AWS deployment stands at end of session
 | 22 | RDS credential rotation in Secrets Manager | ✓ Complete — see "Notes on step 22" below |
 | — | GitHub Actions Node 24 readiness | ✓ Bumped checkout, setup-node, pnpm/action-setup, configure-aws-credentials to `@v6` — see "GitHub Actions" below |
 | — | CloudTrail trail (added as dependency of step 22) | ✓ Complete — `infra/cloudtrail/management-trail.yaml`, see "Notes on step 22" |
+| — | CloudWatch alarms (pre-Phase 3 monitoring) | ✓ Complete — `infra/monitoring/alarms.yaml`, see "Notes on monitoring" |
 
 ## Notes on step 16
 
@@ -229,6 +230,46 @@ on its current cadence.
    collection in CI. Fixed in commit `64d93d4` by passing undefined
    through unchanged.
 3. CloudTrail dependency wasn't in the plan; added during execution.
+
+## Notes on monitoring
+
+Pre-Phase-3 baseline alarms deployed via CloudFormation stack
+`adserve-monitoring-alarms` (template `infra/monitoring/alarms.yaml`).
+6 alarms + 1 metric filter, all targeting one SNS topic
+`adserve-alerts`.
+
+| Alarm | Fires when |
+|---|---|
+| `adserve-ecs-running-task-count-zero` | `RunningTaskCount < 1` for 2 consecutive minutes (missing data treated as breaching) |
+| `adserve-ecs-cpu-high` | `CPUUtilization > 80%` for 5 consecutive minutes |
+| `adserve-rotation-app-lambda-errors` | App-secret rotation Lambda reports any error in a 5-min window |
+| `adserve-rotation-migrator-lambda-errors` | Migrator-secret rotation Lambda reports any error in a 5-min window |
+| `adserve-rotation-redeploy-lambda-errors` | Auto-redeploy Lambda reports any error in a 5-min window |
+| `adserve-ecs-error-rate-high` | More than 10 ERROR-level log lines in a 5-min window (via metric filter on `/ecs/adserve-studio`) |
+
+Dependencies:
+- Container Insights is **enabled** on cluster `adserve-prod` —
+  required for the `RunningTaskCount` metric. Cost ~$3/month for the
+  added per-task metrics.
+- Metric filter `adserve-ecs-error-lines` on the ECS log group with
+  pattern `?ERROR ?"Error:"` — produces custom metric
+  `AdServe/ErrorLineCount`.
+
+**Manual follow-up:** SNS topic `adserve-alerts` has no subscribers
+yet. Add an email subscription with:
+
+```bash
+AWS_PROFILE=adserve-admin aws sns subscribe \
+  --topic-arn arn:aws:sns:eu-west-2:181194339452:adserve-alerts \
+  --protocol email --notification-endpoint <your-email> \
+  --region eu-west-2
+```
+
+Confirmation link will arrive in the inbox.
+
+Auto-created `adserve-prod/adserve-studio/RollbackAlarm` in the alarm
+list is **not** from our stack — it's created by ECS Express Mode's
+autoscaling/deployment logic for rollback detection. Leave alone.
 
 ## Things you can rely on across the session boundary
 
