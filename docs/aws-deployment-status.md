@@ -14,8 +14,8 @@ Snapshot of where the production AWS deployment stands at end of session
 | ECS cluster | `adserve-prod` (NOT `adserve`) |
 | ECS service | `adserve-studio` |
 | Region | `eu-west-2` |
-| Bastion EC2 instance | `i-0ee70c07b19b3d743` (still running — reusable) |
-| Bastion SG | `sg-0cfd59b93f11c47de` |
+| Bastion EC2 instance | Terminated 2026-05-28 (was `i-0ee70c07b19b3d743`) |
+| Bastion SG | Deleted 2026-05-28 (was `sg-0cfd59b93f11c47de`) |
 | Last successful deploy | `26565477286` — GRANTs + withSuperAdminBypass wrap (commit `b4c1626`) |
 
 ## Checklist progress
@@ -160,7 +160,7 @@ doc — start there when this is picked up.
 ## Things you can rely on across the session boundary
 
 - **`origin/main` is fully up to date** with everything we've done in code. HEAD = `e3e4d71` (this status doc update will move it forward by one). Nothing uncommitted will be left when this commit lands.
-- **The bastion EC2 (`i-0ee70c07b19b3d743`)** is still running. Resume DB work with an SSM port-forward against it (`localPortNumber=15432`, `host=adserve-db.c32e6wm047ec.eu-west-2.rds.amazonaws.com`, `portNumber=5432`). The RDS SG's temporary ingress rule from the bastion SG is still in place. SSM sessions idle-timeout after a while; just re-open if needed.
+- **The bastion EC2 has been torn down** (2026-05-28). Instance `i-0ee70c07b19b3d743`, SG `sg-0cfd59b93f11c47de`, IAM role + instance profile `adserve-migrator-bastion-role`, and the RDS SG ingress entry for the bastion SG are all gone. The RDS SG (`sg-012023b2c91d23bde`) ingress now allows port 5432 only from the ECS service SG (`sg-0b8c4e804a9231980`). To do DB work in a future session, stand up a fresh bastion the same way as step 9 (the recipe is in `docs/aws-infrastructure-plan-ecs-express.md`). Don't add a permanent backdoor.
 - **AWS CLI auth note:** the `default` profile uses `aws login` (browser flow). The `adserve-admin` profile has static IAM keys and works directly — use `AWS_PROFILE=adserve-admin` for all CLI calls.
 - **CloudFront, ALB rule, secrets, ECS service, all task definitions and roles** are in the state described above. No teardown actions queued.
 - **RDS GRANTs and default privileges** for `adserve_app` are now in place. Any future `drizzle-kit push` against RDS (run as `adserve_migrator`) will create new tables with the grants already inherited — no manual GRANT needed per migration.
