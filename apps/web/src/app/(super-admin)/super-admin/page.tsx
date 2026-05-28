@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { db, tenants, users } from "@adserve/database";
+import { tenants, users, withSuperAdminBypass } from "@adserve/database";
 import { count, desc, eq } from "drizzle-orm";
 
 const statusStyles: Record<string, string> = {
@@ -15,16 +15,24 @@ export default async function SuperAdminDashboardPage() {
     totalUsersRow,
     activeUsersRow,
     recentTenants,
-  ] = await Promise.all([
-    db.select({ n: count() }).from(tenants).where(eq(tenants.status, "active")),
-    db
-      .select({ n: count() })
-      .from(tenants)
-      .where(eq(tenants.status, "suspended")),
-    db.select({ n: count() }).from(users),
-    db.select({ n: count() }).from(users).where(eq(users.status, "active")),
-    db.select().from(tenants).orderBy(desc(tenants.createdAt)).limit(5),
-  ]);
+  ] = await withSuperAdminBypass((tx) =>
+    Promise.all([
+      tx
+        .select({ n: count() })
+        .from(tenants)
+        .where(eq(tenants.status, "active")),
+      tx
+        .select({ n: count() })
+        .from(tenants)
+        .where(eq(tenants.status, "suspended")),
+      tx.select({ n: count() }).from(users),
+      tx
+        .select({ n: count() })
+        .from(users)
+        .where(eq(users.status, "active")),
+      tx.select().from(tenants).orderBy(desc(tenants.createdAt)).limit(5),
+    ])
+  );
 
   const cards = [
     {

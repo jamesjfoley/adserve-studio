@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  db,
   modules,
   tenants,
   tenantModules,
+  withTenant,
 } from "@adserve/database";
 import { and, asc, eq } from "drizzle-orm";
 import { apiRequireTenantAdmin } from "@/lib/tenant-admin";
@@ -16,23 +16,25 @@ export async function GET() {
   if (guard.error) return guard.error;
   const { tenant } = guard.ctx;
 
-  const enabledModules = await db
-    .select({
-      id: modules.id,
-      slug: modules.slug,
-      name: modules.name,
-      description: modules.description,
-      enabledAt: tenantModules.enabledAt,
-    })
-    .from(tenantModules)
-    .innerJoin(modules, eq(modules.id, tenantModules.moduleId))
-    .where(
-      and(
-        eq(tenantModules.tenantId, tenant.id),
-        eq(tenantModules.enabled, true)
+  const enabledModules = await withTenant(tenant.id, (tx) =>
+    tx
+      .select({
+        id: modules.id,
+        slug: modules.slug,
+        name: modules.name,
+        description: modules.description,
+        enabledAt: tenantModules.enabledAt,
+      })
+      .from(tenantModules)
+      .innerJoin(modules, eq(modules.id, tenantModules.moduleId))
+      .where(
+        and(
+          eq(tenantModules.tenantId, tenant.id),
+          eq(tenantModules.enabled, true)
+        )
       )
-    )
-    .orderBy(asc(modules.name));
+      .orderBy(asc(modules.name))
+  );
 
   return NextResponse.json({
     tenant: {
@@ -143,11 +145,13 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  const [updated] = await db
-    .update(tenants)
-    .set(updates)
-    .where(eq(tenants.id, tenant.id))
-    .returning();
+  const [updated] = await withTenant(tenant.id, (tx) =>
+    tx
+      .update(tenants)
+      .set(updates)
+      .where(eq(tenants.id, tenant.id))
+      .returning()
+  );
 
   return NextResponse.json({ tenant: updated });
 }

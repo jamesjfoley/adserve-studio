@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { db, roles, tenantMemberships } from "@adserve/database";
+import { roles, tenantMemberships, withTenant } from "@adserve/database";
 import { asc, count, eq } from "drizzle-orm";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 import { RolesListActions } from "./_components/roles-list-actions";
@@ -7,18 +7,20 @@ import { RolesListActions } from "./_components/roles-list-actions";
 export default async function AdminRolesPage() {
   const { tenant } = await requireTenantAdmin();
 
-  const [tenantRoles, memberCountRows] = await Promise.all([
-    db
-      .select()
-      .from(roles)
-      .where(eq(roles.tenantId, tenant.id))
-      .orderBy(asc(roles.name)),
-    db
-      .select({ roleId: tenantMemberships.roleId, n: count() })
-      .from(tenantMemberships)
-      .where(eq(tenantMemberships.tenantId, tenant.id))
-      .groupBy(tenantMemberships.roleId),
-  ]);
+  const [tenantRoles, memberCountRows] = await withTenant(tenant.id, (tx) =>
+    Promise.all([
+      tx
+        .select()
+        .from(roles)
+        .where(eq(roles.tenantId, tenant.id))
+        .orderBy(asc(roles.name)),
+      tx
+        .select({ roleId: tenantMemberships.roleId, n: count() })
+        .from(tenantMemberships)
+        .where(eq(tenantMemberships.tenantId, tenant.id))
+        .groupBy(tenantMemberships.roleId),
+    ])
+  );
 
   const countByRole = new Map(memberCountRows.map((r) => [r.roleId, Number(r.n)]));
 

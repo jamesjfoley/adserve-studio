@@ -5,15 +5,20 @@ import {
   rolePermissions,
   roles,
   tenantMemberships,
-  tenantModules,
+  withTenant,
 } from "@adserve/database";
-import { and, count, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { apiRequireTenantAdmin } from "@/lib/tenant-admin";
+import { validatePermissionsForTenant } from "@/lib/role-permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
-async function loadRole(tenantId: string, roleId: string) {
-  const [role] = await db
+/**
+ * Look up a role by id, scoped to a tenant. Takes a `tx` so the caller
+ * owns the wrapper — see `withTenant` in `@adserve/database`.
+ */
+async function loadRole(tx: typeof db, tenantId: string, roleId: string) {
+  const [role] = await tx
     .select()
     .from(roles)
     .where(and(eq(roles.id, roleId), eq(roles.tenantId, tenantId)));
@@ -25,19 +30,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (guard.error) return guard.error;
   const { tenant, role: actorRole } = guard.ctx;
   const { id } = await params;
-
-  const role = await loadRole(tenant.id, id);
-  if (!role) {
-    return NextResponse.json({ error: "Role not found." }, { status: 404 });
-  }
-
-  // Owner role is locked entirely (Q2).
-  if (role.slug === "owner") {
-    return NextResponse.json(
-      { error: "The Owner role cannot be edited." },
-      { status: 403 }
-    );
-  }
 
   let body: unknown;
   try {
@@ -52,123 +44,130 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     permissionIds?: unknown;
   };
 
-  const updates: Record<string, unknown> = {};
-
-  // Name / description: editable on custom roles only. System roles (Q1)
-  // lock these but allow permission changes.
-  if (name !== undefined) {
-    if (role.isSystem) {
-      return NextResponse.json(
-        { error: "System role name cannot be changed." },
-        { status: 403 }
-      );
-    }
-    if (typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Field 'name' must be a non-empty string." },
-        { status: 400 }
-      );
-    }
-    updates.name = name.trim();
-  }
-
-  if (description !== undefined) {
-    if (role.isSystem) {
-      return NextResponse.json(
-        { error: "System role description cannot be changed." },
-        { status: 403 }
-      );
-    }
-    if (description !== null && typeof description !== "string") {
-      return NextResponse.json(
-        { error: "Field 'description' must be a string or null." },
-        { status: 400 }
-      );
-    }
-    updates.description = description;
-  }
-
-  // Resolve enabled modules — needed for permission validation and lockout check
-  const enabledModuleRows = await db
-    .select({ moduleId: tenantModules.moduleId })
-    .from(tenantModules)
-    .where(
-      and(
-        eq(tenantModules.tenantId, tenant.id),
-        eq(tenantModules.enabled, true)
-      )
-    );
-  const enabledModuleIds = enabledModuleRows.map((r) => r.moduleId);
-
+  // Validate permissionIds shape up-front (cheap and tx-independent).
   let newPermissionIds: string[] | null = null;
   if (permissionIds !== undefined) {
-    if (!Array.isArray(permissionIds) || !permissionIds.every((x) => typeof x === "string")) {
+    if (
+      !Array.isArray(permissionIds) ||
+      !permissionIds.every((x) => typeof x === "string")
+    ) {
       return NextResponse.json(
         { error: "Field 'permissionIds' must be an array of strings." },
         { status: 400 }
       );
     }
     newPermissionIds = permissionIds as string[];
+  }
 
-    // Self-lockout protection (Q10): if the actor's own role is being
-    // edited and the new set drops admin.access, refuse.
-    if (role.id === actorRole.id) {
-      const [adminAccess] = await db
-        .select({ id: permissions.id })
-        .from(permissions)
-        .where(
-          and(
-            eq(permissions.resource, "admin"),
-            eq(permissions.action, "access")
-          )
-        );
-      if (adminAccess && !newPermissionIds.includes(adminAccess.id)) {
-        return NextResponse.json(
-          {
-            error:
+  type PatchOutcome =
+    | { kind: "ok"; role: typeof roles.$inferSelect }
+    | {
+        kind: "error";
+        status: number;
+        message: string;
+      };
+
+  const outcome: PatchOutcome = await withTenant(tenant.id, async (tx) => {
+    const role = await loadRole(tx, tenant.id, id);
+    if (!role) return { kind: "error", status: 404, message: "Role not found." };
+
+    // Owner role is locked entirely (Q2).
+    if (role.slug === "owner") {
+      return {
+        kind: "error",
+        status: 403,
+        message: "The Owner role cannot be edited.",
+      };
+    }
+
+    const updates: Record<string, unknown> = {};
+
+    // Name / description: editable on custom roles only. System roles (Q1)
+    // lock these but allow permission changes.
+    if (name !== undefined) {
+      if (role.isSystem) {
+        return {
+          kind: "error",
+          status: 403,
+          message: "System role name cannot be changed.",
+        };
+      }
+      if (typeof name !== "string" || name.trim().length === 0) {
+        return {
+          kind: "error",
+          status: 400,
+          message: "Field 'name' must be a non-empty string.",
+        };
+      }
+      updates.name = name.trim();
+    }
+
+    if (description !== undefined) {
+      if (role.isSystem) {
+        return {
+          kind: "error",
+          status: 403,
+          message: "System role description cannot be changed.",
+        };
+      }
+      if (description !== null && typeof description !== "string") {
+        return {
+          kind: "error",
+          status: 400,
+          message: "Field 'description' must be a string or null.",
+        };
+      }
+      updates.description = description;
+    }
+
+    if (newPermissionIds !== null) {
+      // Self-lockout protection (Q10): if the actor's own role is being
+      // edited and the new set drops admin.access, refuse. permissions
+      // table is not RLS-protected, so this lookup works inside the tx.
+      if (role.id === actorRole.id) {
+        const [adminAccess] = await tx
+          .select({ id: permissions.id })
+          .from(permissions)
+          .where(
+            and(
+              eq(permissions.resource, "admin"),
+              eq(permissions.action, "access")
+            )
+          );
+        if (adminAccess && !newPermissionIds.includes(adminAccess.id)) {
+          return {
+            kind: "error",
+            status: 400,
+            message:
               "Refusing to remove admin.access from your own role — you would lose access to /admin.",
-          },
-          { status: 400 }
-        );
+          };
+        }
+      }
+
+      // Validate every submitted permission is visible to this tenant
+      const validation = await validatePermissionsForTenant(
+        tx,
+        tenant.id,
+        newPermissionIds
+      );
+      if (!validation.ok) {
+        return {
+          kind: "error",
+          status: 400,
+          message:
+            "Some permissions are not visible to this tenant (disabled module or unknown id).",
+        };
       }
     }
 
-    // Validate every submitted permission is visible to this tenant
-    if (newPermissionIds.length > 0) {
-      const validPerms = await db
-        .select({ id: permissions.id })
-        .from(permissions)
-        .where(
-          and(
-            inArray(permissions.id, newPermissionIds),
-            enabledModuleIds.length > 0
-              ? or(
-                  isNull(permissions.moduleId),
-                  inArray(permissions.moduleId, enabledModuleIds)
-                )
-              : isNull(permissions.moduleId)
-          )
-        );
-      if (validPerms.length !== newPermissionIds.length) {
-        return NextResponse.json(
-          {
-            error:
-              "Some permissions are not visible to this tenant (disabled module or unknown id).",
-          },
-          { status: 400 }
-        );
-      }
+    if (Object.keys(updates).length === 0 && newPermissionIds === null) {
+      return {
+        kind: "error",
+        status: 400,
+        message: "No updatable fields provided.",
+      };
     }
-  }
 
-  if (Object.keys(updates).length === 0 && newPermissionIds === null) {
-    return NextResponse.json(
-      { error: "No updatable fields provided." },
-      { status: 400 }
-    );
-  }
-
-  const updated = await db.transaction(async (tx) => {
     let next = role;
     if (Object.keys(updates).length > 0) {
       const [row] = await tx
@@ -181,7 +180,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     if (newPermissionIds !== null) {
       // Atomic replace (Q9)
-      await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, role.id));
+      await tx
+        .delete(rolePermissions)
+        .where(eq(rolePermissions.roleId, role.id));
       if (newPermissionIds.length > 0) {
         await tx.insert(rolePermissions).values(
           newPermissionIds.map((pid) => ({
@@ -192,10 +193,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
     }
 
-    return next;
+    return { kind: "ok", role: next };
   });
 
-  return NextResponse.json({ role: updated });
+  if (outcome.kind === "error") {
+    return NextResponse.json(
+      { error: outcome.message },
+      { status: outcome.status }
+    );
+  }
+  return NextResponse.json({ role: outcome.role });
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
@@ -204,34 +211,54 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { tenant } = guard.ctx;
   const { id } = await params;
 
-  const role = await loadRole(tenant.id, id);
-  if (!role) {
-    return NextResponse.json({ error: "Role not found." }, { status: 404 });
-  }
+  type DeleteOutcome =
+    | { kind: "ok" }
+    | { kind: "error"; status: number; message: string; memberCount?: number };
 
-  if (role.isSystem) {
-    return NextResponse.json(
-      { error: "System roles cannot be deleted." },
-      { status: 403 }
-    );
-  }
+  const outcome: DeleteOutcome = await withTenant(tenant.id, async (tx) => {
+    const role = await loadRole(tx, tenant.id, id);
+    if (!role) {
+      return { kind: "error", status: 404, message: "Role not found." };
+    }
 
-  // Block delete if any memberships reference this role (Q8 — all statuses count)
-  const [{ n }] = await db
-    .select({ n: count() })
-    .from(tenantMemberships)
-    .where(eq(tenantMemberships.roleId, role.id));
-  if (Number(n) > 0) {
+    if (role.isSystem) {
+      return {
+        kind: "error",
+        status: 403,
+        message: "System roles cannot be deleted.",
+      };
+    }
+
+    // Block delete if any memberships reference this role (Q8 — all statuses count)
+    const [{ n }] = await tx
+      .select({ n: count() })
+      .from(tenantMemberships)
+      .where(eq(tenantMemberships.roleId, role.id));
+    if (Number(n) > 0) {
+      return {
+        kind: "error",
+        status: 409,
+        message: `Cannot delete: ${n} user${Number(n) === 1 ? "" : "s"} are assigned to this role.`,
+        memberCount: Number(n),
+      };
+    }
+
+    // role_permissions cascades on role delete
+    await tx.delete(roles).where(eq(roles.id, role.id));
+    return { kind: "ok" };
+  });
+
+  if (outcome.kind === "error") {
     return NextResponse.json(
       {
-        error: `Cannot delete: ${n} user${Number(n) === 1 ? "" : "s"} are assigned to this role.`,
-        memberCount: Number(n),
+        error: outcome.message,
+        ...(outcome.memberCount !== undefined
+          ? { memberCount: outcome.memberCount }
+          : {}),
       },
-      { status: 409 }
+      { status: outcome.status }
     );
   }
 
-  // role_permissions cascades on role delete
-  await db.delete(roles).where(eq(roles.id, role.id));
   return NextResponse.json({ ok: true });
 }

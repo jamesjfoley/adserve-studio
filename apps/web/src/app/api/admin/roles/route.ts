@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  db,
-  permissions,
   rolePermissions,
   roles,
   tenantMemberships,
-  tenantModules,
+  withTenant,
 } from "@adserve/database";
-import { and, asc, count, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 import { apiRequireTenantAdmin } from "@/lib/tenant-admin";
+import { validatePermissionsForTenant } from "@/lib/role-permissions";
 
 function slugify(input: string): string {
   return input
@@ -24,20 +23,26 @@ export async function GET() {
   if (guard.error) return guard.error;
   const { tenant } = guard.ctx;
 
-  const tenantRoles = await db
-    .select()
-    .from(roles)
-    .where(eq(roles.tenantId, tenant.id))
-    .orderBy(asc(roles.name));
+  const { tenantRoles, memberCountRows } = await withTenant(
+    tenant.id,
+    async (tx) => {
+      const tenantRoles = await tx
+        .select()
+        .from(roles)
+        .where(eq(roles.tenantId, tenant.id))
+        .orderBy(asc(roles.name));
 
-  const memberCountRows = await db
-    .select({
-      roleId: tenantMemberships.roleId,
-      n: count(),
-    })
-    .from(tenantMemberships)
-    .where(eq(tenantMemberships.tenantId, tenant.id))
-    .groupBy(tenantMemberships.roleId);
+      const memberCountRows = await tx
+        .select({
+          roleId: tenantMemberships.roleId,
+          n: count(),
+        })
+        .from(tenantMemberships)
+        .where(eq(tenantMemberships.tenantId, tenant.id))
+        .groupBy(tenantMemberships.roleId);
+      return { tenantRoles, memberCountRows };
+    }
+  );
   const countByRole = new Map(memberCountRows.map((r) => [r.roleId, Number(r.n)]));
 
   return NextResponse.json({
@@ -93,49 +98,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Resolve which module IDs are enabled for this tenant
-  const enabledModuleRows = await db
-    .select({ moduleId: tenantModules.moduleId })
-    .from(tenantModules)
-    .where(
-      and(
-        eq(tenantModules.tenantId, tenant.id),
-        eq(tenantModules.enabled, true)
-      )
-    );
-  const enabledModuleIds = enabledModuleRows.map((r) => r.moduleId);
-
-  // Validate every submitted permission ID is either platform-level or
-  // belongs to an enabled module
-  let validPerms: { id: string }[] = [];
-  if (permissionIds.length > 0) {
-    validPerms = await db
-      .select({ id: permissions.id })
-      .from(permissions)
-      .where(
-        and(
-          inArray(permissions.id, permissionIds as string[]),
-          enabledModuleIds.length > 0
-            ? or(
-                isNull(permissions.moduleId),
-                inArray(permissions.moduleId, enabledModuleIds)
-              )
-            : isNull(permissions.moduleId)
-        )
-      );
-    if (validPerms.length !== permissionIds.length) {
-      return NextResponse.json(
-        {
-          error:
-            "Some permissions are not visible to this tenant (disabled module or unknown id).",
-        },
-        { status: 400 }
-      );
-    }
-  }
-
   try {
-    const newRole = await db.transaction(async (tx) => {
+    const result = await withTenant(tenant.id, async (tx) => {
+      const validation = await validatePermissionsForTenant(
+        tx,
+        tenant.id,
+        permissionIds as string[]
+      );
+      if (!validation.ok) return { error: "invalid_permissions" as const };
+
       const [created] = await tx
         .insert(roles)
         .values({
@@ -147,19 +118,29 @@ export async function POST(req: NextRequest) {
         })
         .returning();
 
-      if (validPerms.length > 0) {
+      if (validation.permissionIds.length > 0) {
         await tx.insert(rolePermissions).values(
-          validPerms.map((p) => ({
+          validation.permissionIds.map((pid) => ({
             roleId: created.id,
-            permissionId: p.id,
+            permissionId: pid,
           }))
         );
       }
 
-      return created;
+      return { role: created };
     });
 
-    return NextResponse.json({ role: newRole });
+    if ("error" in result) {
+      return NextResponse.json(
+        {
+          error:
+            "Some permissions are not visible to this tenant (disabled module or unknown id).",
+        },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ role: result.role });
   } catch (err) {
     if (err instanceof Error && /unique/i.test(err.message)) {
       return NextResponse.json(

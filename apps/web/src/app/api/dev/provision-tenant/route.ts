@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import {
-  db,
   tenants,
   roles,
   permissions,
@@ -9,8 +8,9 @@ import {
   tenantMemberships,
   tenantModules,
   modules,
+  withSuperAdminBypass,
 } from "@adserve/database";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { DevSyncError, syncCurrentUser } from "@/lib/dev-sync";
 
 export async function GET() {
@@ -58,7 +58,9 @@ export async function GET() {
   const orgName = clerkOrg.name || clerkOrg.slug || orgId;
   const orgSlug = clerkOrg.slug || orgId;
 
-  const result = await db.transaction(async (tx) => {
+  // withSuperAdminBypass provides its own transaction — flatten the
+  // existing db.transaction() into this callback. No nested tx.
+  const result = await withSuperAdminBypass(async (tx) => {
     // ---- Tenant (idempotent on settings.clerkOrgId) ----
     const existing = await tx
       .select()

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { db, tenants } from "@adserve/database";
+import { tenants, withSuperAdminBypass } from "@adserve/database";
 import { desc, sql } from "drizzle-orm";
 import { TenantStatusActions } from "./_components/tenant-status-actions";
 
@@ -10,18 +10,20 @@ const statusStyles: Record<string, string> = {
 };
 
 export default async function TenantsListPage() {
-  const rows = await db
-    .select({
-      id: tenants.id,
-      name: tenants.name,
-      slug: tenants.slug,
-      status: tenants.status,
-      createdAt: tenants.createdAt,
-      userCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_memberships WHERE tenant_id = "tenants"."id")`,
-      moduleCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_modules WHERE tenant_id = "tenants"."id" AND enabled = true)`,
-    })
-    .from(tenants)
-    .orderBy(desc(tenants.createdAt));
+  const rows = await withSuperAdminBypass((tx) =>
+    tx
+      .select({
+        id: tenants.id,
+        name: tenants.name,
+        slug: tenants.slug,
+        status: tenants.status,
+        createdAt: tenants.createdAt,
+        userCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_memberships WHERE tenant_id = "tenants"."id")`,
+        moduleCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_modules WHERE tenant_id = "tenants"."id" AND enabled = true)`,
+      })
+      .from(tenants)
+      .orderBy(desc(tenants.createdAt))
+  );
 
   return (
     <div>

@@ -5,6 +5,7 @@ import {
   tenantMemberships,
   tenants,
   roles,
+  withSuperAdminBypass,
 } from "@adserve/database";
 import { eq } from "drizzle-orm";
 import { apiRequireSuperAdmin } from "@/lib/super-admin";
@@ -20,28 +21,34 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const { id } = await params;
 
-  const [user] = await db.select().from(users).where(eq(users.id, id));
-  if (!user) {
+  const data = await withSuperAdminBypass(async (tx) => {
+    const [user] = await tx.select().from(users).where(eq(users.id, id));
+    if (!user) return null;
+
+    const memberships = await tx
+      .select({
+        membershipId: tenantMemberships.id,
+        tenantId: tenants.id,
+        tenantName: tenants.name,
+        tenantSlug: tenants.slug,
+        roleSlug: roles.slug,
+        roleName: roles.name,
+        membershipStatus: tenantMemberships.status,
+        joinedAt: tenantMemberships.joinedAt,
+      })
+      .from(tenantMemberships)
+      .innerJoin(tenants, eq(tenants.id, tenantMemberships.tenantId))
+      .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
+      .where(eq(tenantMemberships.userId, id));
+
+    return { user, memberships };
+  });
+
+  if (!data) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const memberships = await db
-    .select({
-      membershipId: tenantMemberships.id,
-      tenantId: tenants.id,
-      tenantName: tenants.name,
-      tenantSlug: tenants.slug,
-      roleSlug: roles.slug,
-      roleName: roles.name,
-      membershipStatus: tenantMemberships.status,
-      joinedAt: tenantMemberships.joinedAt,
-    })
-    .from(tenantMemberships)
-    .innerJoin(tenants, eq(tenants.id, tenantMemberships.tenantId))
-    .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
-    .where(eq(tenantMemberships.userId, id));
-
-  return NextResponse.json({ user, memberships });
+  return NextResponse.json(data);
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {

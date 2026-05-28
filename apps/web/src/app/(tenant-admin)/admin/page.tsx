@@ -1,7 +1,7 @@
 import {
-  db,
   tenantMemberships,
   tenantModules,
+  withTenant,
 } from "@adserve/database";
 import { and, count, eq } from "drizzle-orm";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
@@ -9,39 +9,43 @@ import { requireTenantAdmin } from "@/lib/tenant-admin";
 export default async function TenantAdminDashboardPage() {
   const { tenant } = await requireTenantAdmin();
 
-  const [totalRow, activeRow, invitedRow, modulesRow] = await Promise.all([
-    db
-      .select({ n: count() })
-      .from(tenantMemberships)
-      .where(eq(tenantMemberships.tenantId, tenant.id)),
-    db
-      .select({ n: count() })
-      .from(tenantMemberships)
-      .where(
-        and(
-          eq(tenantMemberships.tenantId, tenant.id),
-          eq(tenantMemberships.status, "active")
-        )
-      ),
-    db
-      .select({ n: count() })
-      .from(tenantMemberships)
-      .where(
-        and(
-          eq(tenantMemberships.tenantId, tenant.id),
-          eq(tenantMemberships.status, "invited")
-        )
-      ),
-    db
-      .select({ n: count() })
-      .from(tenantModules)
-      .where(
-        and(
-          eq(tenantModules.tenantId, tenant.id),
-          eq(tenantModules.enabled, true)
-        )
-      ),
-  ]);
+  const [totalRow, activeRow, invitedRow, modulesRow] = await withTenant(
+    tenant.id,
+    (tx) =>
+      Promise.all([
+        tx
+          .select({ n: count() })
+          .from(tenantMemberships)
+          .where(eq(tenantMemberships.tenantId, tenant.id)),
+        tx
+          .select({ n: count() })
+          .from(tenantMemberships)
+          .where(
+            and(
+              eq(tenantMemberships.tenantId, tenant.id),
+              eq(tenantMemberships.status, "active")
+            )
+          ),
+        tx
+          .select({ n: count() })
+          .from(tenantMemberships)
+          .where(
+            and(
+              eq(tenantMemberships.tenantId, tenant.id),
+              eq(tenantMemberships.status, "invited")
+            )
+          ),
+        tx
+          .select({ n: count() })
+          .from(tenantModules)
+          .where(
+            and(
+              eq(tenantModules.tenantId, tenant.id),
+              eq(tenantModules.enabled, true)
+            )
+          ),
+      ])
+  );
 
   const cards = [
     {

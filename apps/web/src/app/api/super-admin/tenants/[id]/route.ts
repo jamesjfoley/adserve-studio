@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  db,
-  tenants,
-  tenantMemberships,
-  tenantModules,
-  modules,
-  users,
-  roles,
-} from "@adserve/database";
-import { eq, desc } from "drizzle-orm";
+import { tenants, withSuperAdminBypass } from "@adserve/database";
+import { eq } from "drizzle-orm";
 import { apiRequireSuperAdmin } from "@/lib/super-admin";
+import {
+  loadTenantMembers,
+  loadTenantModuleStates,
+} from "@/lib/super-admin-queries";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -23,58 +19,28 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const { id } = await params;
 
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, id));
-  if (!tenant) {
+  const data = await withSuperAdminBypass(async (tx) => {
+    const [tenant] = await tx
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, id));
+    if (!tenant) return null;
+
+    const [members, moduleList] = await Promise.all([
+      loadTenantMembers(tx, id),
+      loadTenantModuleStates(tx, id),
+    ]);
+    return { tenant, members, moduleList };
+  });
+
+  if (!data) {
     return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
   }
 
-  const members = await db
-    .select({
-      membershipId: tenantMemberships.id,
-      userId: users.id,
-      email: users.email,
-      fullName: users.fullName,
-      userStatus: users.status,
-      membershipStatus: tenantMemberships.status,
-      roleSlug: roles.slug,
-      roleName: roles.name,
-      joinedAt: tenantMemberships.joinedAt,
-    })
-    .from(tenantMemberships)
-    .innerJoin(users, eq(users.id, tenantMemberships.userId))
-    .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
-    .where(eq(tenantMemberships.tenantId, id))
-    .orderBy(desc(tenantMemberships.joinedAt));
-
-  const enabledRows = await db
-    .select({
-      moduleId: tenantModules.moduleId,
-      enabled: tenantModules.enabled,
-    })
-    .from(tenantModules)
-    .where(eq(tenantModules.tenantId, id));
-
-  const enabledMap = new Map(enabledRows.map((r) => [r.moduleId, r.enabled]));
-
-  const allModules = await db
-    .select({
-      id: modules.id,
-      slug: modules.slug,
-      name: modules.name,
-      status: modules.status,
-      version: modules.version,
-      displayOrder: modules.displayOrder,
-    })
-    .from(modules);
-
-  const moduleList = allModules
-    .sort((a, b) => a.displayOrder - b.displayOrder)
-    .map((m) => ({ ...m, enabled: enabledMap.get(m.id) === true }));
-
   return NextResponse.json({
-    tenant,
-    members,
-    modules: moduleList,
+    tenant: data.tenant,
+    members: data.members,
+    modules: data.moduleList,
   });
 }
 
@@ -133,31 +99,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     updates.slug = slug;
   }
 
-  if (settings !== undefined) {
+  // Defer settings merge until inside the tx so the read-modify-write of
+  // settings happens atomically with the UPDATE.
+  const mergeSettingsInTx = settings !== undefined;
+  if (mergeSettingsInTx) {
     if (typeof settings !== "object" || settings === null) {
       return NextResponse.json(
         { error: "Field 'settings' must be an object" },
         { status: 400 }
       );
     }
-    const [existing] = await db
-      .select({ settings: tenants.settings })
-      .from(tenants)
-      .where(eq(tenants.id, id));
-    if (!existing) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
-    }
-    const existingSettings = (existing.settings ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const incoming = settings as Record<string, unknown>;
-    // Strip protected fields
-    delete incoming.clerkOrgId;
-    updates.settings = { ...existingSettings, ...incoming };
   }
 
-  if (Object.keys(updates).length === 1) {
+  // Need to allow {updatedAt} + (optional settings) too — the settings
+  // merge fills updates.settings later, so account for it here.
+  if (Object.keys(updates).length === 1 && !mergeSettingsInTx) {
     return NextResponse.json(
       { error: "No updatable fields provided" },
       { status: 400 }
@@ -165,11 +121,29 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   try {
-    const [updated] = await db
-      .update(tenants)
-      .set(updates)
-      .where(eq(tenants.id, id))
-      .returning();
+    const updated = await withSuperAdminBypass(async (tx) => {
+      if (mergeSettingsInTx) {
+        const [existing] = await tx
+          .select({ settings: tenants.settings })
+          .from(tenants)
+          .where(eq(tenants.id, id));
+        if (!existing) return null;
+        const existingSettings = (existing.settings ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const incoming = settings as Record<string, unknown>;
+        // Strip protected fields
+        delete incoming.clerkOrgId;
+        updates.settings = { ...existingSettings, ...incoming };
+      }
+      const [row] = await tx
+        .update(tenants)
+        .set(updates)
+        .where(eq(tenants.id, id))
+        .returning();
+      return row ?? null;
+    });
 
     if (!updated) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });

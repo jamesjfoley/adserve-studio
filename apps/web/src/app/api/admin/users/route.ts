@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  db,
   tenantMemberships,
   users,
   roles,
+  withTenant,
 } from "@adserve/database";
 import { and, eq, ilike, or, desc } from "drizzle-orm";
 import { apiRequireTenantAdmin } from "@/lib/tenant-admin";
@@ -40,24 +40,26 @@ export async function GET(req: NextRequest) {
     conditions.push(eq(tenantMemberships.status, status));
   }
 
-  const rows = await db
-    .select({
-      membershipId: tenantMemberships.id,
-      userId: users.id,
-      fullName: users.fullName,
-      email: users.email,
-      avatarUrl: users.avatarUrl,
-      status: tenantMemberships.status,
-      joinedAt: tenantMemberships.joinedAt,
-      roleId: roles.id,
-      roleSlug: roles.slug,
-      roleName: roles.name,
-    })
-    .from(tenantMemberships)
-    .innerJoin(users, eq(users.id, tenantMemberships.userId))
-    .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
-    .where(and(...conditions))
-    .orderBy(desc(tenantMemberships.joinedAt));
+  const rows = await withTenant(tenant.id, (tx) =>
+    tx
+      .select({
+        membershipId: tenantMemberships.id,
+        userId: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        avatarUrl: users.avatarUrl,
+        status: tenantMemberships.status,
+        joinedAt: tenantMemberships.joinedAt,
+        roleId: roles.id,
+        roleSlug: roles.slug,
+        roleName: roles.name,
+      })
+      .from(tenantMemberships)
+      .innerJoin(users, eq(users.id, tenantMemberships.userId))
+      .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
+      .where(and(...conditions))
+      .orderBy(desc(tenantMemberships.joinedAt))
+  );
 
   return NextResponse.json({ users: rows });
 }

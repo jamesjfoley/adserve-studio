@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  db,
   users,
   tenantMemberships,
   tenants,
   roles,
+  withSuperAdminBypass,
 } from "@adserve/database";
 import { desc, eq, inArray, ilike, or } from "drizzle-orm";
 import { apiRequireSuperAdmin } from "@/lib/super-admin";
@@ -20,31 +20,35 @@ export async function GET(req: NextRequest) {
       ? or(ilike(users.email, `%${q}%`), ilike(users.fullName, `%${q}%`))
       : undefined;
 
-  const userRows = await db
-    .select()
-    .from(users)
-    .where(where)
-    .orderBy(desc(users.createdAt));
+  const { userRows, memberships } = await withSuperAdminBypass(async (tx) => {
+    const userRows = await tx
+      .select()
+      .from(users)
+      .where(where)
+      .orderBy(desc(users.createdAt));
 
-  const userIds = userRows.map((u) => u.id);
+    const userIds = userRows.map((u) => u.id);
 
-  const memberships =
-    userIds.length === 0
-      ? []
-      : await db
-          .select({
-            userId: tenantMemberships.userId,
-            tenantId: tenants.id,
-            tenantName: tenants.name,
-            tenantSlug: tenants.slug,
-            roleSlug: roles.slug,
-            roleName: roles.name,
-            membershipStatus: tenantMemberships.status,
-          })
-          .from(tenantMemberships)
-          .innerJoin(tenants, eq(tenants.id, tenantMemberships.tenantId))
-          .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
-          .where(inArray(tenantMemberships.userId, userIds));
+    const memberships =
+      userIds.length === 0
+        ? []
+        : await tx
+            .select({
+              userId: tenantMemberships.userId,
+              tenantId: tenants.id,
+              tenantName: tenants.name,
+              tenantSlug: tenants.slug,
+              roleSlug: roles.slug,
+              roleName: roles.name,
+              membershipStatus: tenantMemberships.status,
+            })
+            .from(tenantMemberships)
+            .innerJoin(tenants, eq(tenants.id, tenantMemberships.tenantId))
+            .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
+            .where(inArray(tenantMemberships.userId, userIds));
+
+    return { userRows, memberships };
+  });
 
   type Membership = (typeof memberships)[number];
   const byUser = new Map<string, Membership[]>();

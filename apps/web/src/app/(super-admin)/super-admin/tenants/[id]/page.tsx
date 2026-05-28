@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  db,
-  tenants,
-  tenantMemberships,
-  tenantModules,
-  modules,
-  users,
-  roles,
-} from "@adserve/database";
-import { eq, desc } from "drizzle-orm";
+import { tenants, withSuperAdminBypass } from "@adserve/database";
+import { eq } from "drizzle-orm";
 import { TenantStatusActions } from "../_components/tenant-status-actions";
 import { TenantModuleToggle } from "../_components/tenant-module-toggle";
+import {
+  loadTenantMembers,
+  loadTenantModuleStates,
+} from "@/lib/super-admin-queries";
 
 const statusStyles: Record<string, string> = {
   active: "bg-green-100 text-green-800",
@@ -24,41 +20,22 @@ type Params = { params: Promise<{ id: string }> };
 export default async function TenantDetailPage({ params }: Params) {
   const { id } = await params;
 
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, id));
-  if (!tenant) notFound();
+  const data = await withSuperAdminBypass(async (tx) => {
+    const [tenant] = await tx
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, id));
+    if (!tenant) return null;
 
-  const [members, enabledRows, allModules] = await Promise.all([
-    db
-      .select({
-        membershipId: tenantMemberships.id,
-        userId: users.id,
-        email: users.email,
-        fullName: users.fullName,
-        userStatus: users.status,
-        membershipStatus: tenantMemberships.status,
-        roleSlug: roles.slug,
-        roleName: roles.name,
-        joinedAt: tenantMemberships.joinedAt,
-      })
-      .from(tenantMemberships)
-      .innerJoin(users, eq(users.id, tenantMemberships.userId))
-      .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
-      .where(eq(tenantMemberships.tenantId, id))
-      .orderBy(desc(tenantMemberships.joinedAt)),
-    db
-      .select({
-        moduleId: tenantModules.moduleId,
-        enabled: tenantModules.enabled,
-      })
-      .from(tenantModules)
-      .where(eq(tenantModules.tenantId, id)),
-    db.select().from(modules),
-  ]);
+    const [members, moduleList] = await Promise.all([
+      loadTenantMembers(tx, id),
+      loadTenantModuleStates(tx, id),
+    ]);
+    return { tenant, members, moduleList };
+  });
 
-  const enabledMap = new Map(enabledRows.map((r) => [r.moduleId, r.enabled]));
-  const moduleList = allModules
-    .sort((a, b) => a.displayOrder - b.displayOrder)
-    .map((m) => ({ ...m, enabled: enabledMap.get(m.id) === true }));
+  if (!data) notFound();
+  const { tenant, members, moduleList } = data;
 
   const settings = (tenant.settings ?? {}) as Record<string, unknown>;
 

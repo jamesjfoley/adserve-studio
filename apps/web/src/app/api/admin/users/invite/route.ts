@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clerkClient } from "@clerk/nextjs/server";
 import {
-  db,
   tenantInvitations,
   roles,
+  withTenant,
 } from "@adserve/database";
 import { and, eq } from "drizzle-orm";
 import { apiRequireTenantAdmin } from "@/lib/tenant-admin";
@@ -40,10 +40,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [targetRole] = await db
-    .select()
-    .from(roles)
-    .where(and(eq(roles.id, roleId), eq(roles.tenantId, tenant.id)));
+  // Block 1: load the target role (RLS-scoped). The Clerk call after this
+  // shouldn't be inside the tx — DB locks across an HTTP roundtrip are
+  // bad. We open a second tx for the INSERT later.
+  const [targetRole] = await withTenant(tenant.id, (tx) =>
+    tx
+      .select()
+      .from(roles)
+      .where(and(eq(roles.id, roleId), eq(roles.tenantId, tenant.id)))
+  );
   if (!targetRole) {
     return NextResponse.json(
       { error: "Role not found in this tenant." },
@@ -89,20 +94,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: clerkError }, { status: 502 });
   }
 
-  // Store the DB record. The unique-pending index prevents duplicate
-  // pending invitations for the same (tenant, email).
+  // Block 2: store the DB record. Separate tx from block 1 because the
+  // Clerk call sits between them. The unique-pending index prevents
+  // duplicate pending invitations for the same (tenant, email).
   try {
-    const [invitation] = await db
-      .insert(tenantInvitations)
-      .values({
-        tenantId: tenant.id,
-        email,
-        roleId: targetRole.id,
-        invitedBy: actor.id,
-        clerkInvitationId,
-        status: "pending",
-      })
-      .returning();
+    const [invitation] = await withTenant(tenant.id, (tx) =>
+      tx
+        .insert(tenantInvitations)
+        .values({
+          tenantId: tenant.id,
+          email,
+          roleId: targetRole.id,
+          invitedBy: actor.id,
+          clerkInvitationId,
+          status: "pending",
+        })
+        .returning()
+    );
     return NextResponse.json({ invitation });
   } catch (err) {
     // Likely the unique-pending index fired

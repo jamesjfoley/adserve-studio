@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { db, rolePermissions, roles } from "@adserve/database";
+import { rolePermissions, roles, withTenant } from "@adserve/database";
 import { and, eq } from "drizzle-orm";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 import { RoleForm } from "../_components/role-form";
@@ -11,19 +11,25 @@ export default async function EditRolePage({ params }: Params) {
   const { tenant } = await requireTenantAdmin();
   const { id } = await params;
 
-  const [role] = await db
-    .select()
-    .from(roles)
-    .where(and(eq(roles.id, id), eq(roles.tenantId, tenant.id)));
-  if (!role) notFound();
+  const data = await withTenant(tenant.id, async (tx) => {
+    const [role] = await tx
+      .select()
+      .from(roles)
+      .where(and(eq(roles.id, id), eq(roles.tenantId, tenant.id)));
+    if (!role) return null;
 
-  const [allPermissions, currentPermRows] = await Promise.all([
-    getVisiblePermissions(tenant.id),
-    db
-      .select({ permissionId: rolePermissions.permissionId })
-      .from(rolePermissions)
-      .where(eq(rolePermissions.roleId, role.id)),
-  ]);
+    const [allPermissions, currentPermRows] = await Promise.all([
+      getVisiblePermissions(tx, tenant.id),
+      tx
+        .select({ permissionId: rolePermissions.permissionId })
+        .from(rolePermissions)
+        .where(eq(rolePermissions.roleId, role.id)),
+    ]);
+    return { role, allPermissions, currentPermRows };
+  });
+
+  if (!data) notFound();
+  const { role, allPermissions, currentPermRows } = data;
 
   const isOwner = role.slug === "owner";
   const currentPermissionIds = currentPermRows.map((r) => r.permissionId);

@@ -14,11 +14,14 @@ import type { PermissionRow } from "../_components/role-form";
  *
  * Disabled-module perms are hidden so admins can't accidentally grant
  * access to features the super admin hasn't enabled.
+ *
+ * Takes a `tx` so the caller owns the RLS wrapper (typically `withTenant`).
  */
 export async function getVisiblePermissions(
+  tx: typeof db,
   tenantId: string
 ): Promise<PermissionRow[]> {
-  const enabledRows = await db
+  const enabledRows = await tx
     .select({ moduleId: tenantModules.moduleId })
     .from(tenantModules)
     .where(
@@ -34,7 +37,7 @@ export async function getVisiblePermissions(
         )
       : isNull(permissions.moduleId);
 
-  const rows = await db
+  const rows = await tx
     .select({
       id: permissions.id,
       moduleId: permissions.moduleId,

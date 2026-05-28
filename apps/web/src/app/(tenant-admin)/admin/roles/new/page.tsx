@@ -1,10 +1,13 @@
+import { withTenant } from "@adserve/database";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 import { RoleForm } from "../_components/role-form";
 import { getVisiblePermissions } from "../_lib/visible-permissions";
 
 export default async function NewRolePage() {
   const { tenant } = await requireTenantAdmin();
-  const allPermissions = await getVisiblePermissions(tenant.id);
+  const allPermissions = await withTenant(tenant.id, (tx) =>
+    getVisiblePermissions(tx, tenant.id)
+  );
 
   return (
     <div>

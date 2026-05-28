@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clerkClient } from "@clerk/nextjs/server";
-import { db, tenantInvitations } from "@adserve/database";
+import { tenantInvitations, withTenant } from "@adserve/database";
 import { and, eq } from "drizzle-orm";
 import { apiRequireTenantAdmin } from "@/lib/tenant-admin";
 
@@ -13,15 +13,20 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   const { id } = await params;
 
-  const [invitation] = await db
-    .select()
-    .from(tenantInvitations)
-    .where(
-      and(
-        eq(tenantInvitations.id, id),
-        eq(tenantInvitations.tenantId, tenant.id)
+  // Block 1: look up the invitation (RLS-scoped to this tenant).
+  // The Clerk call below depends on this row, so we don't want it inside
+  // the same tx — DB locks shouldn't be held across an HTTP roundtrip.
+  const [invitation] = await withTenant(tenant.id, (tx) =>
+    tx
+      .select()
+      .from(tenantInvitations)
+      .where(
+        and(
+          eq(tenantInvitations.id, id),
+          eq(tenantInvitations.tenantId, tenant.id)
+        )
       )
-    );
+  );
 
   if (!invitation) {
     return NextResponse.json({ error: "Invitation not found." }, { status: 404 });
@@ -53,11 +58,15 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     }
   }
 
-  const [updated] = await db
-    .update(tenantInvitations)
-    .set({ status: "revoked", updatedAt: new Date() })
-    .where(eq(tenantInvitations.id, id))
-    .returning();
+  // Block 2: mark the invitation revoked. Separate tx from block 1
+  // because of the Clerk call between them.
+  const [updated] = await withTenant(tenant.id, (tx) =>
+    tx
+      .update(tenantInvitations)
+      .set({ status: "revoked", updatedAt: new Date() })
+      .where(eq(tenantInvitations.id, id))
+      .returning()
+  );
 
   return NextResponse.json({
     invitation: updated,

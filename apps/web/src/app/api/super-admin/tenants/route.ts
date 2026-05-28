@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, tenants } from "@adserve/database";
+import { tenants, withSuperAdminBypass } from "@adserve/database";
 import { desc, sql } from "drizzle-orm";
 import { apiRequireSuperAdmin } from "@/lib/super-admin";
 import { provisionTenant } from "@/lib/tenant-provision";
@@ -8,19 +8,21 @@ export async function GET() {
   const auth = await apiRequireSuperAdmin();
   if (auth.error) return auth.error;
 
-  const rows = await db
-    .select({
-      id: tenants.id,
-      name: tenants.name,
-      slug: tenants.slug,
-      status: tenants.status,
-      settings: tenants.settings,
-      createdAt: tenants.createdAt,
-      userCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_memberships WHERE tenant_id = "tenants"."id")`,
-      moduleCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_modules WHERE tenant_id = "tenants"."id" AND enabled = true)`,
-    })
-    .from(tenants)
-    .orderBy(desc(tenants.createdAt));
+  const rows = await withSuperAdminBypass((tx) =>
+    tx
+      .select({
+        id: tenants.id,
+        name: tenants.name,
+        slug: tenants.slug,
+        status: tenants.status,
+        settings: tenants.settings,
+        createdAt: tenants.createdAt,
+        userCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_memberships WHERE tenant_id = "tenants"."id")`,
+        moduleCount: sql<number>`(SELECT COUNT(*)::int FROM tenant_modules WHERE tenant_id = "tenants"."id" AND enabled = true)`,
+      })
+      .from(tenants)
+      .orderBy(desc(tenants.createdAt))
+  );
 
   return NextResponse.json({ tenants: rows });
 }
@@ -66,11 +68,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const tenant = await provisionTenant({
-      name: name.trim(),
-      slug,
-      settings: cleanSettings,
-    });
+    const tenant = await withSuperAdminBypass((tx) =>
+      provisionTenant(tx, {
+        name: name.trim(),
+        slug,
+        settings: cleanSettings,
+      })
+    );
     return NextResponse.json({ tenant }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -3,13 +3,13 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import {
   createTenantDb,
-  db,
   permissions,
   rolePermissions,
   roles,
   tenantMemberships,
   tenants,
   users,
+  withSuperAdminBypass,
   type TenantDb,
 } from "@adserve/database";
 import { and, eq, sql } from "drizzle-orm";
@@ -45,58 +45,66 @@ export async function getTenantContextOrNull(): Promise<TenantContext | null> {
   const { userId, orgId } = await auth();
   if (!userId || !orgId) return null;
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.authProviderId, userId));
-  if (!user) return null;
+  // RLS bypass: this function resolves a Clerk session into a tenant
+  // context, which by definition runs before any tenant id is known —
+  // so withTenant() can't be used. Every lookup here is either a
+  // non-RLS table (users, role_permissions, permissions) or one that's
+  // load-bearing for resolving tenancy itself (tenants, tenant_memberships,
+  // roles). Bypass is the only correct mode.
+  return withSuperAdminBypass(async (tx) => {
+    const [user] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.authProviderId, userId));
+    if (!user) return null;
 
-  // Role separation: super admins are not tenant users.
-  if (user.isSuperAdmin) return null;
+    // Role separation: super admins are not tenant users.
+    if (user.isSuperAdmin) return null;
 
-  const [tenant] = await db
-    .select()
-    .from(tenants)
-    .where(sql`${tenants.settings}->>'clerkOrgId' = ${orgId}`);
-  if (!tenant) return null;
+    const [tenant] = await tx
+      .select()
+      .from(tenants)
+      .where(sql`${tenants.settings}->>'clerkOrgId' = ${orgId}`);
+    if (!tenant) return null;
 
-  const [membership] = await db
-    .select()
-    .from(tenantMemberships)
-    .where(
-      and(
-        eq(tenantMemberships.tenantId, tenant.id),
-        eq(tenantMemberships.userId, user.id),
-        eq(tenantMemberships.status, "active")
-      )
-    );
-  if (!membership) return null;
+    const [membership] = await tx
+      .select()
+      .from(tenantMemberships)
+      .where(
+        and(
+          eq(tenantMemberships.tenantId, tenant.id),
+          eq(tenantMemberships.userId, user.id),
+          eq(tenantMemberships.status, "active")
+        )
+      );
+    if (!membership) return null;
 
-  const [role] = await db
-    .select()
-    .from(roles)
-    .where(eq(roles.id, membership.roleId));
-  if (!role) return null;
+    const [role] = await tx
+      .select()
+      .from(roles)
+      .where(eq(roles.id, membership.roleId));
+    if (!role) return null;
 
-  const permRows = await db
-    .select({
-      resource: permissions.resource,
-      action: permissions.action,
-    })
-    .from(rolePermissions)
-    .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
-    .where(eq(rolePermissions.roleId, role.id));
+    const permRows = await tx
+      .select({
+        resource: permissions.resource,
+        action: permissions.action,
+      })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(eq(rolePermissions.roleId, role.id));
 
-  const permSet = new Set(permRows.map((p) => `${p.resource}.${p.action}`));
+    const permSet = new Set(permRows.map((p) => `${p.resource}.${p.action}`));
 
-  return {
-    user,
-    tenant,
-    membership,
-    role,
-    permissions: permSet,
-    db: createTenantDb(tenant.id),
-  };
+    return {
+      user,
+      tenant,
+      membership,
+      role,
+      permissions: permSet,
+      db: createTenantDb(tenant.id),
+    };
+  });
 }
 
 /**

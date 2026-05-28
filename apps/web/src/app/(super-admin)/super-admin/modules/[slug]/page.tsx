@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { db, modules, tenantModules, tenants } from "@adserve/database";
+import {
+  modules,
+  tenantModules,
+  tenants,
+  withSuperAdminBypass,
+} from "@adserve/database";
 import { and, asc, eq } from "drizzle-orm";
 
 const statusStyles: Record<string, string> = {
@@ -20,29 +25,36 @@ type Params = { params: Promise<{ slug: string }> };
 export default async function ModuleDetailPage({ params }: Params) {
   const { slug } = await params;
 
-  const [moduleRow] = await db
-    .select()
-    .from(modules)
-    .where(eq(modules.slug, slug));
-  if (!moduleRow) notFound();
+  const data = await withSuperAdminBypass(async (tx) => {
+    const [moduleRow] = await tx
+      .select()
+      .from(modules)
+      .where(eq(modules.slug, slug));
+    if (!moduleRow) return null;
 
-  const enabledTenants = await db
-    .select({
-      tenantId: tenants.id,
-      tenantName: tenants.name,
-      tenantSlug: tenants.slug,
-      tenantStatus: tenants.status,
-      enabledAt: tenantModules.enabledAt,
-    })
-    .from(tenantModules)
-    .innerJoin(tenants, eq(tenants.id, tenantModules.tenantId))
-    .where(
-      and(
-        eq(tenantModules.moduleId, moduleRow.id),
-        eq(tenantModules.enabled, true)
+    const enabledTenants = await tx
+      .select({
+        tenantId: tenants.id,
+        tenantName: tenants.name,
+        tenantSlug: tenants.slug,
+        tenantStatus: tenants.status,
+        enabledAt: tenantModules.enabledAt,
+      })
+      .from(tenantModules)
+      .innerJoin(tenants, eq(tenants.id, tenantModules.tenantId))
+      .where(
+        and(
+          eq(tenantModules.moduleId, moduleRow.id),
+          eq(tenantModules.enabled, true)
+        )
       )
-    )
-    .orderBy(asc(tenants.name));
+      .orderBy(asc(tenants.name));
+
+    return { moduleRow, enabledTenants };
+  });
+
+  if (!data) notFound();
+  const { moduleRow, enabledTenants } = data;
 
   return (
     <div>
