@@ -1,0 +1,175 @@
+/**
+ * Central type module for the module framework.
+ *
+ * Most types are Drizzle inferred row types from `@adserve/database`,
+ * re-exported so engine code and consumers (CRM, future modules) can
+ * import everything from one place.
+ *
+ * A few types extend the inferred shapes:
+ *   - `FieldDefinitionWithLabels` — predicts the post-Task-0.2 shape
+ *     once the `labels jsonb` migration lands.
+ *   - `LayoutConfig` / `LayoutSection` — structured TS shape for what
+ *     lives in `layouts.config` JSONB.
+ *   - `ValidationCondition` / `ValidationAction` — structured shapes
+ *     for what lives in `validation_rules.condition` / `.action` JSONB.
+ *     Speculative — Task 0.2's validation adapter will lock these in.
+ */
+import type {
+  activities,
+  entityTypes,
+  fieldDefinitions,
+  layouts,
+  recordRelationships,
+  records,
+  schemaRelationships,
+  validationRules,
+} from "@adserve/database";
+
+// ============================================================
+// Row types — Drizzle inferred from the live schema
+// ============================================================
+
+export type EntityType = typeof entityTypes.$inferSelect;
+export type EntityTypeInsert = typeof entityTypes.$inferInsert;
+
+export type FieldDefinition = typeof fieldDefinitions.$inferSelect;
+export type FieldDefinitionInsert = typeof fieldDefinitions.$inferInsert;
+
+export type SchemaRelationship = typeof schemaRelationships.$inferSelect;
+export type SchemaRelationshipInsert = typeof schemaRelationships.$inferInsert;
+
+export type Layout = typeof layouts.$inferSelect;
+export type LayoutInsert = typeof layouts.$inferInsert;
+
+export type ValidationRule = typeof validationRules.$inferSelect;
+export type ValidationRuleInsert = typeof validationRules.$inferInsert;
+
+// `Record` clashes with TS's built-in utility type — use `RecordRow`.
+export type RecordRow = typeof records.$inferSelect;
+export type RecordRowInsert = typeof records.$inferInsert;
+
+export type RecordRelationship = typeof recordRelationships.$inferSelect;
+export type RecordRelationshipInsert = typeof recordRelationships.$inferInsert;
+
+export type Activity = typeof activities.$inferSelect;
+export type ActivityInsert = typeof activities.$inferInsert;
+
+// ============================================================
+// Augmented types
+// ============================================================
+
+/**
+ * Field definition shape AFTER Task 0.2 lands the `labels jsonb` column
+ * migration. Engine code and tests use this; once the migration runs and
+ * the Drizzle schema is regenerated, this will collapse to a plain
+ * re-export of `FieldDefinition`.
+ *
+ * TODO(task-0.2): replace this with `export type FieldDefinitionWithLabels = FieldDefinition`
+ * once the column is added and `field_definitions.labels` is in the
+ * Drizzle schema.
+ */
+export type FieldDefinitionWithLabels = FieldDefinition & {
+  labels: Record<string, string>;
+};
+
+// ============================================================
+// Structured JSONB shapes
+// ============================================================
+
+/**
+ * Structured shape for `layouts.config`. Stored as JSONB; this is the
+ * canonical TS representation. Layout engine reads/writes through this
+ * type.
+ */
+export interface LayoutSection {
+  title: string;
+  columns: 1 | 2 | 3;
+  /** Field definition IDs in display order within this section. */
+  fieldIds: string[];
+}
+
+export interface LayoutConfig {
+  sections: LayoutSection[];
+}
+
+/**
+ * Structured shape for `validation_rules.condition`. Discriminated by
+ * `type`; each variant carries its field reference and any rule-specific
+ * parameters.
+ *
+ * TODO(task-0.2): the validation adapter may need to add/remove variants
+ * as the rule engine matures. The list below covers the cases the field
+ * engine's `isRequired`/`isUnique` flags translate to, plus the common
+ * length / value / regex rules from the original plan.
+ */
+export type ValidationCondition =
+  | { type: "required"; fieldId: string }
+  | { type: "min_length"; fieldId: string; value: number }
+  | { type: "max_length"; fieldId: string; value: number }
+  | { type: "min_value"; fieldId: string; value: number }
+  | { type: "max_value"; fieldId: string; value: number }
+  | { type: "regex"; fieldId: string; pattern: string }
+  | { type: "unique_in_tenant"; fieldId: string };
+
+/**
+ * Structured shape for `validation_rules.action`. Currently a small
+ * set; will grow as the engine adds warn-only and computed-default
+ * behaviors.
+ */
+export type ValidationAction =
+  | { type: "block_save" }
+  | { type: "warn"; severity: "info" | "warning" };
+
+// ============================================================
+// Cross-cutting types
+// ============================================================
+
+/**
+ * The field types enum mirrors `packages/database/src/schema/enums.ts`'s
+ * `fieldTypeEnum`. Re-declared as a TS union for use in stubs and
+ * factories that don't have a Drizzle row to infer from.
+ */
+export type FieldType =
+  | "text"
+  | "number"
+  | "currency"
+  | "date"
+  | "datetime"
+  | "boolean"
+  | "select"
+  | "multiselect"
+  | "email"
+  | "phone"
+  | "url"
+  | "textarea"
+  | "relationship";
+
+/**
+ * A currency value as stored in `records.data` for currency-typed
+ * fields. Amount is in the smallest unit of the currency (e.g. pence
+ * for GBP, cents for USD); the field engine stores integers, the UI
+ * formats with decimals.
+ */
+export interface CurrencyValue {
+  amount: number;
+  currency: string; // ISO-4217 code (e.g. "GBP", "USD")
+}
+
+/**
+ * A locale-tagged label map. Use for `field_definitions.labels` and
+ * any other i18n-aware label storage. Always populated with at least
+ * "en" as the fallback.
+ */
+export type LocalizedLabel = Record<string, string>;
+
+/**
+ * Resolve a localized label with `en` fallback. Provided as a helper
+ * so consumers (UI, prompt builders, etc.) don't reinvent the lookup.
+ */
+export function resolveLabel(
+  labels: LocalizedLabel,
+  locale: string,
+  fallbackName: string
+): string {
+  return labels[locale] ?? labels["en"] ?? fallbackName;
+}

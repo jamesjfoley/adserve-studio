@@ -221,35 +221,59 @@ module actually needs. YAGNI applies.
 
 ## Permissions matrix
 
-CRM needs its own permissions added to the `permissions` table during
-activation. Defined in Task 1.1, seeded by 1.1's migration.
+**Naming convention** (from existing Phase 2 seed): permissions are
+stored as `(module_id, resource, action)` tuples and checked at runtime
+as a 2-part dotted string `${resource}.${action}` (e.g.
+`ctx.permissions.has("account.read")`). The module is the FK on
+`permissions.module_id`, not encoded in the check string. Action
+granularity follows the existing pattern (`read/create/update/delete`)
+rather than collapsing create+update into `write`.
 
-| Permission | Description |
+CRM permissions are added to the `permissions` table during activation
+(Task 1.1's seed). The platform-level `ai_usage.read` is added to the
+existing platform-permissions block in `packages/database/src/seed/index.ts`.
+
+### CRM-scoped permissions (21, `module_id = crm`)
+
+| Resource | Actions |
 |---|---|
-| `crm.account.read` | View accounts |
-| `crm.account.write` | Create/edit accounts |
-| `crm.account.delete` | Archive accounts |
-| `crm.contact.read` | View contacts |
-| `crm.contact.write` | Create/edit contacts |
-| `crm.contact.delete` | Archive contacts |
-| `crm.lead.read` | View leads |
-| `crm.lead.write` | Create/edit leads |
-| `crm.lead.delete` | Archive leads |
-| `crm.lead.convert` | Convert lead → account+contact+opportunity |
-| `crm.opportunity.read` | View opportunities |
-| `crm.opportunity.write` | Create/edit opportunities |
-| `crm.opportunity.delete` | Archive opportunities |
-| `crm.pipeline.read` | View pipeline kanban / pipeline aggregations |
-| `crm.pipeline.write` | Move opportunities between stages |
-| `crm.activity.read` | View activities |
-| `crm.activity.write` | Create activities |
-| `admin.ai_usage.read` | View tenant's AI usage stats |
+| `account` | `read`, `create`, `update`, `delete` |
+| `contact` | `read`, `create`, `update`, `delete` |
+| `lead` | `read`, `create`, `update`, `delete`, `convert` |
+| `opportunity` | `read`, `create`, `update`, `delete` |
+| `pipeline` | `read`, `update` (update = move opportunities between stages) |
+| `activity` | `read`, `create` (no edit/delete on logged activities in Phase 1) |
 
-Default role assignments (also in Task 1.1's seed):
-- **Owner** — all permissions
-- **Admin** — all permissions except `tenant.admin`
-- **Member** — read on all CRM entities, write on activities and on
-  records they own. (Detailed mapping in the seed file.)
+### Platform-level permissions added by Phase 3 (1)
+
+| Resource | Action | Description |
+|---|---|---|
+| `ai_usage` | `read` | View the tenant's own AI usage stats (`/admin/ai-usage`) |
+
+**Total Phase 3 permission additions: 22** (21 CRM-scoped + 1 platform).
+
+### Existing Phase 2 CRM permissions — superseded
+
+Phase 2's seed (`packages/database/src/seed/index.ts`) created placeholder
+CRM permissions for an earlier entity design: `contacts/companies/deals`
+with actions `read/create/update/delete/export` plus `ai/use`. These are
+already in the live database and granted to the existing test tenant's
+Owner role.
+
+Task 1.9a's idempotent reprovisioning **deletes the Phase 2 placeholder
+permissions and reseeds with the Phase 3 matrix above**, then migrates
+any role grants on the old permission rows.
+
+### Default role assignments (Task 1.1's seed)
+
+- **Owner** — all 22 permissions, plus `tenant.admin` from Phase 2.
+- **Admin** — all 22 Phase 3 permissions; same Phase 2 admin perms
+  except `tenant.admin`.
+- **Member** — read-only on CRM entities + create activities:
+  `account.read`, `contact.read`, `lead.read`, `opportunity.read`,
+  `pipeline.read`, `activity.read`, `activity.create` (7 perms).
+  Row-level "edit records you own" is enforced at the route layer, not
+  the permission matrix.
 
 ---
 
@@ -594,7 +618,7 @@ Application code in `packages/ai-service/src/metering.ts`:
 API endpoints:
 
 - `GET /api/admin/ai-usage` — current tenant's usage (last N days,
-  rolling). Requires `admin.ai_usage.read`.
+  rolling). Requires `ai_usage.read`.
 - `GET /api/super-admin/ai-usage` — platform-wide list of tenants by
   usage
 - `GET /api/super-admin/ai-usage/[tenantId]` — drill-in for one tenant

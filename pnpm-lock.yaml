@@ -88,6 +88,25 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/ai-service:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/crm:
+    dependencies:
+      '@adserve/database':
+        specifier: workspace:*
+        version: link:../database
+      '@adserve/module-framework':
+        specifier: workspace:*
+        version: link:../module-framework
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/database:
     dependencies:
       drizzle-orm:
