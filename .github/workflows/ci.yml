@@ -67,3 +67,9 @@ jobs:
         env:
           DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
         run: pnpm db:seed
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
+          TEST_DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
+        run: pnpm test

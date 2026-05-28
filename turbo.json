@@ -13,6 +13,10 @@
     "lint": {
       "dependsOn": ["^build"]
     },
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["DATABASE_URL", "TEST_DATABASE_URL"]
+    },
     "generate": {},
     "migrate": {},
     "seed": {},

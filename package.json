@@ -5,14 +5,17 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "test": "turbo test",
     "db:generate": "pnpm --filter @adserve/database generate",
     "db:migrate": "pnpm --filter @adserve/database migrate",
     "db:seed": "pnpm --filter @adserve/database seed",
     "db:studio": "pnpm --filter @adserve/database studio"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.7",
     "turbo": "^2.3.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.7"
   },
   "packageManager": "pnpm@9.15.0",
   "engines": {
