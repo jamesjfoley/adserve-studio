@@ -22,7 +22,13 @@ import * as schema from "./schema";
  * Exported so the parser can be unit-tested without instantiating a
  * Drizzle client.
  */
-export function resolveConnectionString(raw: string): string {
+export function resolveConnectionString(
+  raw: string | undefined
+): string | undefined {
+  // Allow undefined/empty through. The `postgres` client defers actual
+  // connection until first query, so module-load happens fine at build
+  // time (Next.js collects route metadata without a real DATABASE_URL).
+  if (!raw) return raw;
   const trimmed = raw.trimStart();
   if (!trimmed.startsWith("{")) return raw;
 
@@ -52,13 +58,13 @@ export function resolveConnectionString(raw: string): string {
   return `postgresql://${user}:${pass}@${host}:${port}/${db}?sslmode=${sslmode}`;
 }
 
-const connectionString = resolveConnectionString(process.env.DATABASE_URL!);
+const connectionString = resolveConnectionString(process.env.DATABASE_URL);
 
 // Connection for migrations and seed scripts (no RLS)
-export const migrationClient = postgres(connectionString, { max: 1 });
+export const migrationClient = postgres(connectionString!, { max: 1 });
 
 // Connection pool for the application
-const queryClient = postgres(connectionString, {
+const queryClient = postgres(connectionString!, {
   max: 20,
   idle_timeout: 20,
   connect_timeout: 10,
