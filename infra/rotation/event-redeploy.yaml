@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Auto-redeploy chain for secret rotation. EventBridge watches for
+  Secrets Manager `RotationSucceeded` events on the two adserve DB
+  secrets and invokes a tiny Python Lambda that calls
+  `ecs update-service --force-new-deployment` against the
+  adserve-studio service. Ensures running ECS tasks pick up the new
+  secret value within minutes of rotation completing.
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: adserve-prod
+  ServiceName:
+    Type: String
+    Default: adserve-studio
+  AppSecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/database-url-nIrNYH
+  MigratorSecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/database-url-migrator-ZA3ZEN
+
+Resources:
+  # ----------------------------------------------------------------
+  # Lambda role — minimal: write logs + call ecs:UpdateService on
+  # the one specific service. Scoped narrowly.
+  # ----------------------------------------------------------------
+  RedeployLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: adserve-rotation-redeploy-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EcsForceNewDeployment
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecs:UpdateService
+                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${ServiceName}"
+              - Effect: Allow
+                Action: ecs:DescribeServices
+                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${ServiceName}"
+
+  # ----------------------------------------------------------------
+  # Lambda — ~10 lines of Python, inline. Invokes UpdateService with
+  # forceNewDeployment=True, which triggers a rolling task swap that
+  # picks up the freshly rotated secret at task start.
+  # ----------------------------------------------------------------
+  RedeployLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: adserve-rotation-redeploy
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt RedeployLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          CLUSTER: !Ref ClusterName
+          SERVICE: !Ref ServiceName
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+          import boto3
+
+          log = logging.getLogger()
+          log.setLevel(logging.INFO)
+          ecs = boto3.client("ecs")
+
+          def handler(event, context):
+              log.info("rotation event: %s", json.dumps(event))
+              resp = ecs.update_service(
+                  cluster=os.environ["CLUSTER"],
+                  service=os.environ["SERVICE"],
+                  forceNewDeployment=True,
+              )
+              deployment_id = resp.get("service", {}).get("deployments", [{}])[0].get("id")
+              log.info("forced new deployment id=%s", deployment_id)
+              return {"deploymentId": deployment_id}
+
+  # ----------------------------------------------------------------
+  # EventBridge rule — matches RotationSucceeded for either secret.
+  # The Secrets Manager rotation event uses detail-type
+  # "AWS Service Event via CloudTrail" with eventName RotationSucceeded
+  # and the secret ARN in additionalEventData.SecretId.
+  # ----------------------------------------------------------------
+  RotationSucceededRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: adserve-rotation-succeeded
+      Description: Fires the ECS auto-redeploy Lambda when either adserve DB secret finishes rotating.
+      EventPattern:
+        source: ["aws.secretsmanager"]
+        detail-type: ["AWS Service Event via CloudTrail"]
+        detail:
+          eventName: ["RotationSucceeded"]
+          additionalEventData:
+            SecretId:
+              - !Ref AppSecretArn
+              - !Ref MigratorSecretArn
+      State: ENABLED
+      Targets:
+        - Id: redeploy-lambda
+          Arn: !GetAtt RedeployLambda.Arn
+
+  # ----------------------------------------------------------------
+  # Permission for EventBridge to invoke the Lambda.
+  # ----------------------------------------------------------------
+  RotationSucceededRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt RedeployLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt RotationSucceededRule.Arn
+
+Outputs:
+  RedeployLambdaArn:
+    Value: !GetAtt RedeployLambda.Arn
+  RotationSucceededRuleArn:
+    Value: !GetAtt RotationSucceededRule.Arn
