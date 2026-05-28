@@ -27,7 +27,7 @@ export default async function ModulesListPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Modules</h1>
       <p className="mt-2 text-[var(--muted-foreground)]">
         Platform module registry. Tenant-level enablement is managed from each
-        tenant's detail page.
+        tenant&apos;s detail page.
       </p>
 
       <div className="mt-8 overflow-hidden rounded-xl border border-[var(--border)]">

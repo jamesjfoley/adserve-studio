@@ -38,6 +38,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // svix.verify returns the parsed webhook payload, which is a discriminated
+  // union of differently-shaped Clerk event types (user.*, organization.*,
+  // organizationMembership.*). We narrow on event.type in the switch below.
+  // Tightening this to Clerk's WebhookEvent type would require restructuring
+  // the switch with explicit type guards on each case; out of scope here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let event: any;
   try {
     const wh = new Webhook(secret);
