@@ -94,3 +94,8 @@ export {
   crmCollectionSegment,
   CRM_COLLECTION_SEGMENTS,
 } from "./url";
+
+// ============================================================
+// List view default columns
+// ============================================================
+export { DEFAULT_LIST_COLUMNS } from "./columns";

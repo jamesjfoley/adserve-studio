@@ -401,3 +401,32 @@ describe("DynamicTable — cell formatting consistency with DynamicForm view mod
     expect(screen.getAllByText(expected)).toHaveLength(2);
   });
 });
+
+describe("DynamicTable — long_text cell truncation (Task 1.3 live-render verify)", () => {
+  test("clamps via CSS while the full text stays in the DOM", () => {
+    const notes = fieldDef({
+      id: "n1",
+      slug: "notes",
+      name: "Notes",
+      fieldType: "long_text",
+      displayOrder: 0,
+    });
+    const longText = "Lorem ipsum dolor sit amet ".repeat(30).trim();
+
+    render(
+      <DynamicTable
+        {...buildProps({
+          fields: [notes],
+          records: [{ id: "r1", data: { notes: longText } }],
+        })}
+      />
+    );
+
+    const textEl = screen.getByText(longText);
+    // formatFieldValue output is un-truncated — full text present.
+    expect(textEl.textContent).toBe(longText);
+    // Truncation is CSS-only (line-clamp on the cell wrapper), so it never
+    // alters textContent — this is what keeps the consistency guarantee.
+    expect(textEl.closest(".line-clamp-2")).not.toBeNull();
+  });
+});

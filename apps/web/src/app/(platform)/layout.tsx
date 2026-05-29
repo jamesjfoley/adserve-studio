@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   Users,
   Building2,
+  UserPlus,
   TrendingUp,
   LayoutDashboard,
   Shield,
@@ -12,9 +13,10 @@ import { getTenantAdminContextOrNull } from "@/lib/tenant-admin";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Accounts", href: "/crm/accounts", icon: Building2 },
   { name: "Contacts", href: "/crm/contacts", icon: Users },
-  { name: "Companies", href: "/crm/companies", icon: Building2 },
-  { name: "Deals", href: "/crm/deals", icon: TrendingUp },
+  { name: "Leads", href: "/crm/leads", icon: UserPlus },
+  { name: "Opportunities", href: "/crm/opportunities", icon: TrendingUp },
 ];
 
 export default async function PlatformLayout({
