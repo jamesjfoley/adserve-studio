@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@adserve/crm": "workspace:*",
     "@adserve/database": "workspace:*",
     "@adserve/module-framework": "workspace:^",
     "@anthropic-ai/sdk": "^0.39.0",

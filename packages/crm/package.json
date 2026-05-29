@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@adserve/database": "workspace:*",
-    "@adserve/module-framework": "workspace:*"
+    "@adserve/module-framework": "workspace:*",
+    "drizzle-orm": "^0.38.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

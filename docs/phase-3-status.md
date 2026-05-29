@@ -18,23 +18,23 @@ Task 0.5 implemented in the working tree (uncommitted at time of writing).
 | 0.1 | Package structure | ✓ Complete | — | `module-framework`, `ai-service`, `crm` packages stood up with full types + constants; engine fns stub `not implemented`; AI cost calc is real |
 | 0.2 | Field engine | ✓ Complete | +60 | Migration `003-add-field-labels.sql` (applied locally, deferred on RDS); CRUD + `coerceFieldValue` (13 types + 6 Phase 2+ pass-through); validation boundary documented at top of `field-engine.ts` |
 | 0.3 | Layout engine | ✓ Complete | +21 | CRUD + default-config generation + structural+reference validation; system-field-style protections (last-layout refusal, layoutType-scoped, default demotion) |
-| 0.4 | Dynamic form renderer | ✓ Complete | +15 (+1 expected-fail still) | 13 field components + UnsupportedField; client component takes data as props (server-component wrapper deferred to Task 0.6); explicit-locale Intl.* throughout; @testing-library/react + jsdom plumbed |
+| 0.4 | Dynamic form renderer | ✓ Complete | +15 (+1 expected-fail still) | 13 field components + UnsupportedField; client component takes data as props (server-component wrapper now owned by 1.3/1.4); explicit-locale Intl.* throughout; @testing-library/react + jsdom plumbed |
 | 0.5 | Dynamic table renderer | ✓ Complete | +23 (7 operators, 16 component) | Controlled, props-driven `<DynamicTable>` in `apps/web/src/components/dynamic-table/`. Extracted shared `formatFieldValue` (dynamic-form) + refactored all 13 field components to consume it (single source of truth → consistency test). Sort/filter eligibility centralised in `operators.ts`. Filters draft→Apply (single emit path). Column visibility controlled-with-default. a11y: aria-sort + labelled controls |
-| 0.6 | Entity registration & module activation | Not started | — | Will provide the server-component wrapper for `<DynamicForm>`; also the place to wire per-user column-preference persistence into `<DynamicTable>`'s `visibleColumns`/`onVisibleColumnsChange` |
-| 1.1 | CRM schema + permission matrix | Not started | — | Constants exist in `packages/crm/`; this task wires the seed |
+| 0.6 | Entity type registration & CRM module activation | ✓ Complete | +18 (9 framework, 8 crm, 1 web smoke) | Framework primitive `provisionEntityType` (entity + missing fields + default `detail` layout + `nameFieldId`) + entity-registry stubs implemented + CRM orchestrator `activateCrmForTenant` (entity types, fields, default layouts, relationships, pipeline stages + `schemaVersion` into every CRM entity's `settings`). Idempotent (registry `ON CONFLICT DO NOTHING`; fields top-up by slug; relationships SELECT-then-INSERT). Wired into `/api/dev/provision-tenant`. Added `many_to_one` to `relationship_type` enum (migration `004`, applied locally, deferred on RDS). **NOT** in 0.6: server-component wrappers (→1.3/1.4), `ai_usage_limits` seeding (→0.8), CRM permission rows + role grants (→1.1/1.9a), `validation_rules` seeding (→until `createValidationRule` adapter is implemented) |
+| 1.1 | CRM schema + permission matrix | Not started | — | Constants exist in `packages/crm/`; this task wires the seed. **Owns** the global CRM `permissions` rows + per-tenant role grants (`activateCrmForTenant` from 0.6 does NOT seed permissions) |
 | 1.2 | CRM API routes | Not started | — | Skeleton test in `apps/web/__tests__/api/crm-accounts.test.ts` is still expected-fail |
-| 1.3 | CRM list pages | Not started | — | |
-| 1.4 | CRM detail pages | Not started | — | |
+| 1.3 | CRM list pages | Not started | — | **Now also owns:** the `<DynamicTable>` server-component wrapper (fetch via entity registry → feed the client component); per-user column-preference persistence into `visibleColumns`/`onVisibleColumnsChange`; and the **live-render verify of `long_text` cell truncation** (CSS `line-clamp`/`truncate`, full text preserved in DOM) — moved here from 0.6 as 0.6 renders no table |
+| 1.4 | CRM detail pages | Not started | — | **Now also owns:** the `<DynamicForm>` server-component wrapper (fetch via entity registry → feed the client component) |
 | 1.6a | Dashboard (3 widgets) | Not started | — | |
-| 1.9a | Existing-tenant idempotent reprovision | Not started | — | Supersedes the Phase 2 placeholder CRM permissions (contacts/companies/deals/ai) |
+| 1.9a | Existing-tenant idempotent reprovision | Not started | — | Supersedes the Phase 2 placeholder CRM permissions (contacts/companies/deals/ai). Calls `activateCrmForTenant` (0.6) per existing CRM-enabled tenant + reseeds the permission matrix |
 
-**Cumulative test count: 123** across 5 task suites:
+**Cumulative test count: 141** across 5 task suites:
 
 - `@adserve/database` — 3 (harness smoke)
-- `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) = 81
+- `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) + 9 (5 entity-registry + 4 provisioning) = 90
 - `@adserve/ai-service` — 0 (stubs only; tests land with Task 0.7/0.8)
-- `@adserve/crm` — 0 (constants only; tests land with Task 1.1)
-- `@adserve/web` — 38 component tests (15 form + 23 table) + 1 expected-fail integration test = 39
+- `@adserve/crm` — 8 (CRM activation)
+- `@adserve/web` — 39 passing (15 form + 23 table + 1 provision-activation smoke) + 1 expected-fail integration test = 40
 
 ### Phase 1b — AI + advanced UI
 
@@ -47,8 +47,28 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
   a fresh bastion + the migrator role, same pattern as the Phase 2 RLS
   application. Blocking before Phase 1a final ship — not blocking any
   in-progress task.
-- **Server-component `<DynamicForm>` wrapper** that fetches via the
-  entity-registry. Deferred to Task 0.6 (which builds the registry).
+- **Server-component `<DynamicForm>` / `<DynamicTable>` wrappers** that
+  fetch via the entity-registry. **Reassigned from 0.6 → 1.3 (table) /
+  1.4 (form)** — 0.6 builds the registry/activation but renders no UI, so
+  the wrappers belong with the pages that consume them.
+- **`long_text` cell-truncation live-render verify** (CSS-only clamp,
+  full text preserved in DOM). **Reassigned from 0.6 → 1.3** — only
+  exercisable once a real list page renders multi-line content.
+- **`ai_usage_limits` seeding on CRM activation** — owned by **0.8**
+  (the table is created there, Phase 1b). `activateCrmForTenant` does not
+  touch it.
+- **CRM permission rows + per-tenant role grants** — owned by **1.1**
+  (global rows) and **1.9a** (reprovision/placeholder cleanup), not by
+  0.6's activation.
+- **`validation_rules` seeding on activation** — deferred until the
+  `createValidationRule` adapter is implemented (still stubbed from 0.2).
+  Required-ness is carried by `field_definitions.isRequired` +
+  `coerceFieldValue` in the meantime.
+- **Migration `004-add-many-to-one-relationship-type.sql` on RDS.**
+  Adds `many_to_one` to the `relationship_type` enum. Applied locally in
+  Task 0.6; **not yet applied on RDS.** Blocking before any
+  relationship-creating CRM activation runs against production — same
+  bastion + migrator-role pattern as `003`.
 - **Skeleton API-route test for `GET /api/crm/accounts`** still in
   expected-fail state. Will flip when Task 1.2 lands.
 
@@ -116,30 +136,58 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     the component never queries. Actual JSONB sort/filter + COUNT
     pagination are Task 1.2's server responsibility.
 
+### Task 0.6 decisions
+
+17. **Activation split**: generic `provisionEntityType` in
+    module-framework (entity + missing fields + default layout +
+    `nameFieldId`); CRM-specific orchestration in
+    `@adserve/crm/activate.ts` (`activateCrmForTenant`). CRM gained
+    `drizzle-orm` as a runtime dep for the relationship inserts.
+18. **`relationship_type` enum gained `many_to_one`** (migration `004`).
+    The CRM relationships store source = the "many" side / target = the
+    "one" side (the orientation the plan's query examples use), which had
+    no faithful enum value before. "Fix the framework, not the module."
+    Applied locally; RDS apply deferred (see deferred items).
+19. **Relationship idempotency = SELECT-then-INSERT** on
+    `(tenantId, sourceEntityTypeId, targetEntityTypeId, relationshipType)`
+    — no DB unique constraint added (keeps 0.6 to one enum migration).
+    Entity types use `ON CONFLICT DO NOTHING` (existing unique index);
+    fields top up by slug; settings merge is only-if-absent (never
+    clobbers tenant customisation). Re-running activation is a no-op.
+20. **`schemaVersion` stamped on every CRM entity's `settings`** (not
+    just opportunity) so future migrations can target individual
+    entities. `CRM_SCHEMA_VERSION = 1`.
+21. **Route tests get a `DATABASE_URL` default** in the web vitest
+    config (local dev DB when unset) so handlers that use the app client
+    (`withSuperAdminBypass`) connect to the same DB as the test-helpers'
+    `testDb`. Real/CI `DATABASE_URL` is respected.
+
 ## Next session opens with
 
-**Task 0.6 — Entity type registration & module activation.** Per the
-plan §0.6: on CRM activation, insert entity types / default field
-definitions / default layouts / relationships / pipeline stages /
-permissions / `ai_usage_limits`, idempotently. This task also builds the
-server-component wrapper that fetches via the entity registry and feeds
-`<DynamicForm>` and `<DynamicTable>` (both currently take data as props).
+**Task 0.6 — Entity type registration & CRM module activation.** Scope
+(per the approved 0.6 plan):
 
-`<DynamicTable>` is presentation + callbacks only — the actual JSONB
-sort/filter via `(data->>'field_slug')::<type>` casts and the
-COUNT-over-filtered-set pagination land server-side in **Task 1.2**.
-Sort/filter eligibility per field type lives in
-`apps/web/src/components/dynamic-table/operators.ts` (the contract the
-server query layer should honour).
+- **module-framework**: implement the entity-registry stubs
+  (`registerEntityType` idempotent on `(tenantId, slug)`,
+  `getEntityTypeBySlug` tenant-scoped, `listEntityTypesForModule`) +
+  a new generic `provisionEntityType(tx, spec)` (entity + missing field
+  defs + default `detail` layout + `nameFieldId`).
+- **@adserve/crm**: `activateCrmForTenant(tx, { tenantId })` mapping the
+  CRM constants through `provisionEntityType`, creating the 3
+  `relationships` rows, and writing pipeline stages + a `schemaVersion`
+  stamp into **every** CRM entity's `entity_types.settings`. Idempotent.
+- **wiring**: call `activateCrmForTenant` from `/api/dev/provision-tenant`
+  after the module-enable step.
 
-**Verify during 0.6 (live render, carried over from 0.5):** confirm that
-`long_text` cells truncate via CSS (currently `line-clamp-2` on the cell
-wrapper; `truncate` + a `max-w-*` would also be acceptable) while the
-full text remains in the DOM. The cell-formatting consistency with
-`<DynamicForm>` view mode depends on `formatFieldValue` output staying
-un-truncated — truncation must be CSS-only so `textContent` is preserved
-for long values. Only assertable once a real list page renders multi-line
-content (jsdom doesn't lay out CSS clamping).
+Explicitly out of 0.6 (see deferred items): server-component wrappers
+(→1.3/1.4), `ai_usage_limits` (→0.8), CRM permission rows + role grants
+(→1.1/1.9a), `validation_rules` seeding (→adapter impl).
+
+`<DynamicTable>`/`<DynamicForm>` remain presentation + callbacks only —
+the JSONB sort/filter via `(data->>'field_slug')::<type>` casts and
+COUNT-over-filtered-set pagination land server-side in **Task 1.2**;
+sort/filter eligibility per field type lives in
+`apps/web/src/components/dynamic-table/operators.ts`.
 
 ## Reading order for a fresh Claude session
 

@@ -75,3 +75,13 @@ export {
   DEFAULT_CRM_ROLE_PERMISSIONS,
   type SystemRoleSlug,
 } from "./role-assignments";
+
+// ============================================================
+// Activation
+// ============================================================
+export {
+  activateCrmForTenant,
+  CRM_MODULE_SLUG,
+  CRM_SCHEMA_VERSION,
+  type ActivateCrmResult,
+} from "./activate";

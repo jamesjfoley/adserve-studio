@@ -56,6 +56,7 @@ export const fieldTypeEnum = pgEnum("field_type", [
 export const relationshipTypeEnum = pgEnum("relationship_type", [
   "one_to_one",
   "one_to_many",
+  "many_to_one",
   "many_to_many",
 ]);
 

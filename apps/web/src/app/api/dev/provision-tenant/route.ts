@@ -11,6 +11,7 @@ import {
   withSuperAdminBypass,
 } from "@adserve/database";
 import { eq, sql } from "drizzle-orm";
+import { activateCrmForTenant } from "@adserve/crm";
 import { DevSyncError, syncCurrentUser } from "@/lib/dev-sync";
 
 export async function GET() {
@@ -188,6 +189,11 @@ export async function GET() {
         enabled: true,
       })
       .onConflictDoNothing();
+
+    // ---- CRM activation (entity types, fields, layouts, relationships,
+    // pipeline). Idempotent — safe on re-provision. Permission grants +
+    // ai_usage_limits are owned by Tasks 1.1/1.9a and 0.8 respectively. ----
+    await activateCrmForTenant(tx, { tenantId: tenant.id });
 
     return { tenant, tenantCreated };
   });

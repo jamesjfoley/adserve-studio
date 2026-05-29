@@ -82,6 +82,16 @@ export {
 } from "./entity-registry";
 
 // ============================================================
+// Provisioning (generic entity-type activation primitive)
+// ============================================================
+export {
+  provisionEntityType,
+  type ProvisionFieldSpec,
+  type ProvisionEntityTypeInput,
+  type ProvisionEntityTypeResult,
+} from "./provisioning";
+
+// ============================================================
 // Validation
 // ============================================================
 export {
