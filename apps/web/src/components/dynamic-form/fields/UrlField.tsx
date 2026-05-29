@@ -1,10 +1,9 @@
 "use client";
 
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
 
@@ -20,18 +19,7 @@ export function UrlField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        {str ? (
-          <a
-            href={str}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="truncate text-sm text-brand-600 hover:underline"
-          >
-            {str}
-          </a>
-        ) : (
-          <p className={viewValueClassName}>{VIEW_EMPTY}</p>
-        )}
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

@@ -1,10 +1,9 @@
 "use client";
 
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
 
@@ -24,7 +23,6 @@ export function SelectField(props: FieldComponentProps) {
   const str = value === null || value === undefined ? "" : String(value);
 
   if (mode === "view") {
-    const choice = choices.find((c) => c.value === str);
     return (
       <FieldShell
         field={field}
@@ -32,9 +30,7 @@ export function SelectField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={viewValueClassName}>
-          {str ? choice?.label ?? str : VIEW_EMPTY}
-        </p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

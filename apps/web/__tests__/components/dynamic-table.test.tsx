@@ -1,0 +1,403 @@
+// @vitest-environment jsdom
+import "../setup/jest-dom";
+
+import { describe, expect, test, vi } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type {
+  FieldDefinitionWithLabels,
+  FieldType,
+  LayoutConfig,
+} from "@adserve/module-framework";
+import { DynamicTable } from "@/components/dynamic-table";
+import type {
+  DynamicTableProps,
+  DynamicTableRecord,
+} from "@/components/dynamic-table";
+import { DynamicForm } from "@/components/dynamic-form/DynamicForm";
+
+function fieldDef(args: {
+  id: string;
+  slug: string;
+  name: string;
+  fieldType: FieldType;
+  displayOrder?: number;
+  options?: Record<string, unknown>;
+}): FieldDefinitionWithLabels {
+  return {
+    id: args.id,
+    tenantId: "00000000-0000-0000-0000-000000000000",
+    entityTypeId: "00000000-0000-0000-0000-000000000001",
+    name: args.name,
+    slug: args.slug,
+    fieldType: args.fieldType,
+    isRequired: false,
+    isUnique: false,
+    isSystem: false,
+    defaultValue: null,
+    options: args.options ?? {},
+    labels: { en: args.name },
+    displayOrder: args.displayOrder ?? 0,
+    groupName: null,
+    description: null,
+    isSearchable: false,
+    isFilterable: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+const NAME = fieldDef({ id: "f1", slug: "name", name: "Name", fieldType: "text", displayOrder: 0 });
+const EMAIL = fieldDef({ id: "f2", slug: "email", name: "Email", fieldType: "email", displayOrder: 1 });
+const REVENUE = fieldDef({ id: "f3", slug: "revenue", name: "Revenue", fieldType: "currency", displayOrder: 2 });
+const TAGS = fieldDef({
+  id: "f4",
+  slug: "tags",
+  name: "Tags",
+  fieldType: "multi_select",
+  displayOrder: 3,
+  options: { choices: [{ value: "vip", label: "VIP" }] },
+});
+
+const RECORDS: DynamicTableRecord[] = [
+  {
+    id: "r1",
+    data: {
+      name: "Acme",
+      email: "ops@acme.test",
+      revenue: { amount: 50000, currency: "GBP" },
+      tags: ["vip"],
+    },
+  },
+  {
+    id: "r2",
+    data: {
+      name: "Globex",
+      email: "hi@globex.test",
+      revenue: { amount: 12000, currency: "GBP" },
+      tags: [],
+    },
+    isArchived: true,
+  },
+];
+
+function buildProps(
+  overrides: Partial<DynamicTableProps> = {}
+): DynamicTableProps {
+  return {
+    fields: [NAME, EMAIL, REVENUE, TAGS],
+    records: RECORDS,
+    sort: null,
+    onSortChange: vi.fn(),
+    filterState: { filters: [], includeArchived: false },
+    onFiltersChange: vi.fn(),
+    pagination: { offset: 0, limit: 10, total: 2 },
+    onPageChange: vi.fn(),
+    locale: "en-GB",
+    ...overrides,
+  };
+}
+
+describe("DynamicTable — rendering", () => {
+  test("renders a column header and a row cell per field/record", () => {
+    render(<DynamicTable {...buildProps()} />);
+
+    expect(
+      screen.getByRole("button", { name: "Sort by Name" })
+    ).toBeInTheDocument();
+    // Non-sortable column renders a plain header (no sort button).
+    expect(
+      screen.queryByRole("button", { name: "Sort by Tags" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: /Tags/ })
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(screen.getByText("Globex")).toBeInTheDocument();
+  });
+
+  test("empty state spans the table when there are no records", () => {
+    render(
+      <DynamicTable
+        {...buildProps({ records: [], pagination: { offset: 0, limit: 10, total: 0 } })}
+        emptyMessage="Nothing here yet."
+      />
+    );
+    expect(screen.getByText("Nothing here yet.")).toBeInTheDocument();
+  });
+});
+
+describe("DynamicTable — sorting", () => {
+  test("clicking a sortable header emits asc, then desc, then clear", async () => {
+    const onSortChange = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <DynamicTable {...buildProps({ onSortChange })} />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sort by Name" }));
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      fieldSlug: "name",
+      direction: "asc",
+    });
+
+    rerender(
+      <DynamicTable
+        {...buildProps({ onSortChange, sort: { fieldSlug: "name", direction: "asc" } })}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Sort by Name" }));
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      fieldSlug: "name",
+      direction: "desc",
+    });
+
+    rerender(
+      <DynamicTable
+        {...buildProps({ onSortChange, sort: { fieldSlug: "name", direction: "desc" } })}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Sort by Name" }));
+    expect(onSortChange).toHaveBeenLastCalledWith(null);
+  });
+
+  test("active sort column exposes aria-sort", () => {
+    render(
+      <DynamicTable
+        {...buildProps({ sort: { fieldSlug: "name", direction: "asc" } })}
+      />
+    );
+    expect(
+      screen.getByRole("columnheader", { name: /Name/ })
+    ).toHaveAttribute("aria-sort", "ascending");
+  });
+});
+
+describe("DynamicTable — filtering", () => {
+  test("adding a text filter and applying emits the committed filter state", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(<DynamicTable {...buildProps({ onFiltersChange })} />);
+
+    await user.selectOptions(
+      screen.getByLabelText("Add filter"),
+      "name"
+    );
+    await user.type(screen.getByLabelText("Name value"), "Acme");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onFiltersChange).toHaveBeenCalledTimes(1);
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      filters: [{ fieldSlug: "name", operator: "contains", value: "Acme" }],
+      includeArchived: false,
+    });
+  });
+
+  test("does NOT emit while typing — only on Apply", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(<DynamicTable {...buildProps({ onFiltersChange })} />);
+
+    await user.selectOptions(screen.getByLabelText("Add filter"), "name");
+    await user.type(screen.getByLabelText("Name value"), "Acme");
+    expect(onFiltersChange).not.toHaveBeenCalled();
+  });
+
+  test("between filter blocks Apply and shows an alert when from > to", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(<DynamicTable {...buildProps({ onFiltersChange })} />);
+
+    await user.selectOptions(screen.getByLabelText("Add filter"), "revenue");
+    await user.selectOptions(
+      screen.getByLabelText("Revenue operator"),
+      "between"
+    );
+    await user.type(screen.getByLabelText("Revenue from"), "100");
+    await user.type(screen.getByLabelText("Revenue to"), "50");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/From must be/i);
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+
+    // Fix the order → valid, emits the tuple.
+    await user.clear(screen.getByLabelText("Revenue to"));
+    await user.type(screen.getByLabelText("Revenue to"), "200");
+    expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      filters: [
+        { fieldSlug: "revenue", operator: "between", value: ["100", "200"] },
+      ],
+      includeArchived: false,
+    });
+  });
+
+  test("include-archived toggle is committed through Apply", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(<DynamicTable {...buildProps({ onFiltersChange })} />);
+
+    await user.click(screen.getByLabelText("Include archived"));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      filters: [],
+      includeArchived: true,
+    });
+  });
+});
+
+describe("DynamicTable — pagination", () => {
+  test("Previous disabled on first page; Next emits the next offset", async () => {
+    const onPageChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({
+          onPageChange,
+          pagination: { offset: 0, limit: 10, total: 42 },
+        })}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+    expect(screen.getByText("1–10 of 42")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(onPageChange).toHaveBeenCalledWith(10);
+  });
+
+  test("Next disabled on the last page", () => {
+    render(
+      <DynamicTable
+        {...buildProps({ pagination: { offset: 40, limit: 10, total: 42 } })}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    expect(screen.getByText("41–42 of 42")).toBeInTheDocument();
+  });
+});
+
+describe("DynamicTable — column visibility", () => {
+  test("unchecking a column hides it and notifies the callback", async () => {
+    const onVisibleColumnsChange = vi.fn();
+    const user = userEvent.setup();
+    render(<DynamicTable {...buildProps({ onVisibleColumnsChange })} />);
+
+    expect(
+      screen.getByRole("button", { name: "Sort by Email" })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Toggle columns" }));
+    const menu = screen.getByRole("menu");
+    await user.click(within(menu).getByLabelText("Email"));
+
+    expect(onVisibleColumnsChange).toHaveBeenCalledWith([
+      "name",
+      "revenue",
+      "tags",
+    ]);
+    expect(
+      screen.queryByRole("button", { name: "Sort by Email" })
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("DynamicTable — row interaction", () => {
+  test("clicking a row fires onRowClick with the record", async () => {
+    const onRowClick = vi.fn();
+    const user = userEvent.setup();
+    render(<DynamicTable {...buildProps({ onRowClick })} />);
+
+    await user.click(screen.getByText("Acme"));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(onRowClick).toHaveBeenCalledWith(RECORDS[0]);
+  });
+
+  test("clicking an email link inside a row does NOT fire onRowClick", async () => {
+    const onRowClick = vi.fn();
+    const user = userEvent.setup();
+    render(<DynamicTable {...buildProps({ onRowClick })} />);
+
+    await user.click(screen.getByRole("link", { name: "ops@acme.test" }));
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  test("archived rows are marked with an indicator", () => {
+    render(<DynamicTable {...buildProps()} />);
+    expect(screen.getByText("(archived)")).toBeInTheDocument();
+  });
+});
+
+describe("DynamicTable — cell formatting consistency with DynamicForm view mode", () => {
+  test("currency renders identically in the form view and a table cell", () => {
+    const field = REVENUE;
+    const value = { amount: 50000, currency: "GBP" };
+    const expected = new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+      maximumFractionDigits: 2,
+    }).format(50000);
+
+    const layout: LayoutConfig = {
+      sections: [{ title: "Financials", columns: 2, fieldIds: [field.id] }],
+    };
+    render(
+      <DynamicForm
+        layoutConfig={layout}
+        fields={[field]}
+        initialData={{ revenue: value }}
+        mode="view"
+        locale="en-GB"
+      />
+    );
+    render(
+      <DynamicTable
+        {...buildProps({
+          fields: [field],
+          records: [{ id: "r1", data: { revenue: value } }],
+        })}
+      />
+    );
+
+    // One occurrence from the form, one from the table — identical text.
+    expect(screen.getAllByText(expected)).toHaveLength(2);
+  });
+
+  test("date renders identically (locale-aware) in both surfaces", () => {
+    cleanup();
+    const dateField = fieldDef({
+      id: "d1",
+      slug: "closeDate",
+      name: "Close date",
+      fieldType: "date",
+    });
+    const value = "2026-03-15";
+    const expected = new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeZone: "UTC",
+    }).format(new Date(value + "T00:00:00Z"));
+
+    render(
+      <DynamicForm
+        layoutConfig={{
+          sections: [{ title: "S", columns: 2, fieldIds: [dateField.id] }],
+        }}
+        fields={[dateField]}
+        initialData={{ closeDate: value }}
+        mode="view"
+        locale="en-GB"
+      />
+    );
+    render(
+      <DynamicTable
+        {...buildProps({
+          fields: [dateField],
+          records: [{ id: "r1", data: { closeDate: value } }],
+        })}
+      />
+    );
+
+    expect(screen.getAllByText(expected)).toHaveLength(2);
+  });
+});

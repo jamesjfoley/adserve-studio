@@ -1,11 +1,7 @@
 "use client";
 
-import {
-  FieldShell,
-  viewValueClassName,
-  VIEW_EMPTY,
-  type FieldComponentProps,
-} from "./FieldShell";
+import { formatFieldValue } from "../format-field-value";
+import { FieldShell, type FieldComponentProps } from "./FieldShell";
 
 interface Choice {
   value: string;
@@ -30,9 +26,6 @@ export function MultiSelectField(props: FieldComponentProps) {
   const selected = readArray(value);
 
   if (mode === "view") {
-    const labels = selected
-      .map((v) => choices.find((c) => c.value === v)?.label ?? v)
-      .join(", ");
     return (
       <FieldShell
         field={field}
@@ -40,7 +33,7 @@ export function MultiSelectField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={viewValueClassName}>{labels || VIEW_EMPTY}</p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

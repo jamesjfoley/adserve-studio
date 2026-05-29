@@ -1,15 +1,13 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
 
-const DEFAULT_LOCALE = "en-GB";
 const DEFAULT_CURRENCY = "GBP";
 
 // Initial currency dropdown is a small set; tenants who want more can
@@ -37,16 +35,6 @@ export function CurrencyField(props: FieldComponentProps) {
       ?.allowedCurrencies ?? CURRENCY_CHOICES;
 
   if (mode === "view") {
-    const formatted =
-      current.amount === undefined ||
-      current.amount === null ||
-      current.amount === ""
-        ? VIEW_EMPTY
-        : new Intl.NumberFormat(locale ?? DEFAULT_LOCALE, {
-            style: "currency",
-            currency: current.currency ?? DEFAULT_CURRENCY,
-            maximumFractionDigits: 2,
-          }).format(Number(current.amount));
     return (
       <FieldShell
         field={field}
@@ -54,7 +42,7 @@ export function CurrencyField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={viewValueClassName}>{formatted}</p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

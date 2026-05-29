@@ -1,14 +1,11 @@
 "use client";
 
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
-
-const DEFAULT_LOCALE = "en-GB";
 
 export function NumberField(props: FieldComponentProps) {
   const { field, value, onChange, mode, error, locale, inputId } = props;
@@ -21,13 +18,7 @@ export function NumberField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={viewValueClassName}>
-          {value === null || value === undefined
-            ? VIEW_EMPTY
-            : new Intl.NumberFormat(locale ?? DEFAULT_LOCALE).format(
-                Number(value)
-              )}
-        </p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

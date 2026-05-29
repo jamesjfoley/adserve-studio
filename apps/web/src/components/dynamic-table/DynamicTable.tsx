@@ -1,0 +1,147 @@
+"use client";
+
+import { useMemo, useState, type MouseEvent } from "react";
+import { cn } from "@/lib/utils";
+import { formatFieldValue } from "../dynamic-form/format-field-value";
+import { ColumnToggle } from "./column-toggle";
+import { FilterBar } from "./filter-bar";
+import { Pagination } from "./pagination";
+import { TableHeader } from "./table-header";
+import type { DynamicTableProps, DynamicTableRecord } from "./types";
+
+export type {
+  DynamicTableProps,
+  DynamicTableRecord,
+  Filter,
+  FilterState,
+  PaginationState,
+  SortState,
+  SortDirection,
+} from "./types";
+
+export function DynamicTable({
+  fields,
+  records,
+  sort,
+  onSortChange,
+  filterState,
+  onFiltersChange,
+  pagination,
+  onPageChange,
+  onRowClick,
+  visibleColumns,
+  defaultVisibleColumns,
+  onVisibleColumnsChange,
+  locale,
+  emptyMessage = "No records found.",
+  className,
+}: DynamicTableProps) {
+  // Stable column order: declared displayOrder, then insertion order.
+  const orderedFields = useMemo(
+    () =>
+      [...fields].sort((a, b) => a.displayOrder - b.displayOrder),
+    [fields]
+  );
+
+  // Controllable column visibility: controlled when `visibleColumns` is
+  // provided, otherwise internal state seeded from defaults / all fields.
+  const [internalVisible, setInternalVisible] = useState<string[]>(
+    () => defaultVisibleColumns ?? fields.map((f) => f.slug)
+  );
+  const visible = visibleColumns ?? internalVisible;
+
+  function setVisible(next: string[]) {
+    if (visibleColumns === undefined) setInternalVisible(next);
+    onVisibleColumnsChange?.(next);
+  }
+
+  const visibleSet = new Set(visible);
+  const visibleFields = orderedFields.filter((f) => visibleSet.has(f.slug));
+  const colCount = Math.max(1, visibleFields.length);
+
+  function handleRowClick(
+    e: MouseEvent<HTMLTableRowElement>,
+    record: DynamicTableRecord
+  ) {
+    if (!onRowClick) return;
+    // Let interactive cell content (email/url links) win the click
+    // without also triggering row navigation.
+    if ((e.target as HTMLElement).closest("a")) return;
+    onRowClick(record);
+  }
+
+  return (
+    <div className={cn("space-y-4", className)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <FilterBar
+            fields={orderedFields}
+            filterState={filterState}
+            onFiltersChange={onFiltersChange}
+            locale={locale}
+          />
+        </div>
+        <ColumnToggle
+          fields={orderedFields}
+          visible={visible}
+          onChange={setVisible}
+          locale={locale}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+        <table className="w-full text-sm">
+          <TableHeader
+            fields={visibleFields}
+            sort={sort}
+            onSortChange={onSortChange}
+            locale={locale}
+          />
+          <tbody className="divide-y divide-[var(--border)]">
+            {records.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={colCount}
+                  className="px-4 py-8 text-center text-[var(--muted-foreground)]"
+                >
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : (
+              records.map((record) => {
+                const archived = record.isArchived === true;
+                return (
+                  <tr
+                    key={record.id}
+                    data-archived={archived || undefined}
+                    onClick={(e) => handleRowClick(e, record)}
+                    className={cn(
+                      onRowClick && "cursor-pointer",
+                      "hover:bg-[var(--muted)]/50",
+                      archived && "opacity-60"
+                    )}
+                  >
+                    {visibleFields.map((f, colIdx) => (
+                      <td key={f.id} className="px-4 py-3 align-top">
+                        <div className="line-clamp-2">
+                          {formatFieldValue(f, record.data[f.slug], locale)}
+                        </div>
+                        {archived && colIdx === 0 ? (
+                          <span className="mt-1 inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">
+                            (archived)
+                          </span>
+                        ) : null}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Pagination pagination={pagination} onPageChange={onPageChange} />
+    </div>
+  );
+}

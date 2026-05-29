@@ -1,11 +1,10 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
 
@@ -29,9 +28,7 @@ export function RelationshipField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={cn(viewValueClassName, "font-mono text-xs")}>
-          {str || VIEW_EMPTY}
-        </p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

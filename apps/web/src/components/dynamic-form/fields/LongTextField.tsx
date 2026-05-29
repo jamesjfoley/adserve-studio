@@ -1,11 +1,10 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
 
@@ -21,9 +20,7 @@ export function LongTextField(props: FieldComponentProps) {
       locale={locale}
     >
       {mode === "view" ? (
-        <p className={cn(viewValueClassName, "whitespace-pre-wrap")}>
-          {str || VIEW_EMPTY}
-        </p>
+        formatFieldValue(field, value, locale)
       ) : (
         <textarea
           id={inputId}

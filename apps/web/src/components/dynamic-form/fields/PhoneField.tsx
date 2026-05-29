@@ -1,10 +1,9 @@
 "use client";
 
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
 
@@ -20,7 +19,7 @@ export function PhoneField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={viewValueClassName}>{str || VIEW_EMPTY}</p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

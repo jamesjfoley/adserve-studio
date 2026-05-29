@@ -1,14 +1,11 @@
 "use client";
 
+import { formatFieldValue } from "../format-field-value";
 import {
   FieldShell,
   inputClassName,
-  viewValueClassName,
-  VIEW_EMPTY,
   type FieldComponentProps,
 } from "./FieldShell";
-
-const DEFAULT_LOCALE = "en-GB";
 
 /**
  * `<input type="datetime-local">` expects values in "YYYY-MM-DDTHH:mm"
@@ -27,18 +24,6 @@ export function DateTimeField(props: FieldComponentProps) {
   const str = value === null || value === undefined ? "" : String(value);
 
   if (mode === "view") {
-    let display = VIEW_EMPTY;
-    if (str) {
-      const d = new Date(str);
-      if (!Number.isNaN(d.getTime())) {
-        display = new Intl.DateTimeFormat(locale ?? DEFAULT_LOCALE, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(d);
-      } else {
-        display = str;
-      }
-    }
     return (
       <FieldShell
         field={field}
@@ -46,7 +31,7 @@ export function DateTimeField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={viewValueClassName}>{display}</p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }

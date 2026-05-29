@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  FieldShell,
-  viewValueClassName,
-  type FieldComponentProps,
-} from "./FieldShell";
+import { formatFieldValue } from "../format-field-value";
+import { FieldShell, type FieldComponentProps } from "./FieldShell";
 
 export function BooleanField(props: FieldComponentProps) {
   const { field, value, onChange, mode, error, locale, inputId } = props;
@@ -21,9 +18,7 @@ export function BooleanField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        <p className={viewValueClassName}>
-          {value === null || value === undefined ? "—" : bool ? "Yes" : "No"}
-        </p>
+        {formatFieldValue(field, value, locale)}
       </FieldShell>
     );
   }
