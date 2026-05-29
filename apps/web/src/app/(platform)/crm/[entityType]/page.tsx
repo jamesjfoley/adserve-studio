@@ -8,9 +8,15 @@ import {
   resolveCrmEntitySlug,
 } from "@adserve/crm";
 import { requirePermission } from "@/lib/permissions";
-import { buildOrderBy, buildWhere, parseListParams } from "@/lib/crm/query";
+import {
+  buildOrderBy,
+  buildWhere,
+  parseListParams,
+  resolveOwnerFilter,
+} from "@/lib/crm/query";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { loadEntityForm } from "@/lib/crm/load-entity-form";
+import { listActiveMembers } from "@/lib/crm/members";
 import { CrmListClient } from "./_components/crm-list-client";
 
 type PageProps = {
@@ -24,7 +30,7 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
   if (!slug) notFound();
 
   // Redirects to /dashboard if the user lacks `<entity>.read`.
-  const { tenant } = await requirePermission(`${slug}.read`);
+  const { tenant, user } = await requirePermission(`${slug}.read`);
 
   // Next gives searchParams as an object; reuse the exact 1.2 parser.
   const spObj = await searchParams;
@@ -39,6 +45,8 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
     parsed = parseListParams(new URLSearchParams()); // bad params → defaults
   }
 
+  const ownerFilter = resolveOwnerFilter(parsed.owner, user.id);
+
   const data = await withTenant(tenant.id, async (tx) => {
     const bundle = await loadEntityForm(tx, { tenantId: tenant.id, slug });
     if (!bundle) return null;
@@ -52,14 +60,24 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
         entity.id,
         fields,
         parsed.filters,
-        parsed.includeArchived
+        parsed.includeArchived,
+        ownerFilter
       );
       orderBy = buildOrderBy(fields, parsed.sort);
     } catch {
       // A filter/sort that doesn't apply to this entity → safe default view.
-      where = buildWhere(tenant.id, entity.id, fields, [], parsed.includeArchived);
+      where = buildWhere(
+        tenant.id,
+        entity.id,
+        fields,
+        [],
+        parsed.includeArchived,
+        ownerFilter
+      );
       orderBy = null;
     }
+
+    const members = await listActiveMembers(tx, tenant.id);
 
     const order = orderBy
       ? [orderBy, asc(records.id)]
@@ -80,7 +98,7 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
 
     // Layout for the "New" form is resolved by loadEntityForm above (the
     // activated default `detail` layout, with a generated fallback).
-    return { fields, rows, total: countRow?.total ?? 0, layoutConfig };
+    return { fields, rows, total: countRow?.total ?? 0, layoutConfig, members };
   });
 
   if (!data) notFound();
@@ -109,6 +127,8 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
         total: data.total,
       }}
       createLayoutConfig={data.layoutConfig}
+      members={data.members}
+      owner={parsed.owner}
       locale="en-GB"
     />
   );

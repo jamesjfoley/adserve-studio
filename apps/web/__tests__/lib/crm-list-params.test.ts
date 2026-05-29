@@ -63,6 +63,7 @@ describe("stateToQuery ↔ parseListParams round-trip", () => {
       includeArchived: false,
       sort: null,
       filters: [],
+      owner: null,
     });
   });
 });

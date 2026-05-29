@@ -19,6 +19,8 @@ export interface ListState {
   includeArchived: boolean;
   sort: SortState | null;
   filters: Filter[];
+  /** Owner filter token (userId | "me" | "unassigned"), omitted when null. */
+  owner?: string | null;
 }
 
 export function stateToQuery(state: ListState): string {
@@ -28,5 +30,6 @@ export function stateToQuery(state: ListState): string {
   if (state.includeArchived) sp.set("includeArchived", "true");
   if (state.sort) sp.set("sort", JSON.stringify(state.sort));
   if (state.filters.length > 0) sp.set("filters", JSON.stringify(state.filters));
+  if (state.owner) sp.set("owner", state.owner);
   return sp.toString();
 }

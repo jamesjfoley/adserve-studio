@@ -64,6 +64,8 @@ function renderClient(overrides: Record<string, unknown> = {}) {
       filterState={{ filters: [], includeArchived: false }}
       pagination={{ offset: 0, limit: 50, total: 0 }}
       createLayoutConfig={LAYOUT}
+      members={[]}
+      owner={null}
       locale="en-GB"
       {...overrides}
     />

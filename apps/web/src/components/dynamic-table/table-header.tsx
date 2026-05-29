@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   resolveLabel,
   type FieldDefinitionWithLabels,
@@ -14,6 +15,11 @@ interface TableHeaderProps {
   sort: SortState | null;
   onSortChange: (next: SortState | null) => void;
   locale?: string;
+  /** When true, render a leading select-all checkbox column. */
+  selectable?: boolean;
+  allSelected?: boolean;
+  someSelected?: boolean;
+  onToggleAll?: (checked: boolean) => void;
 }
 
 /**
@@ -47,10 +53,33 @@ export function TableHeader({
   sort,
   onSortChange,
   locale,
+  selectable = false,
+  allSelected = false,
+  someSelected = false,
+  onToggleAll,
 }: TableHeaderProps) {
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  // `indeterminate` is a DOM-only property, not an attribute.
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected && !allSelected;
+    }
+  }, [someSelected, allSelected]);
+
   return (
     <thead className="bg-[var(--muted)] text-left text-xs uppercase tracking-wider text-[var(--muted-foreground)]">
       <tr>
+        {selectable ? (
+          <th scope="col" className="w-10 px-4 py-3">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              aria-label="Select all rows"
+              checked={allSelected}
+              onChange={(e) => onToggleAll?.(e.target.checked)}
+            />
+          </th>
+        ) : null}
         {fields.map((f) => {
           const label = resolveLabel(
             (f.labels as LocalizedLabel) ?? {},

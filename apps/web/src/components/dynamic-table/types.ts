@@ -72,6 +72,17 @@ export interface DynamicTableProps {
   defaultVisibleColumns?: string[];
   onVisibleColumnsChange?: (slugs: string[]) => void;
 
+  /**
+   * Row selection. Opt in with `selectable`; selection is then
+   * controllable-with-default (same seam as column visibility): pass
+   * `selectedIds` to control it, or omit for internal state seeded from
+   * `defaultSelectedIds`. `onSelectionChange` fires on every toggle.
+   */
+  selectable?: boolean;
+  selectedIds?: string[];
+  defaultSelectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
+
   locale?: string;
   emptyMessage?: string;
   className?: string;

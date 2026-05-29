@@ -32,6 +32,10 @@ export function DynamicTable({
   visibleColumns,
   defaultVisibleColumns,
   onVisibleColumnsChange,
+  selectable = false,
+  selectedIds,
+  defaultSelectedIds,
+  onSelectionChange,
   locale,
   emptyMessage = "No records found.",
   className,
@@ -57,7 +61,40 @@ export function DynamicTable({
 
   const visibleSet = new Set(visible);
   const visibleFields = orderedFields.filter((f) => visibleSet.has(f.slug));
-  const colCount = Math.max(1, visibleFields.length);
+  const colCount = Math.max(1, visibleFields.length) + (selectable ? 1 : 0);
+
+  // Row selection: controlled when `selectedIds` is provided, else internal.
+  const [internalSelected, setInternalSelected] = useState<string[]>(
+    () => defaultSelectedIds ?? []
+  );
+  const selected = selectedIds ?? internalSelected;
+  const selectedSet = new Set(selected);
+
+  function setSelected(next: string[]) {
+    if (selectedIds === undefined) setInternalSelected(next);
+    onSelectionChange?.(next);
+  }
+
+  function toggleRow(id: string, checked: boolean) {
+    setSelected(
+      checked ? [...selected, id] : selected.filter((x) => x !== id)
+    );
+  }
+
+  // Select-all operates on the records currently on the page.
+  const pageIds = records.map((r) => r.id);
+  const selectedOnPage = pageIds.filter((id) => selectedSet.has(id));
+  const allSelected = pageIds.length > 0 && selectedOnPage.length === pageIds.length;
+  const someSelected = selectedOnPage.length > 0 && !allSelected;
+
+  function toggleAll(checked: boolean) {
+    if (checked) {
+      setSelected(Array.from(new Set([...selected, ...pageIds])));
+    } else {
+      const pageSet = new Set(pageIds);
+      setSelected(selected.filter((id) => !pageSet.has(id)));
+    }
+  }
 
   function handleRowClick(
     e: MouseEvent<HTMLTableRowElement>,
@@ -96,6 +133,10 @@ export function DynamicTable({
             sort={sort}
             onSortChange={onSortChange}
             locale={locale}
+            selectable={selectable}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onToggleAll={toggleAll}
           />
           <tbody className="divide-y divide-[var(--border)]">
             {records.length === 0 ? (
@@ -121,6 +162,19 @@ export function DynamicTable({
                       archived && "opacity-60"
                     )}
                   >
+                    {selectable ? (
+                      <td className="w-10 px-4 py-3 align-top">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select row ${record.id}`}
+                          checked={selectedSet.has(record.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) =>
+                            toggleRow(record.id, e.target.checked)
+                          }
+                        />
+                      </td>
+                    ) : null}
                     {visibleFields.map((f, colIdx) => (
                       <td key={f.id} className="px-4 py-3 align-top">
                         <div className="line-clamp-2">

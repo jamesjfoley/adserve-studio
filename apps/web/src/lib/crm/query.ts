@@ -1,4 +1,4 @@
-import { and, eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { records } from "@adserve/database";
 import type { FieldDefinitionWithLabels } from "@adserve/module-framework";
 import {
@@ -38,6 +38,31 @@ export interface ParsedListParams {
   includeArchived: boolean;
   sort: SortState | null;
   filters: Filter[];
+  /** Raw owner-filter token: a userId, "me", "unassigned", or null. */
+  owner: string | null;
+}
+
+/**
+ * Owner filter on the `records.ownedBy` column (a system column, not a
+ * JSONB data field — so it lives outside the field-driven filter bar).
+ */
+export type OwnerFilter =
+  | { kind: "user"; userId: string }
+  | { kind: "unassigned" };
+
+/**
+ * Resolve a raw owner token into a concrete filter. "me" resolves to the
+ * current session user (kept server-side so the URL stays shareable).
+ * Returns null when there is no owner filter.
+ */
+export function resolveOwnerFilter(
+  token: string | null,
+  currentUserId: string
+): OwnerFilter | null {
+  if (!token) return null;
+  if (token === "unassigned") return { kind: "unassigned" };
+  if (token === "me") return { kind: "user", userId: currentUserId };
+  return { kind: "user", userId: token };
 }
 
 const DEFAULT_LIMIT = 50;
@@ -109,7 +134,10 @@ export function parseListParams(sp: URLSearchParams): ParsedListParams {
     });
   }
 
-  return { offset, limit, includeArchived, sort, filters };
+  const ownerRaw = sp.get("owner");
+  const owner = ownerRaw && ownerRaw.trim() !== "" ? ownerRaw : null;
+
+  return { offset, limit, includeArchived, sort, filters, owner };
 }
 
 function indexFields(
@@ -226,7 +254,8 @@ export function buildWhere(
   entityTypeId: string,
   fields: FieldDefinitionWithLabels[],
   filters: Filter[],
-  includeArchived: boolean
+  includeArchived: boolean,
+  ownerFilter?: OwnerFilter | null
 ): SQL {
   const bySlug = indexFields(fields);
   const conditions: SQL[] = [
@@ -235,6 +264,13 @@ export function buildWhere(
   ];
   if (!includeArchived) {
     conditions.push(eq(records.isArchived, false));
+  }
+  if (ownerFilter) {
+    conditions.push(
+      ownerFilter.kind === "unassigned"
+        ? isNull(records.ownedBy)
+        : eq(records.ownedBy, ownerFilter.userId)
+    );
   }
 
   for (const filter of filters) {

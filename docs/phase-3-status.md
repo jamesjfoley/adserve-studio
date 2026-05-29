@@ -10,10 +10,10 @@ conversation-history replay needed.
 `origin/main` HEAD: `8d04d30` (unchanged — nothing pushed since).
 Local `main` HEAD: `90f94454196ba91a5e1afb1d7e981917e4e82d03` (Task 1.2,
 merged locally via earlier flatten). Currently on branch
-`task/1.4-crm-detail-pages` (Tasks 1.3 + 1.4 committed here; ahead of
-local `main`). Cumulative tests: **197, zero expected-fail**; lint clean;
-tsc clean. **Next task to begin: Task 1.3b — CRM list bulk actions +
-owner filter.**
+`task/1.4-crm-detail-pages` (Tasks 1.3 + 1.4 + 1.3b committed here; ahead
+of local `main`). Cumulative tests: **223, zero expected-fail**; lint
+clean; tsc clean. **Next task to begin: Task 1.6a — CRM dashboard
+(3 widgets).**
 
 ### Phase 1a — Framework + basic CRM
 
@@ -30,17 +30,17 @@ owner filter.**
 | 1.2 | CRM API routes | ✓ Complete | +23 web (25 CRM-API total; crm-accounts skeleton → real) | RESTful `/api/crm/[entityType]` (+`[id]`): list (JSONB filter/sort/offset+total), detail (relationships expanded), create, patch, archive; plus `leads/[id]/convert`, `accounts/[id]/activities`, generic `activities` POST. Plural collection URLs via `resolveCrmEntitySlug` (`@adserve/crm/url`). `withTenant()` + explicit `tenantId` predicate (correct-by-construction RLS — **not** added to the legacy 44-site `task_rls_production_switchover` debt). Member edit-own override on PATCH/DELETE (null `ownedBy` → strict perm). Audit-log writes (first writer). `crm-accounts.test.ts` rewritten as a **real passing** integration test (skeleton flipped, dodgy cast removed → tsc clean). **NOT** in 1.2: `validation_rules` enforcement (engine stubbed — `coerceFieldValue` only), generic relationship linking on create/patch (→1.4), pages/wrappers (→1.3/1.4) |
 | 1.3 | CRM list pages | ✓ Complete | +8 web (4 round-trip, 3 client wrapper, 1 long_text truncation) | Scope (James-approved 2026-05-29): dynamic `/crm/[entityType]` server pages + `<DynamicTable>` server-component wrapper (query DB directly via `lib/crm/query.ts`; default columns) + state↔URL client wrapper + "New" record `<DynamicForm>` modal + nav cleanup to the 4 Phase-3 entities. Also owns the **live-render verify of `long_text` cell truncation** (CSS clamp, full text in DOM). **Deferred out of 1.3 (James-approved):** bulk actions → **Task 1.3b**; owner filter → **Task 1.3b**; per-user column persistence → **Phase 1b** (plan §499–501; the `<DynamicTable>` controllable-with-default seam from decision #15 makes it free later) |
 | 1.4 | CRM detail pages | ✓ Complete | +21 web (5 record-title, 6 detail-capabilities, 10 detail-client) | Dynamic `/crm/[entityType]/[id]` server page: `loadEntityForm` (shared server-component form wrapper, also retro-fitted into the 1.3 list page — mechanical lift, no behaviour change) → `<DynamicForm>` view default / edit behind `canEdit`; related-records sidebar (generic off the relationships map, links via `crmCollectionSegment`); activity timeline (per-record direct query, gated on `activity.read`); quick actions: log activity (modal → `POST /api/crm/activities`), convert (leads, routes to the new account), archive. **No new API routes, no schema/migration** — reads server-side, writes via the 1.2 routes → zero new RLS debt, zero RDS-deferred. Capability derivation extracted to pure `computeRecordCapabilities` (mirrors 1.2 `canMutate`: perm OR owner; null `ownedBy` never grants). **NOT** in 1.4: generic relationship editing from the form (1.2 deferred generic rel writes), bulk/owner filter (→1.3b), per-user layout (→Phase 1b), AI summarise (→Phase 1b) |
-| 1.3b | CRM list bulk actions + owner filter (follow-up) | Not started | — | Split out of 1.3 (James-approved 2026-05-29). Adds row-selection to `<DynamicTable>` (`selectedIds`/`onSelectionChange` + checkbox column), bulk mutation endpoints (assign owner / change status / archive), and a query-builder extension to filter by the `records.ownedBy` column (owner filter — bundled here since both touch ownership). Phase-1a; sequence after 1.3/1.4. |
+| 1.3b | CRM list bulk actions + owner filter (follow-up) | ✓ Complete | +26 web (5 table-selection, 12 owner-filter, 9 bulk route) | Row selection in `<DynamicTable>` (`selectable`/`selectedIds`/`defaultSelectedIds`/`onSelectionChange` + checkbox column with select-all + indeterminate; checkbox clicks `stopPropagation` so `onRowClick` never fires — the controllable-with-default seam from decision #15). Bulk endpoint `POST /api/crm/[entityType]/bulk` (`assignOwner`/`changeStatus`/`archive`): **strict permission gate, no owner override** (update for assign/status, delete for archive); all-or-nothing (count-checked recordIds, zero writes on a bad/cross-tenant id); idempotent (skips rows already in target state); audit one row per real change. Owner filter on the `records.ownedBy` **column** (token `me`/`unassigned`/`<userId>`, `me` resolved server-side) via `resolveOwnerFilter` + `buildWhere` extension; threaded through `parseListParams`/`stateToQuery`. List page loads active members (`lib/crm/members.ts`) for the owner dropdown + bulk assign picker. `changeStatus` takes a validated `field` param (default `status`, must be single-select) — generic, not hardcoded (account/contact/lead use `status`, opportunity `stage`). **Deferred (unchanged):** per-user saved filters → Phase 1b; bulk hard-delete → never. |
 | 1.6a | Dashboard (3 widgets) | Not started | — | |
 | 1.9a | Existing-tenant idempotent reprovision | Not started | — | Calls `activateCrmForTenant` (0.6/1.1) per existing CRM-enabled tenant (idempotent — seeds perms + grants). 1.9a's **unique** job: **delete** the live Phase-2 placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate** any role grants on them. (1.1 already stopped seeding placeholders going forward.) |
 
-**Cumulative test count: 197** across 5 task suites (zero expected-fail):
+**Cumulative test count: 223** across 5 task suites (zero expected-fail):
 
 - `@adserve/database` — 3 (harness smoke) + 1 (seed permission regression guard) = 4
 - `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) + 9 (5 entity-registry + 4 provisioning) = 90
 - `@adserve/ai-service` — 0 (stubs only; tests land with Task 0.7/0.8)
 - `@adserve/crm` — 8 (CRM activation) + 3 (permission seeding + role grants) = 11
-- `@adserve/web` — 92: 16 table + 15 form (39 component, incl. 1.3 long_text truncation verify) + 1 provision-activation smoke + 25 CRM API + 7 list-pages (4 stateToQuery round-trip, 3 crm-list-client) + 21 detail-pages (5 record-title, 6 detail-capabilities, 10 crm-detail-client). **No expected-fail remaining.**
+- `@adserve/web` — 118: 16 table + 15 form (39 component, incl. 1.3 long_text truncation verify) + 1 provision-activation smoke + 25 CRM API + 7 list-pages (4 stateToQuery round-trip, 3 crm-list-client) + 21 detail-pages (5 record-title, 6 detail-capabilities, 10 crm-detail-client) + 26 bulk/owner (5 table-selection, 12 owner-filter, 9 bulk route). **No expected-fail remaining.**
 
 > **Test-suite note:** the full `pnpm test` (turbo, parallel) can still
 > hit the documented flaky DB gate (`crm-records.test.ts` `beforeAll`
@@ -285,15 +285,54 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     Relationship-type fields still render raw ids in `<DynamicForm>` view
     (known 0.4 gap); the sidebar provides the human-readable view.
 
+### Task 1.3b decisions
+
+39. **Bulk is strict-permission-gated — NO per-record owner override.**
+    Single-record PATCH/DELETE allow edit-own (`canMutate`); bulk does not.
+    Bulk is a cross-record admin action (reassigning/archiving a page of
+    records) where partial-success on ownership is ambiguous — so it
+    requires the real `${slug}.update` / `${slug}.delete` and is
+    all-or-nothing. **This asymmetry with the single-record routes is
+    deliberate** (don't "fix" it).
+40. **One `/bulk` endpoint with an `action` discriminator**
+    (`assignOwner`/`changeStatus`/`archive`) — shares recordId resolution,
+    the tenant/entity isolation check, and the audit loop. Plural→singular
+    via `resolveCrmEntitySlug` like every CRM route (decision #26).
+41. **All-or-nothing + count check is the isolation guard.** The fetch is
+    `WHERE tenantId AND entityTypeId AND id IN (...)`; if the returned count
+    ≠ unique recordIds, the batch fails with `{missing}` and **zero writes**
+    (dev superuser bypasses RLS, so this explicit predicate + count is
+    load-bearing — same posture as decision #28; **not** added to the
+    44-site RLS debt). Idempotent: rows already in the target state are
+    skipped, so `updated` counts real changes and no redundant audit rows
+    are written.
+42. **`changeStatus` takes a validated `field` param (default `status`),
+    required to be single-select** (`select`). Generic, not hardcoded —
+    account/contact/lead carry `status`, opportunity `stage`; both are
+    `select` fields. Value validated via `coerceFieldValue`. Keeps CRM
+    field knowledge out of the generic route ("fix the framework, not the
+    module").
+43. **`assignOwner` validates the target is an active tenant member**
+    (`lib/crm/members.ts`), and **`ownedBy: null` unassigns** (the inverse
+    of the `unassigned` owner filter). **Known gap (logged, not fixed
+    here):** the create route (`POST /api/crm/[entityType]`) accepts
+    `body.ownedBy` **without** this membership validation — create and
+    bulk-assign therefore disagree on legal owners. Candidate cleanup for a
+    later task; intentionally out of 1.3b scope.
+44. **Owner filter is on the `records.ownedBy` column, not a JSONB field**
+    — so it lives outside the field-driven filter bar as a dedicated
+    dropdown. Tokens `me`/`unassigned`/`<userId>`; `me` is resolved
+    server-side from the session (keeps the URL shareable). `buildWhere`
+    gained an optional resolved `ownerFilter` arg (back-compatible).
+
 ## Next session opens with
 
-**Task 1.3b — CRM list bulk actions + owner filter.** (1.3 + 1.4 complete
-— see their rows.) Row selection in `<DynamicTable>`
-(`selectedIds`/`onSelectionChange` + checkbox column, additive via the
-controlled-with-default seam), bulk mutation endpoints (assign owner /
-change status / archive, permission-gated + audit-logged), and an owner
-filter (bounded query-builder extension on the `records.ownedBy` column).
-Phase 1a. Then 1.6a (dashboard) and 1.9a (reprovision).
+**Task 1.6a — CRM dashboard (3 widgets).** (1.3 + 1.4 + 1.3b complete —
+see their rows.) `/crm` index route with: (1) pipeline value by stage
+(bar chart summing opportunity amounts grouped by stage), (2) upcoming
+activities next 7 days (list, ascending), (3) recently modified records
+(last 10, any entity, tenant-wide). Funnel + forecast are Phase 1b.
+Then 1.9a (existing-tenant idempotent reprovision) closes Phase 1a.
 
 (Historical note: Task 1.3's scope was finalised with James on
 2026-05-29 — bulk actions + owner filter split to **Task 1.3b**;
