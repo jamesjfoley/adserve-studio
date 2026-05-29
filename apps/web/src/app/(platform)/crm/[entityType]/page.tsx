@@ -7,16 +7,10 @@ import {
   crmCollectionSegment,
   resolveCrmEntitySlug,
 } from "@adserve/crm";
-import {
-  generateDefaultLayoutConfig,
-  getDefaultLayout,
-  getEntityTypeBySlug,
-  listFieldDefinitions,
-  type LayoutConfig,
-} from "@adserve/module-framework";
 import { requirePermission } from "@/lib/permissions";
 import { buildOrderBy, buildWhere, parseListParams } from "@/lib/crm/query";
 import { serializeRecord } from "@/lib/crm/serialize";
+import { loadEntityForm } from "@/lib/crm/load-entity-form";
 import { CrmListClient } from "./_components/crm-list-client";
 
 type PageProps = {
@@ -46,13 +40,9 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
   }
 
   const data = await withTenant(tenant.id, async (tx) => {
-    const entity = await getEntityTypeBySlug(tx, { tenantId: tenant.id, slug });
-    if (!entity) return null;
-
-    const fields = await listFieldDefinitions(tx, {
-      tenantId: tenant.id,
-      entityTypeId: entity.id,
-    });
+    const bundle = await loadEntityForm(tx, { tenantId: tenant.id, slug });
+    if (!bundle) return null;
+    const { entity, fields, layoutConfig } = bundle;
 
     let where;
     let orderBy;
@@ -88,20 +78,8 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
       .from(records)
       .where(where);
 
-    // Layout for the "New" form — the activated default detail layout,
-    // falling back to a generated one if somehow absent.
-    const layoutRow = await getDefaultLayout(tx, {
-      tenantId: tenant.id,
-      entityTypeId: entity.id,
-      layoutType: "detail",
-    });
-    const layoutConfig =
-      (layoutRow?.config as LayoutConfig | undefined) ??
-      (await generateDefaultLayoutConfig(tx, {
-        tenantId: tenant.id,
-        entityTypeId: entity.id,
-      }));
-
+    // Layout for the "New" form is resolved by loadEntityForm above (the
+    // activated default `detail` layout, with a generated fallback).
     return { fields, rows, total: countRow?.total ?? 0, layoutConfig };
   });
 

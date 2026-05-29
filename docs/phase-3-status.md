@@ -7,8 +7,13 @@ conversation-history replay needed.
 
 ## Status as of 2026-05-29
 
-`origin/main` HEAD: `8d04d30` (Phase 3 progress snapshot).
-Task 0.5 implemented in the working tree (uncommitted at time of writing).
+`origin/main` HEAD: `8d04d30` (unchanged — nothing pushed since).
+Local `main` HEAD: `90f94454196ba91a5e1afb1d7e981917e4e82d03` (Task 1.2,
+merged locally via earlier flatten). Currently on branch
+`task/1.4-crm-detail-pages` (Tasks 1.3 + 1.4 committed here; ahead of
+local `main`). Cumulative tests: **197, zero expected-fail**; lint clean;
+tsc clean. **Next task to begin: Task 1.3b — CRM list bulk actions +
+owner filter.**
 
 ### Phase 1a — Framework + basic CRM
 
@@ -24,18 +29,26 @@ Task 0.5 implemented in the working tree (uncommitted at time of writing).
 | 1.1 | CRM permission matrix wiring (constants already exist) | ✓ Complete | +4 (1 seed guard, 3 crm perm/grant) | Constants already shipped in `packages/crm/` (Task 0.1) — this task wrote **no new constants**, it wired the seed/grants. Scope: extend `activateCrmForTenant` to (a) upsert the **21** global CRM `permissions` rows (`module_id=crm`) from `CRM_PERMISSIONS` and (b) grant them per `DEFAULT_CRM_ROLE_PERMISSIONS` (owner 21 / admin 21 / member 7); remove the Phase-2 placeholder CRM block from `db:seed`. `ai_usage.read` (22nd perm) is **owned by 0.8**, not 1.1. **Behavioral change:** `pnpm db:seed` no longer pre-creates CRM perms — they appear at tenant activation. Live-DB placeholder deletion + grant migration remains **1.9a** |
 | 1.2 | CRM API routes | ✓ Complete | +23 web (25 CRM-API total; crm-accounts skeleton → real) | RESTful `/api/crm/[entityType]` (+`[id]`): list (JSONB filter/sort/offset+total), detail (relationships expanded), create, patch, archive; plus `leads/[id]/convert`, `accounts/[id]/activities`, generic `activities` POST. Plural collection URLs via `resolveCrmEntitySlug` (`@adserve/crm/url`). `withTenant()` + explicit `tenantId` predicate (correct-by-construction RLS — **not** added to the legacy 44-site `task_rls_production_switchover` debt). Member edit-own override on PATCH/DELETE (null `ownedBy` → strict perm). Audit-log writes (first writer). `crm-accounts.test.ts` rewritten as a **real passing** integration test (skeleton flipped, dodgy cast removed → tsc clean). **NOT** in 1.2: `validation_rules` enforcement (engine stubbed — `coerceFieldValue` only), generic relationship linking on create/patch (→1.4), pages/wrappers (→1.3/1.4) |
 | 1.3 | CRM list pages | ✓ Complete | +8 web (4 round-trip, 3 client wrapper, 1 long_text truncation) | Scope (James-approved 2026-05-29): dynamic `/crm/[entityType]` server pages + `<DynamicTable>` server-component wrapper (query DB directly via `lib/crm/query.ts`; default columns) + state↔URL client wrapper + "New" record `<DynamicForm>` modal + nav cleanup to the 4 Phase-3 entities. Also owns the **live-render verify of `long_text` cell truncation** (CSS clamp, full text in DOM). **Deferred out of 1.3 (James-approved):** bulk actions → **Task 1.3b**; owner filter → **Task 1.3b**; per-user column persistence → **Phase 1b** (plan §499–501; the `<DynamicTable>` controllable-with-default seam from decision #15 makes it free later) |
-| 1.4 | CRM detail pages | Not started | — | **Now also owns:** the `<DynamicForm>` server-component wrapper (fetch via entity registry → feed the client component) |
+| 1.4 | CRM detail pages | ✓ Complete | +21 web (5 record-title, 6 detail-capabilities, 10 detail-client) | Dynamic `/crm/[entityType]/[id]` server page: `loadEntityForm` (shared server-component form wrapper, also retro-fitted into the 1.3 list page — mechanical lift, no behaviour change) → `<DynamicForm>` view default / edit behind `canEdit`; related-records sidebar (generic off the relationships map, links via `crmCollectionSegment`); activity timeline (per-record direct query, gated on `activity.read`); quick actions: log activity (modal → `POST /api/crm/activities`), convert (leads, routes to the new account), archive. **No new API routes, no schema/migration** — reads server-side, writes via the 1.2 routes → zero new RLS debt, zero RDS-deferred. Capability derivation extracted to pure `computeRecordCapabilities` (mirrors 1.2 `canMutate`: perm OR owner; null `ownedBy` never grants). **NOT** in 1.4: generic relationship editing from the form (1.2 deferred generic rel writes), bulk/owner filter (→1.3b), per-user layout (→Phase 1b), AI summarise (→Phase 1b) |
 | 1.3b | CRM list bulk actions + owner filter (follow-up) | Not started | — | Split out of 1.3 (James-approved 2026-05-29). Adds row-selection to `<DynamicTable>` (`selectedIds`/`onSelectionChange` + checkbox column), bulk mutation endpoints (assign owner / change status / archive), and a query-builder extension to filter by the `records.ownedBy` column (owner filter — bundled here since both touch ownership). Phase-1a; sequence after 1.3/1.4. |
 | 1.6a | Dashboard (3 widgets) | Not started | — | |
 | 1.9a | Existing-tenant idempotent reprovision | Not started | — | Calls `activateCrmForTenant` (0.6/1.1) per existing CRM-enabled tenant (idempotent — seeds perms + grants). 1.9a's **unique** job: **delete** the live Phase-2 placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate** any role grants on them. (1.1 already stopped seeding placeholders going forward.) |
 
-**Cumulative test count: 176** across 5 task suites (zero expected-fail):
+**Cumulative test count: 197** across 5 task suites (zero expected-fail):
 
 - `@adserve/database` — 3 (harness smoke) + 1 (seed permission regression guard) = 4
 - `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) + 9 (5 entity-registry + 4 provisioning) = 90
 - `@adserve/ai-service` — 0 (stubs only; tests land with Task 0.7/0.8)
 - `@adserve/crm` — 8 (CRM activation) + 3 (permission seeding + role grants) = 11
-- `@adserve/web` — 71: 16 table + 15 form (39 component, incl. 1.3 long_text truncation verify) + 1 provision-activation smoke + 25 CRM API + 7 list-pages (4 stateToQuery round-trip, 3 crm-list-client). **No expected-fail remaining.**
+- `@adserve/web` — 92: 16 table + 15 form (39 component, incl. 1.3 long_text truncation verify) + 1 provision-activation smoke + 25 CRM API + 7 list-pages (4 stateToQuery round-trip, 3 crm-list-client) + 21 detail-pages (5 record-title, 6 detail-capabilities, 10 crm-detail-client). **No expected-fail remaining.**
+
+> **Test-suite note:** the full `pnpm test` (turbo, parallel) can still
+> hit the documented flaky DB gate (`crm-records.test.ts` `beforeAll`
+> contends on the shared single-connection local DB → `users_email_unique`).
+> Deterministically green under serial execution
+> (`vitest run --no-file-parallelism`) and in isolated per-file runs. This
+> is the deferred flaky-gate item below, **not** a 1.4 regression (1.4 adds
+> only pure + jsdom tests, no DB).
 
 ### Phase 1b — AI + advanced UI
 
@@ -231,13 +244,56 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     Generic relationship *writes* on create/patch deferred to 1.4; 1.2
     writes links only in `lead.convert`.
 
+### Task 1.4 decisions
+
+32. **No new API routes; reads server-side, writes via 1.2 routes.** The
+    detail page is a server component that loads the record + relationships
+    + activities directly inside `withTenant` (same pattern as the 1.3 list
+    page). All mutations reuse the 1.2 routes (PATCH/DELETE
+    `/api/crm/[entityType]/[id]`, `POST /api/crm/activities`, `POST
+    /api/crm/leads/[id]/convert`). Consequence: **zero new RLS debt, zero
+    new RDS-deferred migrations** — 1.4 adds no schema.
+33. **`<DynamicForm>` server wrapper = `loadEntityForm`** (`lib/crm/`):
+    resolves entity + field defs + `detail` layout (generated fallback).
+    Consumed by both the detail page (view/edit) and — retro-fitted — the
+    1.3 list page (the "New" form). The list-page refactor was a
+    behaviour-preserving mechanical lift (entity/fields/layout resolution
+    only); list query, param parsing, and column intersection untouched.
+34. **Timeline is a per-record direct query**, ordered `desc(createdAt)`,
+    **gated on its own `activity.read` permission** (a user may read the
+    record without seeing activity). Deliberately NOT the account-aggregate
+    endpoint `GET /api/crm/accounts/[id]/activities` — that answers a
+    different question (activity across an account's related records) and
+    stays available for a future roll-up view.
+35. **Capability derivation extracted to pure `computeRecordCapabilities`**
+    (`lib/crm/detail-capabilities.ts`) so the UI gate and the API
+    `canMutate` agree and the rules are unit-tested. Edit/archive = perm OR
+    record ownership; **null `ownedBy` never grants via ownership**. Convert
+    is lead-only + strictly `lead.convert`-gated (no owner override) and
+    hidden once `status === "converted"`.
+36. **Convert routes to the new account** (uses the 201 response's
+    `account.id`) rather than bare-refreshing the now-converted lead;
+    surfaces the 409 `already_converted` distinctly.
+37. **Activity `body` is JSONB `{ text? }`** (confirmed against the schema +
+    the 1.2 route). The log-activity modal sends `body: { text }`; the
+    timeline renders `body.text` and tolerates an empty `{}`. There is **no
+    `dueDate` column** on `activities` (that concept is 1.6a, and would live
+    in `metadata` if anywhere).
+38. **Related-record sidebar labels are presentation-only heuristics**
+    (`data.name` → `firstName lastName` → id), not driven by each related
+    type's `nameFieldId` — avoids extra per-type field queries for 1.4.
+    Relationship-type fields still render raw ids in `<DynamicForm>` view
+    (known 0.4 gap); the sidebar provides the human-readable view.
+
 ## Next session opens with
 
-**Task 1.4 — CRM detail pages.** (1.3 complete — see its row.) Server
-components at `/crm/[entityType]/[id]`: `<DynamicForm>` view/edit (edit
-behind permission), related-records sidebar, activity timeline, quick
-actions (log activity). Owns the `<DynamicForm>` server-component
-wrapper. Build the detail route the 1.3 list rows link into.
+**Task 1.3b — CRM list bulk actions + owner filter.** (1.3 + 1.4 complete
+— see their rows.) Row selection in `<DynamicTable>`
+(`selectedIds`/`onSelectionChange` + checkbox column, additive via the
+controlled-with-default seam), bulk mutation endpoints (assign owner /
+change status / archive, permission-gated + audit-logged), and an owner
+filter (bounded query-builder extension on the `records.ownedBy` column).
+Phase 1a. Then 1.6a (dashboard) and 1.9a (reprovision).
 
 (Historical note: Task 1.3's scope was finalised with James on
 2026-05-29 — bulk actions + owner filter split to **Task 1.3b**;
