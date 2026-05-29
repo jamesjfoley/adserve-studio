@@ -22,19 +22,19 @@ Task 0.5 implemented in the working tree (uncommitted at time of writing).
 | 0.5 | Dynamic table renderer | ✓ Complete | +23 (7 operators, 16 component) | Controlled, props-driven `<DynamicTable>` in `apps/web/src/components/dynamic-table/`. Extracted shared `formatFieldValue` (dynamic-form) + refactored all 13 field components to consume it (single source of truth → consistency test). Sort/filter eligibility centralised in `operators.ts`. Filters draft→Apply (single emit path). Column visibility controlled-with-default. a11y: aria-sort + labelled controls |
 | 0.6 | Entity type registration & CRM module activation | ✓ Complete | +18 (9 framework, 8 crm, 1 web smoke) | Framework primitive `provisionEntityType` (entity + missing fields + default `detail` layout + `nameFieldId`) + entity-registry stubs implemented + CRM orchestrator `activateCrmForTenant` (entity types, fields, default layouts, relationships, pipeline stages + `schemaVersion` into every CRM entity's `settings`). Idempotent (registry `ON CONFLICT DO NOTHING`; fields top-up by slug; relationships SELECT-then-INSERT). Wired into `/api/dev/provision-tenant`. Added `many_to_one` to `relationship_type` enum (migration `004`, applied locally, deferred on RDS). **NOT** in 0.6: server-component wrappers (→1.3/1.4), `ai_usage_limits` seeding (→0.8), CRM permission rows + role grants (→**1.1** seeds rows + grants; **1.9a** migrates the live DB), `validation_rules` seeding (→until `createValidationRule` adapter is implemented) |
 | 1.1 | CRM permission matrix wiring (constants already exist) | ✓ Complete | +4 (1 seed guard, 3 crm perm/grant) | Constants already shipped in `packages/crm/` (Task 0.1) — this task wrote **no new constants**, it wired the seed/grants. Scope: extend `activateCrmForTenant` to (a) upsert the **21** global CRM `permissions` rows (`module_id=crm`) from `CRM_PERMISSIONS` and (b) grant them per `DEFAULT_CRM_ROLE_PERMISSIONS` (owner 21 / admin 21 / member 7); remove the Phase-2 placeholder CRM block from `db:seed`. `ai_usage.read` (22nd perm) is **owned by 0.8**, not 1.1. **Behavioral change:** `pnpm db:seed` no longer pre-creates CRM perms — they appear at tenant activation. Live-DB placeholder deletion + grant migration remains **1.9a** |
-| 1.2 | CRM API routes | Not started | — | Skeleton test in `apps/web/__tests__/api/crm-accounts.test.ts` is still expected-fail |
+| 1.2 | CRM API routes | ✓ Complete | +23 web (25 CRM-API total; crm-accounts skeleton → real) | RESTful `/api/crm/[entityType]` (+`[id]`): list (JSONB filter/sort/offset+total), detail (relationships expanded), create, patch, archive; plus `leads/[id]/convert`, `accounts/[id]/activities`, generic `activities` POST. Plural collection URLs via `resolveCrmEntitySlug` (`@adserve/crm/url`). `withTenant()` + explicit `tenantId` predicate (correct-by-construction RLS — **not** added to the legacy 44-site `task_rls_production_switchover` debt). Member edit-own override on PATCH/DELETE (null `ownedBy` → strict perm). Audit-log writes (first writer). `crm-accounts.test.ts` rewritten as a **real passing** integration test (skeleton flipped, dodgy cast removed → tsc clean). **NOT** in 1.2: `validation_rules` enforcement (engine stubbed — `coerceFieldValue` only), generic relationship linking on create/patch (→1.4), pages/wrappers (→1.3/1.4) |
 | 1.3 | CRM list pages | Not started | — | **Now also owns:** the `<DynamicTable>` server-component wrapper (fetch via entity registry → feed the client component); per-user column-preference persistence into `visibleColumns`/`onVisibleColumnsChange`; and the **live-render verify of `long_text` cell truncation** (CSS `line-clamp`/`truncate`, full text preserved in DOM) — moved here from 0.6 as 0.6 renders no table |
 | 1.4 | CRM detail pages | Not started | — | **Now also owns:** the `<DynamicForm>` server-component wrapper (fetch via entity registry → feed the client component) |
 | 1.6a | Dashboard (3 widgets) | Not started | — | |
 | 1.9a | Existing-tenant idempotent reprovision | Not started | — | Calls `activateCrmForTenant` (0.6/1.1) per existing CRM-enabled tenant (idempotent — seeds perms + grants). 1.9a's **unique** job: **delete** the live Phase-2 placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate** any role grants on them. (1.1 already stopped seeding placeholders going forward.) |
 
-**Cumulative test count: 145** across 5 task suites:
+**Cumulative test count: 168** across 5 task suites (zero expected-fail):
 
 - `@adserve/database` — 3 (harness smoke) + 1 (seed permission regression guard) = 4
 - `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) + 9 (5 entity-registry + 4 provisioning) = 90
 - `@adserve/ai-service` — 0 (stubs only; tests land with Task 0.7/0.8)
 - `@adserve/crm` — 8 (CRM activation) + 3 (permission seeding + role grants) = 11
-- `@adserve/web` — 39 passing (15 form + 23 table + 1 provision-activation smoke, now also asserting member CRM grants) + 1 expected-fail integration test = 40
+- `@adserve/web` — 63: 15 form + 23 table (38 component) + 1 provision-activation smoke + 25 CRM API (2 list/crm-accounts, 11 query-builder unit, 7 records lifecycle/perms, 4 convert+activities+bounded-query). **No expected-fail remaining** — `crm-accounts.test.ts` is now a real passing test.
 
 ### Phase 1b — AI + advanced UI
 
@@ -69,8 +69,16 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
   Task 0.6; **not yet applied on RDS.** Blocking before any
   relationship-creating CRM activation runs against production — same
   bastion + migrator-role pattern as `003`.
-- **Skeleton API-route test for `GET /api/crm/accounts`** still in
-  expected-fail state. Will flip when Task 1.2 lands.
+- **Migration `005-add-task-activity-type.sql` on RDS.** Adds `task` to
+  the `activity_type` enum (CRM logs call/email/meeting/**task**/note).
+  Applied locally in Task 1.2; **not yet applied on RDS.** Blocking
+  before the activities API runs against production — same pattern as
+  `003`/`004`.
+- **Skeleton API-route test for `GET /api/crm/accounts`** — **resolved in
+  Task 1.2**: rewritten from an expected-fail skeleton into a real
+  passing integration test against the live route; the dodgy type cast is
+  gone and `pnpm --filter @adserve/web exec tsc --noEmit` is now fully
+  clean for the first time since Task 0.0.
 
 ## Key decisions made this session
 
@@ -185,23 +193,47 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     placeholders going forward; deleting the rows that already exist in
     live DBs + migrating their grants is 1.9a's unique job.
 
+### Task 1.2 decisions
+
+26. **Plural collection URLs** (`/api/crm/accounts`) mapped to singular
+    entity slugs via `resolveCrmEntitySlug` in `@adserve/crm/url` (shared
+    with 1.3/1.4). The `[entityType]` param accepts plural or singular.
+27. **JSONB query builder** (`apps/web/src/lib/crm/query.ts`): sort/filter
+    honour the `operators.ts` eligibility vocabulary server-side; slugs
+    validated against field defs; values are bound params; casts from a
+    fixed allowlist. Verified storage shapes: currency `{amount,currency}`
+    → sort/filter on `data->slug->>'amount'`; multi_select top-level
+    string array → `data->slug ? value`.
+28. **Permission at the route layer**; tenant isolation via `withTenant()`
+    **+ explicit `tenantId` predicate** (dev superuser bypasses RLS, so the
+    predicate is load-bearing today). CRM routes are correct-by-construction
+    — **not** part of the legacy 44-site `task_rls_production_switchover`.
+29. **Member edit-own override** on PATCH/DELETE: allowed if the user has
+    the perm OR `record.ownedBy === userId`. **Null `ownedBy` never grants
+    via the override** — falls back to the strict permission check (tested).
+30. **`activity_type` enum gained `task`** (migration `005`, applied local,
+    deferred RDS). Audit-log shape defined in `lib/crm/audit.ts`: create →
+    `{after}`, update → `{before,after}`, archive → `{before,after}`,
+    convert → one row per created entity + one for the lead status change;
+    activities write **no** audit rows.
+31. **Relationship reads are query-bounded** — `loadRecordWithRelationships`
+    fans out in ≤4 queries regardless of N related records (asserted).
+    Generic relationship *writes* on create/patch deferred to 1.4; 1.2
+    writes links only in `lead.convert`.
+
 ## Next session opens with
 
-**Task 1.2 — CRM API routes.** RESTful per-entity-type routes under
-`/api/crm/[entityType]` (+ `[id]`): list (filter/sort/offset-paginate),
-get-with-relationships, create, patch, soft-delete (`isArchived = true`),
-plus `leads/[id]/convert`, `accounts/[id]/activities`, and
-`activities`. All routes use `withTenant()`, `apiRequirePermission()`
-(the CRM perms 1.1 wired), write audit-log entries, and return consistent
-error shapes.
-
-This is where the server **does** the JSONB sort/filter via
-`(data->>'field_slug')::<type>` casts and the COUNT-over-filtered-set
-pagination that `<DynamicTable>` only emits state for; honour the
-sort/filter eligibility contract in
-`apps/web/src/components/dynamic-table/operators.ts`. The expected-fail
-skeleton `apps/web/__tests__/api/crm-accounts.test.ts` flips to passing
-when the `GET /api/crm/accounts` route lands (and its `tsc` error clears).
+**Task 1.3 — CRM list pages.** Server components at `/crm/[entityType]`
+that fetch via the entity registry + the 1.2 list API and render
+`<DynamicTable>` with CRM default columns. **Now also owns** (reassigned
+from 0.6): the `<DynamicTable>` server-component wrapper, per-user column
+preference persistence (`visibleColumns`/`onVisibleColumnsChange`), and
+the **live-render verify of `long_text` cell truncation** (CSS-only
+clamp, full text preserved in DOM). Translate `DynamicTable` state →
+the 1.2 query-param contract (`offset`/`limit`/`includeArchived`/JSON
+`sort`/JSON `filters`). Sidebar filters + bulk actions + a "New" button
+(create via `<DynamicForm>`). Use the plural URLs from
+`@adserve/crm/url`.
 
 ## Reading order for a fresh Claude session
 

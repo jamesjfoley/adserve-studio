@@ -1,0 +1,27 @@
+-- ===========================================================================
+-- Phase 3 / Task 1.2: Add `task` to the activity_type enum
+-- ===========================================================================
+--
+-- CRM logs activities of type call / email / meeting / task / note (see
+-- CrmActivityType in @adserve/crm). The original activity_type enum had
+-- note / email / call / meeting / change / ai_action / system — no
+-- `task`. The generic `POST /api/crm/activities` endpoint needs it, so
+-- we add the missing value rather than dropping `task` from the module.
+--
+-- Idempotent: ADD VALUE IF NOT EXISTS. Safe to re-run.
+--
+-- NOTE: ALTER TYPE ... ADD VALUE cannot run inside a transaction block,
+-- and a newly added value cannot be used in the same transaction it was
+-- added in. Apply this once, standalone, before any code that inserts
+-- 'task' activities (tests included).
+--
+-- Apply locally:
+--   psql "postgresql://jamesfoley@localhost:5432/adserve" -v ON_ERROR_STOP=1 \
+--     -f packages/database/sql/005-add-task-activity-type.sql
+--   (or: pnpm db:push — drizzle-kit picks up the enum change)
+-- Apply on RDS (deferred, same pattern as 003/004):
+--   psql "$DATABASE_URL_MIGRATOR" -v ON_ERROR_STOP=1 \
+--     -f packages/database/sql/005-add-task-activity-type.sql
+-- ===========================================================================
+
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'task' AFTER 'meeting';

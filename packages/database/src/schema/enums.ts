@@ -79,6 +79,7 @@ export const activityTypeEnum = pgEnum("activity_type", [
   "email",
   "call",
   "meeting",
+  "task",
   "change",
   "ai_action",
   "system",

@@ -85,3 +85,12 @@ export {
   CRM_SCHEMA_VERSION,
   type ActivateCrmResult,
 } from "./activate";
+
+// ============================================================
+// URL ↔ slug mapping
+// ============================================================
+export {
+  resolveCrmEntitySlug,
+  crmCollectionSegment,
+  CRM_COLLECTION_SEGMENTS,
+} from "./url";
