@@ -6,14 +6,21 @@ import {
   test,
   vi,
 } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   testDb,
   createTestUser,
   deleteTestTenant,
   type TestUser,
 } from "@adserve/database/test-helpers";
-import { entityTypes, schemaRelationships } from "@adserve/database";
+import {
+  entityTypes,
+  permissions,
+  rolePermissions,
+  roles,
+  schemaRelationships,
+} from "@adserve/database";
+import { DEFAULT_CRM_ROLE_PERMISSIONS } from "@adserve/crm";
 
 /**
  * Smoke test: the dev provisioning endpoint triggers CRM activation
@@ -104,5 +111,26 @@ describe("GET /api/dev/provision-tenant → CRM activation", () => {
       .from(schemaRelationships)
       .where(eq(schemaRelationships.tenantId, tenantId));
     expect(rels).toHaveLength(3);
+
+    // Member role got exactly the 7 CRM grants from activation (the
+    // provisioning route itself grants member nothing).
+    const [memberRole] = await testDb
+      .select({ id: roles.id })
+      .from(roles)
+      .where(and(eq(roles.tenantId, tenantId), eq(roles.slug, "member")));
+    expect(memberRole).toBeTruthy();
+
+    const memberGrants = await testDb
+      .select({
+        resource: permissions.resource,
+        action: permissions.action,
+      })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(eq(rolePermissions.roleId, memberRole.id));
+    const memberKeys = new Set(
+      memberGrants.map((g) => `${g.resource}.${g.action}`)
+    );
+    expect(memberKeys).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.member));
   });
 });

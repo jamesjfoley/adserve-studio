@@ -1,9 +1,26 @@
 import "dotenv/config";
-import { db, migrationClient } from "../client";
+import { db } from "../client";
 import { modules, permissions } from "../schema";
 import { and, eq, isNull } from "drizzle-orm";
 
-async function seed() {
+type Database = typeof db;
+
+/**
+ * Seed the global, tenant-independent baseline: the module registry and
+ * the platform-level permission rows.
+ *
+ * Idempotent — safe to run repeatedly. Accepts a `database` handle so it
+ * can run inside a test transaction; defaults to the app client for the
+ * `pnpm db:seed` runner (`./run.ts`).
+ *
+ * NOTE: this seed deliberately does NOT create CRM (or any module's)
+ * permission rows. Module permissions are seeded when the module is
+ * activated for a tenant — CRM's land in `activateCrmForTenant`
+ * (@adserve/crm). The Phase-2 placeholder CRM perms
+ * (contacts/companies/deals/ai) were removed in Task 1.1; 1.9a deletes
+ * any that remain in live databases. `ai_usage.read` is seeded by 0.8.
+ */
+export async function seed(database: Database = db) {
   console.log("🌱 Seeding database...\n");
 
   // ========================================
@@ -22,7 +39,7 @@ async function seed() {
   ];
 
   for (const mod of moduleData) {
-    await db
+    await database
       .insert(modules)
       .values(mod)
       .onConflictDoNothing({ target: modules.slug });
@@ -54,7 +71,7 @@ async function seed() {
   // duplicate rows when module_id IS NULL. Use an explicit existence check
   // here so re-running the seed is truly idempotent for platform permissions.
   for (const perm of platformPerms) {
-    const [existing] = await db
+    const [existing] = await database
       .select({ id: permissions.id })
       .from(permissions)
       .where(
@@ -66,60 +83,16 @@ async function seed() {
       )
       .limit(1);
     if (!existing) {
-      await db.insert(permissions).values(perm);
+      await database.insert(permissions).values(perm);
     }
   }
 
   console.log(`  ✓ ${platformPerms.length} platform permissions ensured\n`);
 
   // ========================================
-  // CRM module permissions
+  // Module permissions (CRM etc.) are NOT seeded here — they are created
+  // at tenant activation time. See activateCrmForTenant in @adserve/crm.
   // ========================================
-  console.log("  Creating CRM module permissions...");
-
-  const [crmModule] = await db
-    .select()
-    .from(modules)
-    .where(eq(modules.slug, "crm"));
-
-  if (crmModule) {
-    const crmPerms = [
-      { resource: "contacts", action: "read", description: "View contacts" },
-      { resource: "contacts", action: "create", description: "Create contacts" },
-      { resource: "contacts", action: "update", description: "Edit contacts" },
-      { resource: "contacts", action: "delete", description: "Archive contacts" },
-      { resource: "contacts", action: "export", description: "Export contacts" },
-      { resource: "companies", action: "read", description: "View companies" },
-      { resource: "companies", action: "create", description: "Create companies" },
-      { resource: "companies", action: "update", description: "Edit companies" },
-      { resource: "companies", action: "delete", description: "Archive companies" },
-      { resource: "companies", action: "export", description: "Export companies" },
-      { resource: "deals", action: "read", description: "View deals" },
-      { resource: "deals", action: "create", description: "Create deals" },
-      { resource: "deals", action: "update", description: "Edit deals" },
-      { resource: "deals", action: "delete", description: "Archive deals" },
-      { resource: "deals", action: "export", description: "Export deals" },
-      { resource: "ai", action: "use", description: "Use AI features in CRM" },
-    ];
-
-    for (const perm of crmPerms) {
-      await db
-        .insert(permissions)
-        .values({ ...perm, moduleId: crmModule.id })
-        .onConflictDoNothing();
-    }
-
-    console.log(`  ✓ ${crmPerms.length} CRM permissions created\n`);
-  }
 
   console.log("✅ Seed complete!\n");
-
-  // Close the connection
-  await migrationClient.end();
-  process.exit(0);
 }
-
-seed().catch((err) => {
-  console.error("❌ Seed failed:", err);
-  process.exit(1);
-});

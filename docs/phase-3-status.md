@@ -20,21 +20,21 @@ Task 0.5 implemented in the working tree (uncommitted at time of writing).
 | 0.3 | Layout engine | ✓ Complete | +21 | CRUD + default-config generation + structural+reference validation; system-field-style protections (last-layout refusal, layoutType-scoped, default demotion) |
 | 0.4 | Dynamic form renderer | ✓ Complete | +15 (+1 expected-fail still) | 13 field components + UnsupportedField; client component takes data as props (server-component wrapper now owned by 1.3/1.4); explicit-locale Intl.* throughout; @testing-library/react + jsdom plumbed |
 | 0.5 | Dynamic table renderer | ✓ Complete | +23 (7 operators, 16 component) | Controlled, props-driven `<DynamicTable>` in `apps/web/src/components/dynamic-table/`. Extracted shared `formatFieldValue` (dynamic-form) + refactored all 13 field components to consume it (single source of truth → consistency test). Sort/filter eligibility centralised in `operators.ts`. Filters draft→Apply (single emit path). Column visibility controlled-with-default. a11y: aria-sort + labelled controls |
-| 0.6 | Entity type registration & CRM module activation | ✓ Complete | +18 (9 framework, 8 crm, 1 web smoke) | Framework primitive `provisionEntityType` (entity + missing fields + default `detail` layout + `nameFieldId`) + entity-registry stubs implemented + CRM orchestrator `activateCrmForTenant` (entity types, fields, default layouts, relationships, pipeline stages + `schemaVersion` into every CRM entity's `settings`). Idempotent (registry `ON CONFLICT DO NOTHING`; fields top-up by slug; relationships SELECT-then-INSERT). Wired into `/api/dev/provision-tenant`. Added `many_to_one` to `relationship_type` enum (migration `004`, applied locally, deferred on RDS). **NOT** in 0.6: server-component wrappers (→1.3/1.4), `ai_usage_limits` seeding (→0.8), CRM permission rows + role grants (→1.1/1.9a), `validation_rules` seeding (→until `createValidationRule` adapter is implemented) |
-| 1.1 | CRM schema + permission matrix | Not started | — | Constants exist in `packages/crm/`; this task wires the seed. **Owns** the global CRM `permissions` rows + per-tenant role grants (`activateCrmForTenant` from 0.6 does NOT seed permissions) |
+| 0.6 | Entity type registration & CRM module activation | ✓ Complete | +18 (9 framework, 8 crm, 1 web smoke) | Framework primitive `provisionEntityType` (entity + missing fields + default `detail` layout + `nameFieldId`) + entity-registry stubs implemented + CRM orchestrator `activateCrmForTenant` (entity types, fields, default layouts, relationships, pipeline stages + `schemaVersion` into every CRM entity's `settings`). Idempotent (registry `ON CONFLICT DO NOTHING`; fields top-up by slug; relationships SELECT-then-INSERT). Wired into `/api/dev/provision-tenant`. Added `many_to_one` to `relationship_type` enum (migration `004`, applied locally, deferred on RDS). **NOT** in 0.6: server-component wrappers (→1.3/1.4), `ai_usage_limits` seeding (→0.8), CRM permission rows + role grants (→**1.1** seeds rows + grants; **1.9a** migrates the live DB), `validation_rules` seeding (→until `createValidationRule` adapter is implemented) |
+| 1.1 | CRM permission matrix wiring (constants already exist) | ✓ Complete | +4 (1 seed guard, 3 crm perm/grant) | Constants already shipped in `packages/crm/` (Task 0.1) — this task wrote **no new constants**, it wired the seed/grants. Scope: extend `activateCrmForTenant` to (a) upsert the **21** global CRM `permissions` rows (`module_id=crm`) from `CRM_PERMISSIONS` and (b) grant them per `DEFAULT_CRM_ROLE_PERMISSIONS` (owner 21 / admin 21 / member 7); remove the Phase-2 placeholder CRM block from `db:seed`. `ai_usage.read` (22nd perm) is **owned by 0.8**, not 1.1. **Behavioral change:** `pnpm db:seed` no longer pre-creates CRM perms — they appear at tenant activation. Live-DB placeholder deletion + grant migration remains **1.9a** |
 | 1.2 | CRM API routes | Not started | — | Skeleton test in `apps/web/__tests__/api/crm-accounts.test.ts` is still expected-fail |
 | 1.3 | CRM list pages | Not started | — | **Now also owns:** the `<DynamicTable>` server-component wrapper (fetch via entity registry → feed the client component); per-user column-preference persistence into `visibleColumns`/`onVisibleColumnsChange`; and the **live-render verify of `long_text` cell truncation** (CSS `line-clamp`/`truncate`, full text preserved in DOM) — moved here from 0.6 as 0.6 renders no table |
 | 1.4 | CRM detail pages | Not started | — | **Now also owns:** the `<DynamicForm>` server-component wrapper (fetch via entity registry → feed the client component) |
 | 1.6a | Dashboard (3 widgets) | Not started | — | |
-| 1.9a | Existing-tenant idempotent reprovision | Not started | — | Supersedes the Phase 2 placeholder CRM permissions (contacts/companies/deals/ai). Calls `activateCrmForTenant` (0.6) per existing CRM-enabled tenant + reseeds the permission matrix |
+| 1.9a | Existing-tenant idempotent reprovision | Not started | — | Calls `activateCrmForTenant` (0.6/1.1) per existing CRM-enabled tenant (idempotent — seeds perms + grants). 1.9a's **unique** job: **delete** the live Phase-2 placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate** any role grants on them. (1.1 already stopped seeding placeholders going forward.) |
 
-**Cumulative test count: 141** across 5 task suites:
+**Cumulative test count: 145** across 5 task suites:
 
-- `@adserve/database` — 3 (harness smoke)
+- `@adserve/database` — 3 (harness smoke) + 1 (seed permission regression guard) = 4
 - `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) + 9 (5 entity-registry + 4 provisioning) = 90
 - `@adserve/ai-service` — 0 (stubs only; tests land with Task 0.7/0.8)
-- `@adserve/crm` — 8 (CRM activation)
-- `@adserve/web` — 39 passing (15 form + 23 table + 1 provision-activation smoke) + 1 expected-fail integration test = 40
+- `@adserve/crm` — 8 (CRM activation) + 3 (permission seeding + role grants) = 11
+- `@adserve/web` — 39 passing (15 form + 23 table + 1 provision-activation smoke, now also asserting member CRM grants) + 1 expected-fail integration test = 40
 
 ### Phase 1b — AI + advanced UI
 
@@ -162,32 +162,46 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     (`withSuperAdminBypass`) connect to the same DB as the test-helpers'
     `testDb`. Real/CI `DATABASE_URL` is respected.
 
+### Task 1.1 decisions
+
+22. **CRM permission rows + role grants live in `activateCrmForTenant`**
+    (Option A), sourced from the canonical `CRM_PERMISSIONS` /
+    `DEFAULT_CRM_ROLE_PERMISSIONS` in `@adserve/crm` — no duplication, no
+    `database → crm` circular dep. Global perm rows upserted on
+    `(module_id, resource, action)`; grants idempotent on the
+    `role_permissions` PK; grants only to roles that exist for the tenant.
+23. **`db:seed` no longer creates module permissions.** The Phase-2
+    placeholder CRM block (contacts/companies/deals/ai) was removed; CRM
+    perms now appear at tenant activation. The seed was refactored into an
+    importable `seed(database)` (in `seed/index.ts`) + a `seed/run.ts`
+    runner (so it's testable without `process.exit`). A regression-guard
+    test asserts `seed()` creates zero CRM permission rows. Grep confirmed
+    the placeholder resource names were referenced **only** in the seed
+    block — nothing else depended on them.
+24. **`ai_usage.read` deferred to 0.8.** 1.1 ships exactly the 21 CRM
+    perms; the platform `ai_usage.read` (the 22nd) is owned by 0.8, per
+    `ai-service/src/permissions.ts`'s own annotation.
+25. **Live-DB placeholder cleanup stays 1.9a.** 1.1 only stops *seeding*
+    placeholders going forward; deleting the rows that already exist in
+    live DBs + migrating their grants is 1.9a's unique job.
+
 ## Next session opens with
 
-**Task 0.6 — Entity type registration & CRM module activation.** Scope
-(per the approved 0.6 plan):
+**Task 1.2 — CRM API routes.** RESTful per-entity-type routes under
+`/api/crm/[entityType]` (+ `[id]`): list (filter/sort/offset-paginate),
+get-with-relationships, create, patch, soft-delete (`isArchived = true`),
+plus `leads/[id]/convert`, `accounts/[id]/activities`, and
+`activities`. All routes use `withTenant()`, `apiRequirePermission()`
+(the CRM perms 1.1 wired), write audit-log entries, and return consistent
+error shapes.
 
-- **module-framework**: implement the entity-registry stubs
-  (`registerEntityType` idempotent on `(tenantId, slug)`,
-  `getEntityTypeBySlug` tenant-scoped, `listEntityTypesForModule`) +
-  a new generic `provisionEntityType(tx, spec)` (entity + missing field
-  defs + default `detail` layout + `nameFieldId`).
-- **@adserve/crm**: `activateCrmForTenant(tx, { tenantId })` mapping the
-  CRM constants through `provisionEntityType`, creating the 3
-  `relationships` rows, and writing pipeline stages + a `schemaVersion`
-  stamp into **every** CRM entity's `entity_types.settings`. Idempotent.
-- **wiring**: call `activateCrmForTenant` from `/api/dev/provision-tenant`
-  after the module-enable step.
-
-Explicitly out of 0.6 (see deferred items): server-component wrappers
-(→1.3/1.4), `ai_usage_limits` (→0.8), CRM permission rows + role grants
-(→1.1/1.9a), `validation_rules` seeding (→adapter impl).
-
-`<DynamicTable>`/`<DynamicForm>` remain presentation + callbacks only —
-the JSONB sort/filter via `(data->>'field_slug')::<type>` casts and
-COUNT-over-filtered-set pagination land server-side in **Task 1.2**;
-sort/filter eligibility per field type lives in
-`apps/web/src/components/dynamic-table/operators.ts`.
+This is where the server **does** the JSONB sort/filter via
+`(data->>'field_slug')::<type>` casts and the COUNT-over-filtered-set
+pagination that `<DynamicTable>` only emits state for; honour the
+sort/filter eligibility contract in
+`apps/web/src/components/dynamic-table/operators.ts`. The expected-fail
+skeleton `apps/web/__tests__/api/crm-accounts.test.ts` flips to passing
+when the `GET /api/crm/accounts` route lands (and its `tsc` error clears).
 
 ## Reading order for a fresh Claude session
 

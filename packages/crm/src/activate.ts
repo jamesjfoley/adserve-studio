@@ -1,5 +1,12 @@
 import { and, eq } from "drizzle-orm";
-import { db, modules, schemaRelationships } from "@adserve/database";
+import {
+  db,
+  modules,
+  permissions,
+  rolePermissions,
+  roles,
+  schemaRelationships,
+} from "@adserve/database";
 import {
   provisionEntityType,
   type ProvisionFieldSpec,
@@ -8,21 +15,26 @@ import { CRM_ENTITY_TYPES } from "./entity-types";
 import { DEFAULT_FIELDS_BY_ENTITY } from "./field-definitions";
 import { CRM_RELATIONSHIPS, type RelationshipCardinality } from "./relationships";
 import { DEFAULT_PIPELINE_STAGES } from "./pipeline";
+import { CRM_PERMISSIONS } from "./permissions";
+import { DEFAULT_CRM_ROLE_PERMISSIONS } from "./role-assignments";
 
 /**
  * CRM module activation for a single tenant.
  *
  * Maps the CRM constants (entity types, default fields, relationships,
  * pipeline) through the framework's `provisionEntityType` primitive,
- * then wires the cross-entity `relationships` rows and stamps each
- * entity's `settings` with a schema version (and the opportunity's
- * pipeline stages).
+ * wires the cross-entity `relationships` rows, stamps each entity's
+ * `settings` with a schema version (+ the opportunity's pipeline
+ * stages), seeds the global CRM `permissions` rows, and grants them to
+ * the tenant's roles per `DEFAULT_CRM_ROLE_PERMISSIONS` (Task 1.1).
  *
  * Idempotent end to end — safe to call on every provision and to re-run
  * for existing tenants (Task 1.9a).
  *
  * Explicitly NOT handled here (see docs/phase-3-status.md deferrals):
- *   - CRM `permissions` rows + per-tenant role grants → Task 1.1 / 1.9a
+ *   - `ai_usage.read` platform permission → Task 0.8
+ *   - Deleting the live Phase-2 placeholder CRM permission rows
+ *     (contacts/companies/deals/ai) + migrating their grants → Task 1.9a
  *   - `ai_usage_limits` seeding → Task 0.8 (table created there)
  *   - `validation_rules` seeding → until the createValidationRule adapter
  *     is implemented; `isRequired` is carried on field_definitions.
@@ -52,6 +64,10 @@ export interface ActivateCrmResult {
   entityTypeIds: Record<string, string>;
   /** Relationship rows created on this run (0 on a clean re-run). */
   relationshipsCreated: number;
+  /** Global CRM permission rows created on this run (0 on a clean re-run). */
+  permissionsSeeded: number;
+  /** role_permissions grants created on this run (0 on a clean re-run). */
+  grantsCreated: number;
 }
 
 export async function activateCrmForTenant(
@@ -154,10 +170,69 @@ export async function activateCrmForTenant(
     }
   }
 
+  // Global CRM permission rows (module-scoped, not tenant-scoped).
+  // Idempotent on the (module_id, resource, action) unique index. These
+  // are distinct tuples from the Phase-2 placeholders
+  // (contacts/companies/deals/ai), which 1.9a removes from live DBs.
+  let permissionsSeeded = 0;
+  for (const perm of CRM_PERMISSIONS) {
+    const inserted = await tx
+      .insert(permissions)
+      .values({
+        moduleId: crmModule.id,
+        resource: perm.resource,
+        action: perm.action,
+        description: perm.description,
+      })
+      .onConflictDoNothing()
+      .returning({ id: permissions.id });
+    if (inserted.length > 0) permissionsSeeded += 1;
+  }
+
+  // Resolve every CRM permission row to its id for granting.
+  const crmPermRows = await tx
+    .select({
+      id: permissions.id,
+      resource: permissions.resource,
+      action: permissions.action,
+    })
+    .from(permissions)
+    .where(eq(permissions.moduleId, crmModule.id));
+  const permIdByKey = new Map(
+    crmPermRows.map((p) => [`${p.resource}.${p.action}`, p.id])
+  );
+
+  // Look up the tenant's roles by slug — grant only to roles that exist.
+  const roleRows = await tx
+    .select({ id: roles.id, slug: roles.slug })
+    .from(roles)
+    .where(eq(roles.tenantId, tenantId));
+  const roleIdBySlug = new Map(roleRows.map((r) => [r.slug, r.id]));
+
+  // Grant per DEFAULT_CRM_ROLE_PERMISSIONS. Idempotent on the
+  // role_permissions (roleId, permissionId) primary key.
+  let grantsCreated = 0;
+  for (const [slug, keys] of Object.entries(DEFAULT_CRM_ROLE_PERMISSIONS)) {
+    const roleId = roleIdBySlug.get(slug);
+    if (!roleId) continue;
+    for (const key of keys) {
+      const permissionId = permIdByKey.get(key);
+      if (!permissionId) continue;
+      const inserted = await tx
+        .insert(rolePermissions)
+        .values({ roleId, permissionId })
+        .onConflictDoNothing()
+        .returning({ roleId: rolePermissions.roleId });
+      if (inserted.length > 0) grantsCreated += 1;
+    }
+  }
+
   return {
     moduleId: crmModule.id,
     entityTypeIds,
     relationshipsCreated,
+    permissionsSeeded,
+    grantsCreated,
   };
 }
 

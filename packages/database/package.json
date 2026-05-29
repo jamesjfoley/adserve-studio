@@ -12,7 +12,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "push": "drizzle-kit push",
-    "seed": "tsx src/seed/index.ts",
+    "seed": "tsx src/seed/run.ts",
     "seed:backfill-admin-access": "tsx src/seed/backfill-admin-access.ts",
     "seed:dedupe-platform-permissions": "tsx src/seed/dedupe-platform-permissions.ts",
     "sql:rls": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/001-enable-rls.sql",

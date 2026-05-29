@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
+  createTestRole,
   setupTestContext,
   testClient,
   withTestTransaction,
@@ -9,6 +10,8 @@ import {
   entityTypes,
   fieldDefinitions,
   layouts,
+  permissions,
+  rolePermissions,
   schemaRelationships,
 } from "@adserve/database";
 import { activateCrmForTenant, CRM_SCHEMA_VERSION } from "../src/activate";
@@ -16,6 +19,8 @@ import { CRM_ENTITY_TYPES } from "../src/entity-types";
 import { DEFAULT_FIELDS_BY_ENTITY } from "../src/field-definitions";
 import { CRM_RELATIONSHIPS } from "../src/relationships";
 import { DEFAULT_PIPELINE_STAGES } from "../src/pipeline";
+import { CRM_PERMISSIONS, CRM_PERMISSION_KEYS } from "../src/permissions";
+import { DEFAULT_CRM_ROLE_PERMISSIONS } from "../src/role-assignments";
 
 afterAll(async () => {
   await testClient.end();
@@ -233,6 +238,105 @@ describe("activateCrmForTenant", () => {
           .where(eq(fieldDefinitions.entityTypeId, second.entityTypeIds[et.slug]));
         expect(rows).toHaveLength(DEFAULT_FIELDS_BY_ENTITY[et.slug].length);
       }
+    });
+  });
+});
+
+describe("activateCrmForTenant — permissions & grants", () => {
+  // Helper: the CRM permission keys granted to a role.
+  async function grantedCrmKeys(
+    tx: Parameters<Parameters<typeof withTestTransaction>[0]>[0],
+    roleId: string,
+    moduleId: string
+  ): Promise<Set<string>> {
+    const rows = await tx
+      .select({
+        resource: permissions.resource,
+        action: permissions.action,
+      })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(
+        and(
+          eq(rolePermissions.roleId, roleId),
+          eq(permissions.moduleId, moduleId)
+        )
+      );
+    return new Set(rows.map((r) => `${r.resource}.${r.action}`));
+  }
+
+  test("seeds the 21 CRM permission rows under the crm module", async () => {
+    await withTestTransaction(async (tx) => {
+      const { tenant } = await setupTestContext(tx);
+      const result = await activateCrmForTenant(tx, { tenantId: tenant.id });
+
+      const rows = await tx
+        .select({
+          resource: permissions.resource,
+          action: permissions.action,
+        })
+        .from(permissions)
+        .where(eq(permissions.moduleId, result.moduleId));
+      const keys = new Set(rows.map((r) => `${r.resource}.${r.action}`));
+
+      expect(CRM_PERMISSIONS).toHaveLength(21);
+      // Presence check (not exact count) — the shared permissions table
+      // may also carry Phase-2 placeholders until 1.9a cleans them.
+      for (const key of CRM_PERMISSION_KEYS) {
+        expect(keys.has(key)).toBe(true);
+      }
+    });
+  });
+
+  test("grants CRM perms per role — owner 21, admin 21, member 7", async () => {
+    await withTestTransaction(async (tx) => {
+      const { tenant, role: ownerRole } = await setupTestContext(tx);
+      const admin = await createTestRole(tx, tenant.id, {
+        name: "Admin",
+        slug: "admin",
+      });
+      const member = await createTestRole(tx, tenant.id, {
+        name: "Member",
+        slug: "member",
+      });
+
+      const result = await activateCrmForTenant(tx, { tenantId: tenant.id });
+
+      const owner = await grantedCrmKeys(tx, ownerRole.id, result.moduleId);
+      expect(owner).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.owner));
+      expect(owner.size).toBe(21);
+
+      const adminKeys = await grantedCrmKeys(tx, admin.id, result.moduleId);
+      expect(adminKeys).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.admin));
+      expect(adminKeys.size).toBe(21);
+
+      const memberKeys = await grantedCrmKeys(tx, member.id, result.moduleId);
+      expect(memberKeys).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.member));
+      expect(memberKeys.size).toBe(7);
+    });
+  });
+
+  test("permission seeding + role grants are idempotent on re-run", async () => {
+    await withTestTransaction(async (tx) => {
+      const { tenant } = await setupTestContext(tx);
+      await createTestRole(tx, tenant.id, { name: "Admin", slug: "admin" });
+      await createTestRole(tx, tenant.id, { name: "Member", slug: "member" });
+
+      const expectedGrants =
+        DEFAULT_CRM_ROLE_PERMISSIONS.owner.length +
+        DEFAULT_CRM_ROLE_PERMISSIONS.admin.length +
+        DEFAULT_CRM_ROLE_PERMISSIONS.member.length;
+
+      const first = await activateCrmForTenant(tx, { tenantId: tenant.id });
+      // Roles are fresh in this tx → all grants are new.
+      expect(first.grantsCreated).toBe(expectedGrants);
+
+      const second = await activateCrmForTenant(tx, { tenantId: tenant.id });
+      // permissionsSeeded first-run count is not asserted: the global
+      // permissions table is committed state shared across test runs.
+      // Idempotency is what matters — the second run adds nothing.
+      expect(second.permissionsSeeded).toBe(0);
+      expect(second.grantsCreated).toBe(0);
     });
   });
 });
