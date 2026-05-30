@@ -62,7 +62,7 @@ placeholders retired, idempotent on re-run).
 |---|---|---|---|---|
 | 0.7 | AI service layer | ✓ Complete | +15 (`ai-service`) | Anthropic-backed `aiComplete` chokepoint on branch `task/0.7-ai-service-layer`. Per-tenant usage emitted on every path via an injectable `recordUsage` seam. See decisions below. |
 | 0.8 | AI usage metering + limits | ✓ Complete | +13 (ai-service metering, incl. 2 RLS-enforcement) +1 (crm activation) | 3 RLS tables + real metering behind the 0.7 seam + cap enforcement + 4 endpoints + 2 UI pages. See decisions below. |
-| 1.5 | Pipeline kanban | Not started | — | |
+| 1.5 | Pipeline kanban | ✓ Complete | +5 (pipeline loader) +5 (move endpoint) | `/crm/pipeline` board; native HTML5 DnD (no new dep); dedicated `pipeline.update` move endpoint. See decisions below. |
 | 1.6b | Dashboard funnel + forecast | Not started | — | |
 | 1.7 | AI feature endpoints | Not started | — | Consume `aiComplete`; inject DB-backed metering deps. |
 | 1.8 | — | Not started | — | |
@@ -156,6 +156,31 @@ shape is already exported as `RecordUsageInput`. — **DONE in 0.8.**
 **Deferred (NOT in 0.8):** GBP/FX conversion (presentation); AI feature
 endpoints (1.7); streaming; cap-breach alerting/email (the cap blocks silently,
 no notifications).
+
+#### Task 1.5 — decisions (2026-05-30)
+
+1. **Drag-drop: native HTML5 DnD API — no new dependency.** Avoids the gated
+   `@dnd-kit` add; adequate for a desktop kanban. Touch/keyboard fallback: every
+   card links to the opportunity detail page where `stage` is an editable
+   select (the same path read-only users use). Swappable to a lib later.
+2. **Dedicated move endpoint** `PATCH /api/crm/pipeline/[id]` — pure
+   `pipeline.update` gate (NOT the generic record PATCH's permission-OR-ownership
+   rule). Validates target stage ∈ tenant's `pipelineStages`; sets BOTH
+   `data.stage` AND `data.probability` (= stage `defaultProbability`, per the
+   `pipeline.ts` contract — moving resets probability; users re-override on the
+   detail page). RLS-safe: existence SELECT + UPDATE both carry tenant_id +
+   entity_type_id, so a forged cross-tenant id → 404 (tested).
+3. **Board loader** `lib/crm/pipeline.ts` `loadPipelineBoard`: account names
+   resolved by joining `record_relationships` (opp always source) to records of
+   the ACCOUNT entity type specifically — never "any related record" (would
+   conflate the primary-contact relationship). Unknown/missing-stage opps →
+   trailing `__other__`/"Other" column (dashboard convention). Currency totals
+   summed numerically (no FX, mirrors dashboard).
+4. **Closed stages:** free movement allowed in v1 (re-opening a deal is
+   legitimate); `pipeline.ts` `isClosed` comment updated to reflect this. NOT
+   done (deferred, conscious gaps): close-date auto-stamp on entering
+   closed_won/closed_lost; WIP/flow constraints; per-tenant stage-config UI;
+   keyboard reorder. No new dependency, no migration.
 
 **GATED — awaiting James (joins the 003/004/005 deferred RDS queue):** apply
 `sql/006-add-ai-usage-tables.sql` then re-run `sql/001-enable-rls.sql` against

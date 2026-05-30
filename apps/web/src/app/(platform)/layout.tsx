@@ -7,6 +7,7 @@ import {
   TrendingUp,
   LayoutDashboard,
   Shield,
+  KanbanSquare,
 } from "lucide-react";
 import { getSuperAdminOrNull } from "@/lib/super-admin";
 import { getTenantAdminContextOrNull } from "@/lib/tenant-admin";
@@ -17,6 +18,7 @@ const navigation = [
   { name: "Contacts", href: "/crm/contacts", icon: Users },
   { name: "Leads", href: "/crm/leads", icon: UserPlus },
   { name: "Opportunities", href: "/crm/opportunities", icon: TrendingUp },
+  { name: "Pipeline", href: "/crm/pipeline", icon: KanbanSquare },
 ];
 
 export default async function PlatformLayout({

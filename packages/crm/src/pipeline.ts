@@ -18,7 +18,12 @@ export interface PipelineStageSpec {
   displayOrder: number;
   /** 0-100 inclusive. Closed Lost is 0; Closed Won is 100. */
   defaultProbability: number;
-  /** Closed states halt forward motion in the pipeline kanban. */
+  /**
+   * Marks Closed Won / Closed Lost. NB: the Task 1.5 kanban does NOT
+   * enforce a forward-only flow in v1 — cards can move freely between any
+   * stages, including back out of a closed stage (re-opening a deal is
+   * legitimate). WIP/flow constraints are a deferred enhancement.
+   */
   isClosed: boolean;
   /** Closed Won contributes to revenue forecast; Closed Lost does not. */
   isWon: boolean;
