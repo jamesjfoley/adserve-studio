@@ -1,6 +1,6 @@
 /**
- * CRM permission matrix — 21 permissions seeded per tenant when the
- * CRM module is activated (Task 1.1 / 1.9a).
+ * CRM permission matrix — 22 permissions seeded per tenant when the
+ * CRM module is activated (Task 1.1 / 1.9a; `crm.admin` added in 1.8).
  *
  * Naming follows the existing Phase 2 convention: `resource.action`
  * stored as two columns, checked at runtime as
@@ -86,6 +86,13 @@ export const CRM_PERMISSIONS: CrmPermissionSpec[] = [
     resource: "activity",
     action: "create",
     description: "Log activities (calls, emails, meetings, tasks, notes)",
+  },
+
+  // CRM configuration (Task 1.8) — manage fields, layouts, pipeline stages.
+  {
+    resource: "crm",
+    action: "admin",
+    description: "Manage CRM configuration (fields, layouts, pipeline stages)",
   },
 ];
 

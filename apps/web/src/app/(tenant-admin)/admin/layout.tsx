@@ -8,6 +8,9 @@ import {
   ArrowLeft,
   Building2,
   Sparkles,
+  Columns3,
+  ListChecks,
+  KanbanSquare,
 } from "lucide-react";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 
@@ -16,6 +19,9 @@ const navigation = [
   { name: "Users", href: "/admin/users", icon: Users },
   { name: "Roles", href: "/admin/roles", icon: Shield },
   { name: "AI usage", href: "/admin/ai-usage", icon: Sparkles },
+  { name: "CRM fields", href: "/admin/crm/fields", icon: ListChecks },
+  { name: "CRM layouts", href: "/admin/crm/layouts", icon: Columns3 },
+  { name: "CRM pipeline", href: "/admin/crm/pipeline", icon: KanbanSquare },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

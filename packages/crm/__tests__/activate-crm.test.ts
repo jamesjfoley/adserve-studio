@@ -266,7 +266,7 @@ describe("activateCrmForTenant — permissions & grants", () => {
     return new Set(rows.map((r) => `${r.resource}.${r.action}`));
   }
 
-  test("seeds the 21 CRM permission rows under the crm module", async () => {
+  test("seeds the 22 CRM permission rows under the crm module", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant } = await setupTestContext(tx);
       const result = await activateCrmForTenant(tx, { tenantId: tenant.id });
@@ -280,7 +280,7 @@ describe("activateCrmForTenant — permissions & grants", () => {
         .where(eq(permissions.moduleId, result.moduleId));
       const keys = new Set(rows.map((r) => `${r.resource}.${r.action}`));
 
-      expect(CRM_PERMISSIONS).toHaveLength(21);
+      expect(CRM_PERMISSIONS).toHaveLength(22);
       // Presence check (not exact count) — the shared permissions table
       // may also carry Phase-2 placeholders until 1.9a cleans them.
       for (const key of CRM_PERMISSION_KEYS) {
@@ -289,7 +289,7 @@ describe("activateCrmForTenant — permissions & grants", () => {
     });
   });
 
-  test("grants CRM perms per role — owner 21, admin 21, member 7", async () => {
+  test("grants CRM perms per role — owner 22, admin 22, member 7", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant, role: ownerRole } = await setupTestContext(tx);
       const admin = await createTestRole(tx, tenant.id, {
@@ -305,11 +305,11 @@ describe("activateCrmForTenant — permissions & grants", () => {
 
       const owner = await grantedCrmKeys(tx, ownerRole.id, result.moduleId);
       expect(owner).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.owner));
-      expect(owner.size).toBe(21);
+      expect(owner.size).toBe(22);
 
       const adminKeys = await grantedCrmKeys(tx, admin.id, result.moduleId);
       expect(adminKeys).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.admin));
-      expect(adminKeys.size).toBe(21);
+      expect(adminKeys.size).toBe(22);
 
       const memberKeys = await grantedCrmKeys(tx, member.id, result.moduleId);
       expect(memberKeys).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.member));

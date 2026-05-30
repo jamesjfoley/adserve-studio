@@ -65,7 +65,7 @@ placeholders retired, idempotent on re-run).
 | 1.5 | Pipeline kanban | ✓ Complete | +5 (pipeline loader) +5 (move endpoint) | `/crm/pipeline` board; native HTML5 DnD (no new dep); dedicated `pipeline.update` move endpoint. See decisions below. |
 | 1.6b | Dashboard funnel + forecast | ✓ Complete | +4 (funnel + forecast queries) | Two widgets added to the 1.6a CRM dashboard. Lead funnel (new→contacted→qualified→converted, `lost` off-funnel); weighted revenue forecast (Σ amount×probability/100) in 30/60/90-day close-date windows. Pure CSS bars (no chart lib). Funnel gated on `lead.read`, forecast on `opportunity.read`. Queries run inside `withTenant` (scoped connection) AND carry explicit `tenantId` predicates. **Known assumption:** the forecast SQL casts `closeDate::date` / `probability::numeric`, so it assumes well-formed values — revisit when AI record creation (1.7a) can write unvalidated fields (a malformed value would error the tenant's forecast query). |
 | 1.7 | AI feature endpoints | ◐ Endpoints done; 3 UIs deferred | +13 (ai-features) | 4 metered AI endpoints (from-nl, suggest-field, summarize, smart-search) all via `aiComplete` (auto-metered/capped) + summarize UI. **3 UIs deferred (SCOPE CHANGE — gated, see below).** See decisions. |
-| 1.8 | — | Not started | — | |
+| 1.8 | Tenant-admin CRM config UIs | ✓ Complete | +11 (crm-config) | `crm.admin` perm + 3 admin pages (fields CRUD, layout editor, pipeline stages) + backfill. Up/down reorder (not DnD). See decisions below. |
 
 #### Task 0.7 — decisions (2026-05-30)
 
@@ -223,6 +223,48 @@ couple deeply into the existing CRM create-form and dynamic-table filter
 contracts — higher regression risk to do unattended. The metered capabilities
 all work end-to-end at the API level; only the front-end affordances are
 outstanding. Recommend a follow-up task `1.7-UI`.
+
+#### Task 1.8 — decisions (2026-05-30)
+
+1. **`crm.admin` permission** added to `CRM_PERMISSIONS` (22 now) →
+   owner+admin auto-inherit via the `[...CRM_PERMISSION_KEYS]` spread; member
+   excluded (schema/layout/pipeline mutation is destructive, beyond read-only
+   scope). New tenants get it via activation + provisioning wildcard.
+   `seed:backfill-crm-admin` grants it to existing owner/admin roles — and,
+   unlike the platform `ai_usage.read` backfill, **ensures the `crm.admin`
+   permission row exists first** (module-scoped perms are created at
+   activation, so the row is absent for pre-1.8 tenants). Ran locally: 6 roles
+   across 5 tenants. The 3 pages gate `requirePermission("crm.admin")`; routes
+   `apiRequirePermission("crm.admin")`.
+2. **Reorder via up/down buttons, NOT drag-and-drop** (all 3 editors). The
+   plan row says "drag-and-drop" for layouts; buttons deliver the same
+   capability (reorder + cross-section reassign via a dropdown) without
+   nested-DnD regression risk or a new dep. Approach choice, not a capability
+   cut — the Phase 1b *kanban* (1.5) remains true drag-and-drop.
+3. **Routes are thin wrappers over the 0.2 field engine / 0.3 layout engine**;
+   error codes mapped to HTTP in `lib/crm/config-errors.ts` (dup_slug→409,
+   system_field→403, type_change_blocked→422, has_data→409, invalid_config→422,
+   etc.). System fields: editable label/flags, type-locked + delete-blocked
+   (engine-enforced; UI hides delete). Field delete defaults to block-on-data
+   (409); `?force=true` available behind explicit intent.
+4. **Pipeline editor safety:** slug immutable on rename (UI edits name only);
+   deleting a stage that opportunities still reference is **blocked with 409**
+   (else those records vanish from the kanban/dashboard and get stuck in an
+   unselectable stage); ≥1 open (non-closed) stage enforced (lead-convert uses
+   the first open stage as the default). `displayOrder` recomputed from array
+   order; writes merge into `entity_types.settings` with a tenant predicate.
+   **Known/accepted edge:** the orphan-check counts only non-archived
+   opportunities, so an *archived* opportunity in a removed stage keeps an
+   orphaned `data.stage` slug (archived records are hidden from kanban/dashboard
+   anyway; consistent with "archived persists as-is").
+6. **Permission count correction:** Phase 3 now adds **22 CRM-scoped** perms
+   (`crm.admin` added in 1.8) + **1 platform** (`ai_usage.read`) = **23** total.
+   The plan's matrix headers (§236/§253) still say 21/22 — stale, code is the
+   source of truth.
+5. **Layout editor:** edits the default `detail` layout's config only (never
+   creates/deletes layouts, so the single-default invariant can't be violated);
+   null-default → bootstrap via `generateDefaultLayoutConfig` + `createLayout`.
+   All config writes validated by the engine (fieldIds exist tenant-scoped).
 
 **SDK version skew — RESOLVED (Task 0.8).** `apps/web`'s stale direct
 `@anthropic-ai/sdk@^0.39.0` dep was removed; web now depends on
@@ -612,16 +654,27 @@ deploy step 22 was RDS rotation, unrelated.
 
 ## Next session opens with
 
-**Phase 1a is feature-complete (Tasks 0.0–1.9a).** Next is **Phase 1b**,
-per `docs/phase-3-plan.md` sequencing: **0.7** (AI service layer) → **0.8**
-(AI usage metering + limits — RLS-protected tables/endpoints; also seeds
-the `ai_usage.read` permission) → **1.5** (pipeline kanban) → **1.6b**
-(dashboard funnel + forecast) → **1.7** (AI features). Pick 0.7 first.
+**Phase 1b is COMPLETE (2026-05-30).** All milestone tasks done end-to-end,
+each on its own stacked branch (off local `main`), reviewer-approved, committed,
+NOT pushed: **0.7** `task/0.7-ai-service-layer` (6296eb4) → **0.8**
+`task/0.8-ai-usage-metering` (9af7868) → **1.5** `task/1.5-pipeline-kanban`
+(55888a3) → **1.6b** `task/1.6b-dashboard-funnel-forecast` (2ea37b6) → **1.7**
+`task/1.7-ai-features` (073efbd) → **1.8** `task/1.8-crm-config` (this commit).
+Full suite green; lint + web tsc clean.
 
-**Before Phase 1a ships to production, the gated actions queue must be
-cleared** (see header): the production `reprovision-crm` run, plus the
-standing RDS migration deferrals (003/004/005) tracked under "Deferred
-items".
+**Phase 1b milestone met:** 4 metered AI capabilities; pipeline kanban (DnD);
+all 5 dashboard widgets; tenant-admin can add custom fields + manage
+layouts/pipeline; `/admin/ai-usage` + `/super-admin/ai-usage`; all routes
+`withTenant`/`withSuperAdminBypass`.
+
+**Open follow-ups (not blocking):** `1.7-UI` (3 deferred AI UIs — gated scope
+change); the deep branch stack should be flattened/merged before more work.
+
+**GATED actions still awaiting James** (see header + per-task notes): prod
+`reprovision-crm`; RDS migration deferrals (003/004/005 **+ 006 ai-usage +
+RLS re-run**); create the `adserve/anthropic-api-key` Secrets Manager secret +
+ECS/IAM wiring (required before AI features run in prod); eyeball model prices
+in `cost.ts`.
 
 (Historical note: Task 1.3's scope was finalised with James on
 2026-05-29 — bulk actions + owner filter split to **Task 1.3b**;
