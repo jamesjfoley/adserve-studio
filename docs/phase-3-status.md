@@ -61,7 +61,7 @@ placeholders retired, idempotent on re-run).
 | # | Task | Status | Tests added | Notes |
 |---|---|---|---|---|
 | 0.7 | AI service layer | ✓ Complete | +15 (`ai-service`) | Anthropic-backed `aiComplete` chokepoint on branch `task/0.7-ai-service-layer`. Per-tenant usage emitted on every path via an injectable `recordUsage` seam. See decisions below. |
-| 0.8 | AI usage metering + limits | Not started | — | Owns the `ai_usage_*` tables + RLS + real `checkLimits`/`recordUsage` + cap enforcement + endpoints/UI. Picks up the 0.7 seam (see handoff below). |
+| 0.8 | AI usage metering + limits | ✓ Complete | +13 (ai-service metering, incl. 2 RLS-enforcement) +1 (crm activation) | 3 RLS tables + real metering behind the 0.7 seam + cap enforcement + 4 endpoints + 2 UI pages. See decisions below. |
 | 1.5 | Pipeline kanban | Not started | — | |
 | 1.6b | Dashboard funnel + forecast | Not started | — | |
 | 1.7 | AI feature endpoints | Not started | — | Consume `aiComplete`; inject DB-backed metering deps. |
@@ -107,7 +107,61 @@ placeholders retired, idempotent on re-run).
 **Handoff to 0.8:** implement `metering.checkLimits`/`recordUsage` against the
 new tables, then swap `client.ts`'s `defaultCheckLimits`/`defaultRecordUsage`
 (or inject via `AIServiceDeps` from the 1.7 endpoints). The `recordUsage` arg
-shape is already exported as `RecordUsageInput`.
+shape is already exported as `RecordUsageInput`. — **DONE in 0.8.**
+
+#### Task 0.8 — decisions (2026-05-30)
+
+1. **Tables:** `ai_usage_log`, `ai_usage_summary`, `ai_usage_limits` in
+   `packages/database/src/schema/ai-usage.ts`. Migration `sql/006-add-ai-usage-tables.sql`
+   (hand-written, idempotent; matches the Drizzle defs — the 003–005
+   convention, not `drizzle-kit generate`). All three added to the RLS array
+   in `001-enable-rls.sql` (14→17 tables) and to the test-role grants in `002`.
+   Applied to LOCAL dev; **prod RDS application is gated (see below).**
+2. **Cap behaviour:** hard block when `total_cost_micros >= cap` (at-or-over).
+   Optional `monthly_token_limit` enforced the same way. **Period:**
+   calendar-month, **UTC**, `period_start`/`period_end` as `YYYY-MM-DD`. A
+   single `currentPeriod()` helper feeds both read and write paths.
+3. **Fail-safe:** missing summary → used=0; **missing limits row → default
+   $50 cap applies (never unlimited).**
+4. **Currency:** the cap is **$50 USD** (50_000_000 microdollars), NOT £50 —
+   `DEFAULT_MONTHLY_COST_LIMIT_MICROS` comment corrected. GBP is display-only
+   and deferred (no live FX). UI shows `$`.
+5. **Metering ↔ seam:** `metering.ts` functions take an optional `tx` (tests
+   pass the rollback handle; prod opens its own `withTenant`/
+   `withSuperAdminBypass`). `aiComplete`'s defaults now wire the real
+   DB-backed metering — **safe-by-default, metering can't be skipped.**
+   `recordUsage` writes the log row on every status; only `success` moves the
+   summary (atomic `ON CONFLICT` increments + `jsonb_set` breakdown merge that
+   handles first-touch of a new `module.capability` key).
+6. **Permission:** `ai_usage.read` added to `seed/index.ts` platformPerms
+   (inlined, NOT imported from ai-service — `@adserve/database` must not
+   depend on ai-service or it cycles). New tenants auto-grant it (provisioning
+   wildcard); existing tenants via new `seed:backfill-ai-usage-read` (run
+   locally — granted Owner+Admin across 4 tenants). **Decision: `ai_usage.read`
+   → Owner + Admin only** (it's an admin-panel view).
+7. **Endpoints:** `GET /api/admin/ai-usage`, `GET /api/super-admin/ai-usage`,
+   `GET /api/super-admin/ai-usage/[tenantId]`, `PATCH …/[tenantId]/limits`.
+   **Pages:** `/admin/ai-usage`, `/super-admin/ai-usage` (+ `[tenantId]`
+   drill-in with a client limit editor). Nav items added to both layouts.
+8. **SDK skew RESOLVED:** `apps/web` had a stale direct `@anthropic-ai/sdk@^0.39.0`
+   (no direct import). Web now depends on `@adserve/ai-service` (for the
+   metering reads in routes/pages) and gets the SDK transitively at `0.100.1`;
+   web's direct dep removed. One SDK version in the deployable now.
+9. **Test-helper fix:** `uniqueSuffix()` (test-helpers/tenant.ts) now includes
+   `process.pid` + a random component. The old `Date.now()+per-process counter`
+   collided across turbo's parallel vitest workers once ai-service added a 3rd
+   concurrent DB-testing process (`users_email_unique`). Pre-existing latent
+   flaw, surfaced and fixed here.
+
+**Deferred (NOT in 0.8):** GBP/FX conversion (presentation); AI feature
+endpoints (1.7); streaming; cap-breach alerting/email (the cap blocks silently,
+no notifications).
+
+**GATED — awaiting James (joins the 003/004/005 deferred RDS queue):** apply
+`sql/006-add-ai-usage-tables.sql` then re-run `sql/001-enable-rls.sql` against
+**production RDS** with the **`adserve_migrator`** role. Until then, the AI
+metering tables don't exist in prod (fine — no AI feature endpoints ship until
+1.7).
 
 **SDK version skew (reconcile in 1.7):** `apps/web` pins
 `@anthropic-ai/sdk@^0.39.0` (pre-existing); `@adserve/ai-service` pins

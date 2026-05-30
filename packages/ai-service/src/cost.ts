@@ -62,11 +62,17 @@ export function calculateCostMicros(
 }
 
 /**
- * Default cost limit per tenant on module activation: £50/month.
- * Stored in microdollars (no live FX — treat the number as fixed for
- * Phase 1; the UI shows it as £50 because that's our display
- * convention).
+ * Default cost limit per tenant on module activation.
  *
- * £50 × 1_000_000 = 50_000_000 micros.
+ * The value is **$50 USD** expressed in microdollars (Anthropic bills in
+ * USD, so the cap is naturally a USD figure). The product spec frames it
+ * as "£50/month *equivalent*" — GBP is a display concern and there is no
+ * live FX in Phase 1b, so we treat $50 as the fixed cap and defer any
+ * GBP conversion to the presentation layer.
+ *
+ * IMPORTANT: this is 50_000_000 micro-DOLLARS = $50, NOT £50. Do not
+ * reason about it as GBP without applying an FX rate.
+ *
+ * $50 × 1_000_000 = 50_000_000 micros.
  */
 export const DEFAULT_MONTHLY_COST_LIMIT_MICROS = 50_000_000;

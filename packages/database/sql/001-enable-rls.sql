@@ -39,6 +39,9 @@ DECLARE
   tables text[] := ARRAY[
     'activities',
     'audit_log',
+    'ai_usage_limits',
+    'ai_usage_log',
+    'ai_usage_summary',
     'entity_types',
     'field_definitions',
     'layouts',

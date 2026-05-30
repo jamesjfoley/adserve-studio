@@ -7,6 +7,7 @@ import {
   withTestTransaction,
 } from "@adserve/database/test-helpers";
 import {
+  aiUsageLimits,
   entityTypes,
   fieldDefinitions,
   layouts,
@@ -337,6 +338,28 @@ describe("activateCrmForTenant — permissions & grants", () => {
       // Idempotency is what matters — the second run adds nothing.
       expect(second.permissionsSeeded).toBe(0);
       expect(second.grantsCreated).toBe(0);
+    });
+  });
+
+  test("seeds the default AI usage limit ($50 = 50_000_000 micros), idempotent", async () => {
+    await withTestTransaction(async (tx) => {
+      const { tenant } = await setupTestContext(tx);
+
+      await activateCrmForTenant(tx, { tenantId: tenant.id });
+      let rows = await tx
+        .select()
+        .from(aiUsageLimits)
+        .where(eq(aiUsageLimits.tenantId, tenant.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].monthlyCostLimitMicros).toBe(50_000_000);
+
+      // Re-running activation must not duplicate the limits row.
+      await activateCrmForTenant(tx, { tenantId: tenant.id });
+      rows = await tx
+        .select()
+        .from(aiUsageLimits)
+        .where(eq(aiUsageLimits.tenantId, tenant.id));
+      expect(rows).toHaveLength(1);
     });
   });
 });

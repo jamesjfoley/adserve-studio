@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import {
+  aiUsageLimits,
   db,
   modules,
   permissions,
@@ -226,6 +227,17 @@ export async function activateCrmForTenant(
       if (inserted.length > 0) grantsCreated += 1;
     }
   }
+
+  // Seed the tenant's default AI usage cap (Task 0.8). Value is the
+  // canonical default from @adserve/ai-service's
+  // DEFAULT_MONTHLY_COST_LIMIT_MICROS — inlined here (not imported) to keep
+  // the Anthropic SDK out of the activation module graph. $50 USD in
+  // microdollars (GBP display deferred — see cost.ts). Idempotent on the
+  // (tenant_id) unique key.
+  await tx
+    .insert(aiUsageLimits)
+    .values({ tenantId, monthlyCostLimitMicros: 50_000_000 })
+    .onConflictDoNothing({ target: aiUsageLimits.tenantId });
 
   return {
     moduleId: crmModule.id,

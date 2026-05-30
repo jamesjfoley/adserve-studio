@@ -19,6 +19,10 @@ import type {
 } from "./types";
 import { calculateCostMicros } from "./cost";
 import { resolveModelForCapability } from "./models";
+import {
+  checkLimits as meteringCheckLimits,
+  recordUsage as meteringRecordUsage,
+} from "./metering";
 
 import * as recordCreationPrompt from "./prompts/record-creation";
 import * as fieldSuggestionPrompt from "./prompts/field-suggestion";
@@ -99,19 +103,16 @@ export interface AIServiceDeps {
 }
 
 /**
- * Default limit check — ALWAYS passes. Cap enforcement is Task 0.8's
- * job; until it wires the real `checkLimits`, the service never blocks
- * on limits. (We deliberately do NOT import the throwing `metering.ts`
- * stub here — that would make every call throw.)
+ * Defaults wire the real DB-backed metering (Task 0.8) so that callers
+ * who don't inject `deps` still get cap enforcement and usage recording —
+ * metering is safe-by-default and can't be accidentally skipped. The
+ * metering functions open their own `withTenant()` transaction (scoped by
+ * `record.tenantId`), so they're correct when called from a request
+ * handler with no ambient transaction. Tests inject mocks via `deps`.
  */
-const defaultCheckLimits: CheckLimitsFn = async () => ({ ok: true });
-
-/**
- * Default usage sink — no-op. Persistence (writing `ai_usage_log` rows
- * and rolling up `ai_usage_summary`) is Task 0.8. The seam is still
- * invoked on every path so emission is fully exercised and testable now.
- */
-const defaultRecordUsage: RecordUsageFn = async () => undefined;
+const defaultCheckLimits: CheckLimitsFn = (args) => meteringCheckLimits(args);
+const defaultRecordUsage: RecordUsageFn = (record) =>
+  meteringRecordUsage(record);
 
 // ============================================================
 // Anthropic client (lazy singleton)

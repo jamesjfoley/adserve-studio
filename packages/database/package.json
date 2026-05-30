@@ -14,6 +14,7 @@
     "push": "drizzle-kit push",
     "seed": "tsx src/seed/run.ts",
     "seed:backfill-admin-access": "tsx src/seed/backfill-admin-access.ts",
+    "seed:backfill-ai-usage-read": "tsx src/seed/backfill-ai-usage-read.ts",
     "seed:dedupe-platform-permissions": "tsx src/seed/dedupe-platform-permissions.ts",
     "sql:rls": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/001-enable-rls.sql",
     "sql:rls-test-role": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/002-create-rls-test-role.sql",

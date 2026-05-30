@@ -55,6 +55,16 @@ vi.mock("@anthropic-ai/sdk", () => {
   };
 });
 
+// Task 0.8 wired the real DB-backed metering as aiComplete's default
+// checkLimits/recordUsage. These client tests exercise the client only, so
+// we mock metering to safe no-ops — no DB. Tests that need to observe
+// emission inject their own recordUsage spy via `deps` (which overrides the
+// default), and the over-limit test injects its own checkLimits.
+vi.mock("../src/metering", () => ({
+  checkLimits: vi.fn().mockResolvedValue({ ok: true }),
+  recordUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 import {
   APIError,
   APIConnectionError,

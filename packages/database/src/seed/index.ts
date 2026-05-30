@@ -64,6 +64,11 @@ export async function seed(database: Database = db) {
     { moduleId: null, resource: "settings", action: "read", description: "View tenant settings" },
     { moduleId: null, resource: "settings", action: "admin", description: "Modify tenant settings" },
     { moduleId: null, resource: "audit", action: "read", description: "View audit log" },
+    // Canonical definition: AI_PLATFORM_PERMISSIONS in
+    // packages/ai-service/src/permissions.ts. Mirrored here (not imported)
+    // because @adserve/database must not depend on @adserve/ai-service —
+    // ai-service already depends on database, and the reverse would cycle.
+    { moduleId: null, resource: "ai_usage", action: "read", description: "View the tenant's own AI usage stats" },
   ];
 
   // The unique index idx_permissions_unique(module_id, resource, action) uses

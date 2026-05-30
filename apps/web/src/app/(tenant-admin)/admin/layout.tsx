@@ -7,6 +7,7 @@ import {
   Settings,
   ArrowLeft,
   Building2,
+  Sparkles,
 } from "lucide-react";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 
@@ -14,6 +15,7 @@ const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { name: "Users", href: "/admin/users", icon: Users },
   { name: "Roles", href: "/admin/roles", icon: Shield },
+  { name: "AI usage", href: "/admin/ai-usage", icon: Sparkles },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

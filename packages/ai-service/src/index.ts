@@ -54,6 +54,7 @@ export {
   getCurrentPeriodSummary,
   getUsageLimits,
   setUsageLimits,
+  currentPeriod,
 } from "./metering";
 
 // ============================================================

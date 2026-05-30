@@ -7,6 +7,7 @@ import {
   Boxes,
   Shield,
   ArrowLeft,
+  Sparkles,
 } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/super-admin";
 
@@ -15,6 +16,7 @@ const navigation = [
   { name: "Tenants", href: "/super-admin/tenants", icon: Building2 },
   { name: "Users", href: "/super-admin/users", icon: Users },
   { name: "Modules", href: "/super-admin/modules", icon: Boxes },
+  { name: "AI usage", href: "/super-admin/ai-usage", icon: Sparkles },
 ];
 
 export default async function SuperAdminLayout({

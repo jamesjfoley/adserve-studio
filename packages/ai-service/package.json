@@ -8,7 +8,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.100.1"
+    "@adserve/database": "workspace:*",
+    "@anthropic-ai/sdk": "0.100.1",
+    "drizzle-orm": "^0.38.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

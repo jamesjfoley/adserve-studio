@@ -20,7 +20,12 @@ type Tx = typeof testDb;
 let counter = 0;
 function uniqueSuffix(): string {
   counter += 1;
-  return `${Date.now().toString(36)}-${counter}`;
+  // Include process.pid + a random component so suffixes stay unique across
+  // the parallel vitest worker processes turbo spawns (one per package, each
+  // with its own `counter` starting at 0 — pid+random prevents same-ms,
+  // same-counter collisions on the shared dev DB, e.g. users_email_unique).
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${Date.now().toString(36)}-${process.pid.toString(36)}-${counter}-${rand}`;
 }
 
 export interface TestTenant {

@@ -3,3 +3,4 @@ export * from "./tenants";
 export * from "./modules";
 export * from "./schema-engine";
 export * from "./records";
+export * from "./ai-usage";

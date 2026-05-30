@@ -10,10 +10,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@adserve/ai-service": "workspace:*",
     "@adserve/crm": "workspace:*",
     "@adserve/database": "workspace:*",
     "@adserve/module-framework": "workspace:^",
-    "@anthropic-ai/sdk": "^0.39.0",
     "@clerk/nextjs": "^6.9.0",
     "clsx": "^2.1.0",
     "drizzle-orm": "^0.38.0",
