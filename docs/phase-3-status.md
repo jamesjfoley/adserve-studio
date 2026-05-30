@@ -10,10 +10,10 @@ conversation-history replay needed.
 `origin/main` HEAD: `8d04d30` (unchanged — nothing pushed since).
 Local `main` HEAD: `90f94454196ba91a5e1afb1d7e981917e4e82d03` (Task 1.2,
 merged locally via earlier flatten). Currently on branch
-`task/1.4-crm-detail-pages` (Tasks 1.3 + 1.4 + 1.3b committed here; ahead
-of local `main`). Cumulative tests: **223, zero expected-fail**; lint
-clean; tsc clean. **Next task to begin: Task 1.6a — CRM dashboard
-(3 widgets).**
+`task/1.4-crm-detail-pages` (Tasks 1.3 + 1.4 + 1.3b + 1.6a committed here;
+ahead of local `main`). Cumulative tests: **234, zero expected-fail**;
+lint clean; tsc clean. **Next task to begin: Task 1.9a — existing-tenant
+idempotent reprovision (closes Phase 1a).**
 
 ### Phase 1a — Framework + basic CRM
 
@@ -31,16 +31,16 @@ clean; tsc clean. **Next task to begin: Task 1.6a — CRM dashboard
 | 1.3 | CRM list pages | ✓ Complete | +8 web (4 round-trip, 3 client wrapper, 1 long_text truncation) | Scope (James-approved 2026-05-29): dynamic `/crm/[entityType]` server pages + `<DynamicTable>` server-component wrapper (query DB directly via `lib/crm/query.ts`; default columns) + state↔URL client wrapper + "New" record `<DynamicForm>` modal + nav cleanup to the 4 Phase-3 entities. Also owns the **live-render verify of `long_text` cell truncation** (CSS clamp, full text in DOM). **Deferred out of 1.3 (James-approved):** bulk actions → **Task 1.3b**; owner filter → **Task 1.3b**; per-user column persistence → **Phase 1b** (plan §499–501; the `<DynamicTable>` controllable-with-default seam from decision #15 makes it free later) |
 | 1.4 | CRM detail pages | ✓ Complete | +21 web (5 record-title, 6 detail-capabilities, 10 detail-client) | Dynamic `/crm/[entityType]/[id]` server page: `loadEntityForm` (shared server-component form wrapper, also retro-fitted into the 1.3 list page — mechanical lift, no behaviour change) → `<DynamicForm>` view default / edit behind `canEdit`; related-records sidebar (generic off the relationships map, links via `crmCollectionSegment`); activity timeline (per-record direct query, gated on `activity.read`); quick actions: log activity (modal → `POST /api/crm/activities`), convert (leads, routes to the new account), archive. **No new API routes, no schema/migration** — reads server-side, writes via the 1.2 routes → zero new RLS debt, zero RDS-deferred. Capability derivation extracted to pure `computeRecordCapabilities` (mirrors 1.2 `canMutate`: perm OR owner; null `ownedBy` never grants). **NOT** in 1.4: generic relationship editing from the form (1.2 deferred generic rel writes), bulk/owner filter (→1.3b), per-user layout (→Phase 1b), AI summarise (→Phase 1b) |
 | 1.3b | CRM list bulk actions + owner filter (follow-up) | ✓ Complete | +26 web (5 table-selection, 12 owner-filter, 9 bulk route) | Row selection in `<DynamicTable>` (`selectable`/`selectedIds`/`defaultSelectedIds`/`onSelectionChange` + checkbox column with select-all + indeterminate; checkbox clicks `stopPropagation` so `onRowClick` never fires — the controllable-with-default seam from decision #15). Bulk endpoint `POST /api/crm/[entityType]/bulk` (`assignOwner`/`changeStatus`/`archive`): **strict permission gate, no owner override** (update for assign/status, delete for archive); all-or-nothing (count-checked recordIds, zero writes on a bad/cross-tenant id); idempotent (skips rows already in target state); audit one row per real change. Owner filter on the `records.ownedBy` **column** (token `me`/`unassigned`/`<userId>`, `me` resolved server-side) via `resolveOwnerFilter` + `buildWhere` extension; threaded through `parseListParams`/`stateToQuery`. List page loads active members (`lib/crm/members.ts`) for the owner dropdown + bulk assign picker. `changeStatus` takes a validated `field` param (default `status`, must be single-select) — generic, not hardcoded (account/contact/lead use `status`, opportunity `stage`). **Deferred (unchanged):** per-user saved filters → Phase 1b; bulk hard-delete → never. |
-| 1.6a | Dashboard (3 widgets) | Not started | — | |
+| 1.6a | Dashboard (3 widgets) | ✓ Complete | +11 web (5 dashboard-format, 6 dashboard queries DB) | `/crm` index server page (new). Three read-only widgets, **per-widget permission-gated**; page redirects to `/dashboard` only if the user has none of `{account,contact,lead,opportunity}.read ∪ activity.read`. (1) Pipeline value by stage — SQL `sum` of opportunity `amount` grouped by `stage`, labelled/ordered from `settings.pipelineStages`, **CSS bars (no charting dep)**; zero-opportunity stages render at £0, unknown stages bucket to "Other", null amounts coalesce to 0. (2) Upcoming tasks (next 7 days) — `task` activities with `metadata.dueDate` in `[today,+7d]` ascending. (3) Recently modified — last 10 records across **readable** entity types only (permission boundary), newest-first. Query seam `lib/crm/dashboard.ts` (testable; explicit `tenantId` predicate, not added to 44-site debt). **Bundled (per decision #37):** the 1.4 log-activity modal gained an optional task due-date → `metadata.dueDate` (no API change — route already accepts `metadata`). **Deferred (unchanged):** funnel + revenue forecast → Phase 1b. |
 | 1.9a | Existing-tenant idempotent reprovision | Not started | — | Calls `activateCrmForTenant` (0.6/1.1) per existing CRM-enabled tenant (idempotent — seeds perms + grants). 1.9a's **unique** job: **delete** the live Phase-2 placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate** any role grants on them. (1.1 already stopped seeding placeholders going forward.) |
 
-**Cumulative test count: 223** across 5 task suites (zero expected-fail):
+**Cumulative test count: 234** across 5 task suites (zero expected-fail):
 
 - `@adserve/database` — 3 (harness smoke) + 1 (seed permission regression guard) = 4
 - `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) + 9 (5 entity-registry + 4 provisioning) = 90
 - `@adserve/ai-service` — 0 (stubs only; tests land with Task 0.7/0.8)
 - `@adserve/crm` — 8 (CRM activation) + 3 (permission seeding + role grants) = 11
-- `@adserve/web` — 118: 16 table + 15 form (39 component, incl. 1.3 long_text truncation verify) + 1 provision-activation smoke + 25 CRM API + 7 list-pages (4 stateToQuery round-trip, 3 crm-list-client) + 21 detail-pages (5 record-title, 6 detail-capabilities, 10 crm-detail-client) + 26 bulk/owner (5 table-selection, 12 owner-filter, 9 bulk route). **No expected-fail remaining.**
+- `@adserve/web` — 129: 16 table + 15 form (39 component, incl. 1.3 long_text truncation verify) + 1 provision-activation smoke + 25 CRM API + 7 list-pages (4 stateToQuery round-trip, 3 crm-list-client) + 21 detail-pages (5 record-title, 6 detail-capabilities, 10 crm-detail-client) + 26 bulk/owner (5 table-selection, 12 owner-filter, 9 bulk route) + 11 dashboard (5 format/heuristic, 6 query DB incl. permission boundary). **No expected-fail remaining.**
 
 > **Test-suite note:** the full `pnpm test` (turbo, parallel) can still
 > hit the documented flaky DB gate (`crm-records.test.ts` `beforeAll`
@@ -325,14 +325,49 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     server-side from the session (keeps the URL shareable). `buildWhere`
     gained an optional resolved `ownerFilter` arg (back-compatible).
 
+### Task 1.6a decisions
+
+45. **Widget 2 "upcoming" sourced from `activities.metadata.dueDate`
+    (`YYYY-MM-DD`, task-type only), and the capture UI was bundled here**
+    per decision #37 (which pre-located `dueDate` to 1.6a/metadata). The
+    1.4 log-activity modal gained an optional due-date input → stored in
+    `metadata.dueDate`; no API/schema change (the route already accepts
+    `metadata`). Day-granular `YYYY-MM-DD` stored + compared as `::date`
+    (timezone-stable); the window is `[today, +7d]` inclusive. Re-scoping
+    to "recent by createdAt" or shipping an always-empty widget were both
+    rejected as unfaithful to the plan.
+46. **No charting dependency — CSS bars.** Adding a chart lib is a gated
+    action; the bar widget is trivial in CSS. Avoided.
+47. **Per-widget permission gating; page redirects only on zero CRM read.**
+    The redirect predicate is the union
+    `account.read ∪ contact.read ∪ lead.read ∪ opportunity.read ∪
+    activity.read`. A user with only `activity.read` lands on the page.
+    **Both record-surfacing widgets (upcoming tasks AND recently modified)
+    are filtered to the entity types the user can read** — `activity.read`
+    alone is necessary but not sufficient to see a task, because a task
+    surfaces its record's title + deep-link; seeing it requires read on
+    that record's entity type. So `activity.read` without any entity read
+    shows an empty upcoming widget. (Permission boundary, tested for both
+    widgets.)
+48. **Pipeline aggregation is SQL `sum`/`group by`** inside `withTenant`
+    with the explicit `tenantId` predicate (correct-by-construction; not
+    added to the 44-site RLS debt). Null/malformed amounts coalesce to 0;
+    configured stages with no opportunities still render; opportunities
+    with an unrecognised stage bucket into "Other" (never silently
+    dropped). **Mixed-currency assumption (recorded):** amounts are summed
+    raw and formatted GBP — correct only if a tenant's opportunities share
+    one currency. Multi-currency aggregation is a Phase-1b concern; flagged
+    here so the number isn't mistaken for currency-aware.
+
 ## Next session opens with
 
-**Task 1.6a — CRM dashboard (3 widgets).** (1.3 + 1.4 + 1.3b complete —
-see their rows.) `/crm` index route with: (1) pipeline value by stage
-(bar chart summing opportunity amounts grouped by stage), (2) upcoming
-activities next 7 days (list, ascending), (3) recently modified records
-(last 10, any entity, tenant-wide). Funnel + forecast are Phase 1b.
-Then 1.9a (existing-tenant idempotent reprovision) closes Phase 1a.
+**Task 1.9a — existing-tenant idempotent reprovision (closes Phase 1a).**
+(1.3 + 1.4 + 1.3b + 1.6a complete — see their rows.) Calls
+`activateCrmForTenant` per existing CRM-enabled tenant (idempotent — seeds
+perms + grants). 1.9a's **unique** job: **delete** the live Phase-2
+placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate**
+any role grants on them. (1.1 already stopped seeding placeholders going
+forward.) After 1.9a, Phase 1a is shippable.
 
 (Historical note: Task 1.3's scope was finalised with James on
 2026-05-29 — bulk actions + owner filter split to **Task 1.3b**;

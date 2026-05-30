@@ -160,6 +160,11 @@ export function CrmDetailClient({
     const activityType = String(fd.get("activityType") ?? "note");
     const subject = String(fd.get("subject") ?? "").trim();
     const text = String(fd.get("text") ?? "").trim();
+    // Due date only applies to task-type activities; stored day-granular
+    // (YYYY-MM-DD) in metadata.dueDate — the dashboard's upcoming widget.
+    const dueDate = String(fd.get("dueDate") ?? "").trim();
+    const metadata =
+      activityType === "task" && dueDate ? { dueDate } : undefined;
 
     const res = await fetch(`/api/crm/activities`, {
       method: "POST",
@@ -169,6 +174,7 @@ export function CrmDetailClient({
         activityType,
         subject: subject || null,
         body: text ? { text } : {},
+        ...(metadata ? { metadata } : {}),
       }),
     });
     if (!res.ok) {
@@ -415,6 +421,17 @@ export function CrmDetailClient({
                 <textarea
                   name="text"
                   rows={3}
+                  className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Due date</span>
+                <span className="ml-1 text-xs text-[var(--muted-foreground)]">
+                  (tasks only)
+                </span>
+                <input
+                  name="dueDate"
+                  type="date"
                   className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
                 />
               </label>
