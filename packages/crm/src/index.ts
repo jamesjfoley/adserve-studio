@@ -87,6 +87,11 @@ export {
 } from "./activate";
 
 // ============================================================
+// Existing-tenant reprovision + Phase-2 placeholder retirement (1.9a)
+// ============================================================
+export { reprovisionCrm, type ReprovisionCrmResult } from "./reprovision";
+
+// ============================================================
 // URL ↔ slug mapping
 // ============================================================
 export {

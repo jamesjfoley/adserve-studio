@@ -10,10 +10,16 @@ conversation-history replay needed.
 `origin/main` HEAD: `8d04d30` (unchanged — nothing pushed since).
 Local `main` HEAD: `90f94454196ba91a5e1afb1d7e981917e4e82d03` (Task 1.2,
 merged locally via earlier flatten). Currently on branch
-`task/1.4-crm-detail-pages` (Tasks 1.3 + 1.4 + 1.3b + 1.6a committed here;
-ahead of local `main`). Cumulative tests: **234, zero expected-fail**;
-lint clean; tsc clean. **Next task to begin: Task 1.9a — existing-tenant
-idempotent reprovision (closes Phase 1a).**
+`task/1.4-crm-detail-pages` (Tasks 1.3 + 1.4 + 1.3b + 1.6a + 1.9a committed
+here; ahead of local `main`). Cumulative tests: **236, zero expected-fail**;
+lint clean; web tsc clean. **Phase 1a is feature-complete.** Next: Phase 1b
+(0.7 AI service → 0.8 metering → 1.5 kanban → 1.6b → 1.7 AI features).
+**GATED — awaiting James:** run `pnpm --filter @adserve/crm reprovision-crm`
+against **production** with the **`adserve_migrator` role**
+(`database-url-migrator` — it deletes permission rows; the app role can't).
+Destructive — retires the 16 Phase-2 placeholder perms + reprovisions
+CRM-enabled tenants. Verified on local dev (1 tenant reprovisioned, 16
+placeholders retired, idempotent on re-run).
 
 ### Phase 1a — Framework + basic CRM
 
@@ -32,14 +38,14 @@ idempotent reprovision (closes Phase 1a).**
 | 1.4 | CRM detail pages | ✓ Complete | +21 web (5 record-title, 6 detail-capabilities, 10 detail-client) | Dynamic `/crm/[entityType]/[id]` server page: `loadEntityForm` (shared server-component form wrapper, also retro-fitted into the 1.3 list page — mechanical lift, no behaviour change) → `<DynamicForm>` view default / edit behind `canEdit`; related-records sidebar (generic off the relationships map, links via `crmCollectionSegment`); activity timeline (per-record direct query, gated on `activity.read`); quick actions: log activity (modal → `POST /api/crm/activities`), convert (leads, routes to the new account), archive. **No new API routes, no schema/migration** — reads server-side, writes via the 1.2 routes → zero new RLS debt, zero RDS-deferred. Capability derivation extracted to pure `computeRecordCapabilities` (mirrors 1.2 `canMutate`: perm OR owner; null `ownedBy` never grants). **NOT** in 1.4: generic relationship editing from the form (1.2 deferred generic rel writes), bulk/owner filter (→1.3b), per-user layout (→Phase 1b), AI summarise (→Phase 1b) |
 | 1.3b | CRM list bulk actions + owner filter (follow-up) | ✓ Complete | +26 web (5 table-selection, 12 owner-filter, 9 bulk route) | Row selection in `<DynamicTable>` (`selectable`/`selectedIds`/`defaultSelectedIds`/`onSelectionChange` + checkbox column with select-all + indeterminate; checkbox clicks `stopPropagation` so `onRowClick` never fires — the controllable-with-default seam from decision #15). Bulk endpoint `POST /api/crm/[entityType]/bulk` (`assignOwner`/`changeStatus`/`archive`): **strict permission gate, no owner override** (update for assign/status, delete for archive); all-or-nothing (count-checked recordIds, zero writes on a bad/cross-tenant id); idempotent (skips rows already in target state); audit one row per real change. Owner filter on the `records.ownedBy` **column** (token `me`/`unassigned`/`<userId>`, `me` resolved server-side) via `resolveOwnerFilter` + `buildWhere` extension; threaded through `parseListParams`/`stateToQuery`. List page loads active members (`lib/crm/members.ts`) for the owner dropdown + bulk assign picker. `changeStatus` takes a validated `field` param (default `status`, must be single-select) — generic, not hardcoded (account/contact/lead use `status`, opportunity `stage`). **Deferred (unchanged):** per-user saved filters → Phase 1b; bulk hard-delete → never. |
 | 1.6a | Dashboard (3 widgets) | ✓ Complete | +11 web (5 dashboard-format, 6 dashboard queries DB) | `/crm` index server page (new). Three read-only widgets, **per-widget permission-gated**; page redirects to `/dashboard` only if the user has none of `{account,contact,lead,opportunity}.read ∪ activity.read`. (1) Pipeline value by stage — SQL `sum` of opportunity `amount` grouped by `stage`, labelled/ordered from `settings.pipelineStages`, **CSS bars (no charting dep)**; zero-opportunity stages render at £0, unknown stages bucket to "Other", null amounts coalesce to 0. (2) Upcoming tasks (next 7 days) — `task` activities with `metadata.dueDate` in `[today,+7d]` ascending. (3) Recently modified — last 10 records across **readable** entity types only (permission boundary), newest-first. Query seam `lib/crm/dashboard.ts` (testable; explicit `tenantId` predicate, not added to 44-site debt). **Bundled (per decision #37):** the 1.4 log-activity modal gained an optional task due-date → `metadata.dueDate` (no API change — route already accepts `metadata`). **Deferred (unchanged):** funnel + revenue forecast → Phase 1b. |
-| 1.9a | Existing-tenant idempotent reprovision | Not started | — | Calls `activateCrmForTenant` (0.6/1.1) per existing CRM-enabled tenant (idempotent — seeds perms + grants). 1.9a's **unique** job: **delete** the live Phase-2 placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate** any role grants on them. (1.1 already stopped seeding placeholders going forward.) |
+| 1.9a | Existing-tenant idempotent reprovision | ✓ Complete | +2 crm (reprovision: migrate/drop/delete + idempotent no-op) | `reprovisionCrm(tx)` in `@adserve/crm` (NOT `@adserve/database` — would create a `database→crm` cycle): reprovisions every CRM-enabled tenant via the idempotent `activateCrmForTenant`, then retires the 16 Phase-2 placeholder perms (`contacts/companies/deals × r/c/u/d/export` + `ai.use`). **Migrate-then-delete in one transaction** (runner wraps `db.transaction`): grants on placeholders are migrated to the Phase-3 perms (`contacts→contact`, `companies→account`, `deals→opportunity` for r/c/u/d) **before** deletion. `*.export` + `ai.use` dropped (no Phase-3 equivalent), counted distinctly (`ai.use` flagged for a future 0.8 `ai_usage.read` follow-up). **Migration scoped to CRM-enabled tenants** — a CRM-disabled tenant's placeholder grants are dropped, not migrated. Throws if a mapped target perm is missing (botched-reprovision guard). Thin runner `reprovision.run.ts` + `pnpm --filter @adserve/crm reprovision-crm`. **Verified on local dev** (1 tenant, 16 placeholders retired, 6 export + 2 ai.use drops, idempotent). **Production run is GATED** (destructive — see header). |
 
-**Cumulative test count: 234** across 5 task suites (zero expected-fail):
+**Cumulative test count: 236** across 5 task suites (zero expected-fail):
 
 - `@adserve/database` — 3 (harness smoke) + 1 (seed permission regression guard) = 4
 - `@adserve/module-framework` — 60 (field engine) + 21 (layout engine) + 9 (5 entity-registry + 4 provisioning) = 90
 - `@adserve/ai-service` — 0 (stubs only; tests land with Task 0.7/0.8)
-- `@adserve/crm` — 8 (CRM activation) + 3 (permission seeding + role grants) = 11
+- `@adserve/crm` — 8 (CRM activation) + 3 (permission seeding + role grants) + 2 (1.9a reprovision: migrate/drop/delete + idempotent no-op) = 13
 - `@adserve/web` — 129: 16 table + 15 form (39 component, incl. 1.3 long_text truncation verify) + 1 provision-activation smoke + 25 CRM API + 7 list-pages (4 stateToQuery round-trip, 3 crm-list-client) + 21 detail-pages (5 record-title, 6 detail-capabilities, 10 crm-detail-client) + 26 bulk/owner (5 table-selection, 12 owner-filter, 9 bulk route) + 11 dashboard (5 format/heuristic, 6 query DB incl. permission boundary). **No expected-fail remaining.**
 
 > **Test-suite note:** the full `pnpm test` (turbo, parallel) can still
@@ -359,15 +365,55 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     one currency. Multi-currency aggregation is a Phase-1b concern; flagged
     here so the number isn't mistaken for currency-aware.
 
+### Task 1.9a decisions
+
+49. **`reprovisionCrm` lives in `@adserve/crm`, not `@adserve/database`.**
+    It calls `activateCrmForTenant` (a crm export), so housing it in
+    `@adserve/database` would create a `database → crm` import cycle
+    (decision #22). crm already depends on database, so it imports the
+    tables (`modules`/`permissions`/`rolePermissions`/`roles`/
+    `tenantModules`) + `db` directly.
+50. **Migrate-then-delete in a single transaction; runner wraps
+    `db.transaction`.** Grants on placeholders are migrated to the Phase-3
+    perms before the placeholders are deleted — no orphan window, full
+    rollback on error. The `role_permissions` FK cascades on perm delete;
+    the explicit grant-delete is kept for clarity.
+51. **Placeholder → Phase-3 mapping:** `contacts→contact`,
+    `companies→account`, `deals→opportunity` for `read/create/update/
+    delete`. `*.export` and `ai.use` have no Phase-3 equivalent and are
+    **dropped, counted distinctly** (`grantsDroppedExport` /
+    `grantsDroppedAi`) so a future 0.8 `ai_usage.read` follow-up can target
+    the tenants that had AI grants. **Identity caveat:** placeholders are
+    matched by resource-prefix (`resource ∈ {contacts,companies,deals,ai}`
+    under the crm module), not an explicit 16-id allowlist — do not
+    reintroduce a crm-module perm under those plural resources or this
+    script would retire it.
+52. **Grant migration is scoped to CRM-enabled tenants' roles.** A tenant
+    that has since *disabled* CRM does not gain Phase-3 grants; its
+    placeholder grants are dropped (`grantsDroppedDisabledTenant`). Avoids
+    granting CRM perms to a tenant that no longer has the module.
+53. **Production run is GATED.** Local-dev run is reversible (re-seed) and
+    was executed to verify (16 placeholders retired, idempotent). The
+    production run deletes live permission rows → queued for James, not run
+    unattended. Runner reads `DATABASE_URL` from the environment (the local
+    verify required passing it explicitly, since the crm package has no
+    `.env`; production sets it in the deploy environment). **Run with the
+    `adserve_migrator` role (`database-url-migrator`), NOT the runtime
+    `adserve_app` role** — the script deletes `permissions` /
+    `role_permissions` rows, which the non-superuser app role cannot do.
+
 ## Next session opens with
 
-**Task 1.9a — existing-tenant idempotent reprovision (closes Phase 1a).**
-(1.3 + 1.4 + 1.3b + 1.6a complete — see their rows.) Calls
-`activateCrmForTenant` per existing CRM-enabled tenant (idempotent — seeds
-perms + grants). 1.9a's **unique** job: **delete** the live Phase-2
-placeholder CRM permission rows (contacts/companies/deals/ai) + **migrate**
-any role grants on them. (1.1 already stopped seeding placeholders going
-forward.) After 1.9a, Phase 1a is shippable.
+**Phase 1a is feature-complete (Tasks 0.0–1.9a).** Next is **Phase 1b**,
+per `docs/phase-3-plan.md` sequencing: **0.7** (AI service layer) → **0.8**
+(AI usage metering + limits — RLS-protected tables/endpoints; also seeds
+the `ai_usage.read` permission) → **1.5** (pipeline kanban) → **1.6b**
+(dashboard funnel + forecast) → **1.7** (AI features). Pick 0.7 first.
+
+**Before Phase 1a ships to production, the gated actions queue must be
+cleared** (see header): the production `reprovision-crm` run, plus the
+standing RDS migration deferrals (003/004/005) tracked under "Deferred
+items".
 
 (Historical note: Task 1.3's scope was finalised with James on
 2026-05-29 — bulk actions + owner filter split to **Task 1.3b**;
