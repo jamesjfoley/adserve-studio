@@ -108,6 +108,7 @@ export default async function CrmDetailPage({ params }: PageProps) {
       canConvert={canConvert}
       canLogActivity={canLogActivity}
       canViewActivities={canViewActivities}
+      showAiSummary={slug === "account" && canViewActivities}
       locale="en-GB"
     />
   );

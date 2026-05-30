@@ -64,7 +64,7 @@ placeholders retired, idempotent on re-run).
 | 0.8 | AI usage metering + limits | ✓ Complete | +13 (ai-service metering, incl. 2 RLS-enforcement) +1 (crm activation) | 3 RLS tables + real metering behind the 0.7 seam + cap enforcement + 4 endpoints + 2 UI pages. See decisions below. |
 | 1.5 | Pipeline kanban | ✓ Complete | +5 (pipeline loader) +5 (move endpoint) | `/crm/pipeline` board; native HTML5 DnD (no new dep); dedicated `pipeline.update` move endpoint. See decisions below. |
 | 1.6b | Dashboard funnel + forecast | ✓ Complete | +4 (funnel + forecast queries) | Two widgets added to the 1.6a CRM dashboard. Lead funnel (new→contacted→qualified→converted, `lost` off-funnel); weighted revenue forecast (Σ amount×probability/100) in 30/60/90-day close-date windows. Pure CSS bars (no chart lib). Funnel gated on `lead.read`, forecast on `opportunity.read`. Queries run inside `withTenant` (scoped connection) AND carry explicit `tenantId` predicates. **Known assumption:** the forecast SQL casts `closeDate::date` / `probability::numeric`, so it assumes well-formed values — revisit when AI record creation (1.7a) can write unvalidated fields (a malformed value would error the tenant's forecast query). |
-| 1.7 | AI feature endpoints | Not started | — | Consume `aiComplete`; inject DB-backed metering deps. |
+| 1.7 | AI feature endpoints | ◐ Endpoints done; 3 UIs deferred | +13 (ai-features) | 4 metered AI endpoints (from-nl, suggest-field, summarize, smart-search) all via `aiComplete` (auto-metered/capped) + summarize UI. **3 UIs deferred (SCOPE CHANGE — gated, see below).** See decisions. |
 | 1.8 | — | Not started | — | |
 
 #### Task 0.7 — decisions (2026-05-30)
@@ -188,12 +188,46 @@ no notifications).
 metering tables don't exist in prod (fine — no AI feature endpoints ship until
 1.7).
 
-**SDK version skew (reconcile in 1.7):** `apps/web` pins
-`@anthropic-ai/sdk@^0.39.0` (pre-existing); `@adserve/ai-service` pins
-`0.100.1`. No conflict today — web does not yet import `aiComplete`. When 1.7
-wires the web → `aiComplete` path, reconcile to a single version (bump web to
-`0.100.1`, or drop web's direct dep if it only needs the types ai-service
-re-exports) so one deployable doesn't ship two SDK majors.
+#### Task 1.7 — decisions (2026-05-30)
+
+1. **4 metered AI endpoints**, each: resolve ctx → permission gate → `withTenant`
+   to build the prompt inputs → `aiComplete` (auto-meters via the 0.8 default;
+   cap enforced inside) → shape JSON. Endpoints call `aiComplete` exactly once
+   and never touch metering directly (no double-count).
+   - `POST /api/crm/[entityType]/from-nl` {prompt} → `${slug}.create`; returns
+     `{fields}` draft (does NOT create — the normal create path does, validated).
+   - `POST /api/crm/[entityType]/suggest-field` {recordContext,fieldSlug} →
+     `${slug}.create` **OR** `${slug}.update` (button lives on create+edit forms).
+   - `POST /api/crm/accounts/[id]/summarize` → `account.read` **AND**
+     `activity.read` (the summary surfaces activity content — both required to
+     avoid an exfiltration bypass; mirrors the activity-timeline route).
+   - `POST /api/crm/[entityType]/smart-search` {query} → `${slug}.read`; returns
+     `{filters}` only (no search execution).
+2. **Shared `lib/crm/ai-response.ts`:** AIError→HTTP (over_limit/rate_limited→429,
+   timeout→504, others→502); `parseAiJson` strips a single ```json fence before
+   parsing (defensive — prompts forbid fences) then falls through to 502; a
+   `resolveTenantCtx` for the OR/AND gates.
+3. **Summarize UI** (1.7c) shipped: self-contained `AiActivitySummary` panel in
+   the account detail Activity section (one optional `showAiSummary` prop on
+   `CrmDetailClient`, accounts only) — full UI→endpoint→AI→metering path.
+4. **Tests** mock only `aiComplete` (real prompt builders + real DB input
+   loading via `setupCrmTenant`); cover success/shape, permission gates (incl.
+   the update-only suggest case and the activity.read-denied summarize case),
+   over_limit→429, fence-strip success, malformed→502, 404.
+
+**GATED — SCOPE CHANGE vs `docs/phase-3-plan.md` §671-715 (awaiting James):**
+Task 1.7 delivers all 4 endpoints + the summarize UI, but **defers the UI
+integration for 1.7a (Create-with-AI form pre-fill), 1.7b (inline field-suggest
+button), and 1.7d (smart-search → dynamic-table filter state)**. Reason: these
+couple deeply into the existing CRM create-form and dynamic-table filter
+contracts — higher regression risk to do unattended. The metered capabilities
+all work end-to-end at the API level; only the front-end affordances are
+outstanding. Recommend a follow-up task `1.7-UI`.
+
+**SDK version skew — RESOLVED (Task 0.8).** `apps/web`'s stale direct
+`@anthropic-ai/sdk@^0.39.0` dep was removed; web now depends on
+`@adserve/ai-service` and gets the single SDK at `0.100.1` transitively. One
+SDK major in the deployable.
 
 **GATED — awaiting James (one-time infra, for prod/0.8):** create Secrets
 Manager secret `adserve/anthropic-api-key` (eu-west-2), add to ECS task-def

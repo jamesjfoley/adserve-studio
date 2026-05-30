@@ -10,6 +10,7 @@ import { crmCollectionSegment, type CrmActivityType } from "@adserve/crm";
 import { DynamicForm } from "@/components/dynamic-form";
 import type { SerializedRecord } from "@/lib/crm/serialize";
 import type { SerializedActivity } from "../page";
+import { AiActivitySummary } from "./ai-activity-summary";
 
 interface CrmDetailClientProps {
   collectionSegment: string;
@@ -26,6 +27,8 @@ interface CrmDetailClientProps {
   canConvert: boolean;
   canLogActivity: boolean;
   canViewActivities: boolean;
+  /** Task 1.7c — show the "Summarize recent activity" AI affordance (accounts). */
+  showAiSummary?: boolean;
   locale: string;
 }
 
@@ -66,6 +69,7 @@ export function CrmDetailClient({
   canConvert,
   canLogActivity,
   canViewActivities,
+  showAiSummary = false,
   locale,
 }: CrmDetailClientProps) {
   const router = useRouter();
@@ -330,6 +334,9 @@ export function CrmDetailClient({
           {canViewActivities ? (
             <section aria-label="Activity timeline">
               <h2 className="text-sm font-semibold tracking-tight">Activity</h2>
+              {showAiSummary ? (
+                <AiActivitySummary accountId={recordId} />
+              ) : null}
               {activities.length === 0 ? (
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">
                   No activity yet.
