@@ -243,3 +243,61 @@ describe("CRM records — permission + ownership matrix (member)", () => {
     await testDb.delete(records).where(and(eq(records.id, row.id)));
   });
 });
+
+describe("CRM create — ownedBy tenant-membership validation (1.4a)", () => {
+  const OWNER_ERR = "ownedBy must be an active member of this tenant";
+
+  test("omitted ownedBy defaults to the acting user (201)", async () => {
+    actAs(crm.owner.authProviderId);
+    const res = await createRecord(
+      jsonReq("POST", { data: { name: `${uniqueToken()} Default`, status: "active" } }),
+      accountsParams
+    );
+    expect(res.status).toBe(201);
+    expect((await res.json()).record.ownedBy).toBe(crm.owner.id);
+  });
+
+  test("ownedBy of a tenant member succeeds (201)", async () => {
+    actAs(crm.owner.authProviderId);
+    const res = await createRecord(
+      jsonReq("POST", {
+        data: { name: `${uniqueToken()} Member`, status: "active" },
+        ownedBy: crm.member.id,
+      }),
+      accountsParams
+    );
+    expect(res.status).toBe(201);
+    expect((await res.json()).record.ownedBy).toBe(crm.member.id);
+  });
+
+  test("ownedBy of a non-member → 400 (matches bulk message)", async () => {
+    actAs(crm.owner.authProviderId);
+    const res = await createRecord(
+      jsonReq("POST", {
+        data: { name: `${uniqueToken()} NonMember`, status: "active" },
+        ownedBy: "00000000-0000-0000-0000-0000000000ff",
+      }),
+      accountsParams
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe(OWNER_ERR);
+  });
+
+  test("ownedBy of a user from a DIFFERENT tenant → 400", async () => {
+    const other = await setupCrmTenant();
+    try {
+      actAs(crm.owner.authProviderId); // acting in OUR tenant
+      const res = await createRecord(
+        jsonReq("POST", {
+          data: { name: `${uniqueToken()} Foreign`, status: "active" },
+          ownedBy: other.owner.id, // a real user, but not a member here
+        }),
+        accountsParams
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe(OWNER_ERR);
+    } finally {
+      await teardownCrmTenant(other.tenantId);
+    }
+  });
+});

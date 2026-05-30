@@ -402,6 +402,39 @@ Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
     `adserve_app` role** — the script deletes `permissions` /
     `role_permissions` rows, which the non-superuser app role cannot do.
 
+### Protocol decisions
+
+54. **Autonomous execution policy was modified mid-run** by commit
+    `036b89c` ("chore: autonomous execution policy"), which superseded the
+    earlier "wait for explicit approval" workflow with the overnight /
+    unattended default (decide-and-proceed on reversible work;
+    queue-and-continue on a short irreversible/external list). James
+    reviewed and **approved this after the fact**, with **one carve-out
+    added here**: *scope changes versus the originally-defined task in
+    `docs/phase-3-plan.md` (architectural pivots that redefine what a task
+    is supposed to deliver) are now on the gated-actions list* — queued for
+    James, not auto-proceeded. Applied in: `CLAUDE.md` (gated-actions list)
+    + `.claude/agents/architect-reviewer.md` (scope changes reframed from a
+    stop-the-run gate to a queue-and-surface item, consistent with the
+    policy).
+55. **Task 1.4a — `ownedBy` create-route gap (logged in #43) closed.** The
+    create route (`POST /api/crm/[entityType]`) now validates a
+    caller-supplied `body.ownedBy` is an active member of the tenant
+    (reusing `isActiveMember` from `lib/crm/members.ts`) → **400** with the
+    same message as bulk assignOwner, giving create + bulk parity on legal
+    owners. Audit of all `ownedBy` write paths: create (fixed), bulk
+    (already validated), PATCH/DELETE (don't accept `ownedBy`), and
+    `lead.convert` — which **derives** `ownedBy` from the existing lead
+    record, not request input, so it's out of scope. **Surfaced note:**
+    `convert` propagates a stored `ownedBy`; pre-existing rows with an
+    invalid `ownedBy` (created before this fix) are a data-migration
+    concern, not an input gap — not actioned here. **Follow-up (queued, not
+    in 1.4a's reviewed scope):** an explicit `ownedBy: ""` (empty string) is
+    falsy, so it skips the `&&` guard and `"" ?? user.id` keeps `""` — a
+    pre-existing theoretical hole. Tighten later to `if (body.ownedBy !=
+    null)` + default `body.ownedBy || user.id` if airtight rejection of
+    empty-string owners is wanted.
+
 ## Next session opens with
 
 **Phase 1a is feature-complete (Tasks 0.0–1.9a).** Next is **Phase 1b**,

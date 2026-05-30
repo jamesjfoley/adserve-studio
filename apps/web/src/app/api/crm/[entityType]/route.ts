@@ -16,6 +16,7 @@ import {
 } from "@/lib/crm/query";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
+import { isActiveMember } from "@/lib/crm/members";
 
 type Params = { params: Promise<{ entityType: string }> };
 
@@ -154,6 +155,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       return { kind: "invalid" as const, fieldErrors };
     }
 
+    // A caller-supplied owner must be an active member of this tenant
+    // (mirrors the bulk assignOwner check). Omitted → defaults to the
+    // acting user, who is already an active member via the permission guard.
+    if (body.ownedBy && !(await isActiveMember(tx, tenant.id, body.ownedBy))) {
+      return { kind: "invalid_owner" as const };
+    }
+
     const [row] = await tx
       .insert(records)
       .values({
@@ -185,6 +193,12 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(
       { error: "Validation failed", fieldErrors: outcome.fieldErrors },
       { status: 422 }
+    );
+  }
+  if (outcome.kind === "invalid_owner") {
+    return NextResponse.json(
+      { error: "ownedBy must be an active member of this tenant" },
+      { status: 400 }
     );
   }
 
