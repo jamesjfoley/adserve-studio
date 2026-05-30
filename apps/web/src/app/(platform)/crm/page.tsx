@@ -7,11 +7,15 @@ import { crmCollectionSegment } from "@adserve/crm";
 import { getTenantContextOrNull } from "@/lib/permissions";
 import {
   formatCurrency,
+  leadConversionFunnel,
   pipelineValueByStage,
   recentlyModifiedRecords,
+  revenueForecast,
   upcomingActivities,
+  type LeadFunnelStage,
   type PipelineStageValue,
   type RecentRecord,
+  type RevenueForecast,
   type UpcomingActivity,
 } from "@/lib/crm/dashboard";
 
@@ -34,6 +38,7 @@ export default async function CrmDashboardPage() {
     permissions.has(`${s}.read`)
   );
   const canPipeline = permissions.has("opportunity.read");
+  const canLead = permissions.has("lead.read");
   const canActivities = permissions.has("activity.read");
 
   // No CRM visibility at all → fall back to the generic dashboard.
@@ -44,6 +49,11 @@ export default async function CrmDashboardPage() {
   const today = new Date();
   const weekOut = new Date(today);
   weekOut.setDate(weekOut.getDate() + 7);
+  const plusDays = (n: number) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + n);
+    return ymd(d);
+  };
 
   const data = await withTenant(tenant.id, async (tx) => {
     const types = await tx
@@ -97,11 +107,33 @@ export default async function CrmDashboardPage() {
       entityTypeIds: readableIds,
     });
 
-    return { pipeline, upcoming, recent };
+    let funnel: LeadFunnelStage[] = [];
+    const lead = bySlug.get("lead");
+    if (canLead && lead) {
+      funnel = await leadConversionFunnel(tx, {
+        tenantId: tenant.id,
+        leadEntityTypeId: lead.id,
+      });
+    }
+
+    let forecast: RevenueForecast | null = null;
+    if (canPipeline && opportunity) {
+      forecast = await revenueForecast(tx, {
+        tenantId: tenant.id,
+        opportunityEntityTypeId: opportunity.id,
+        today: ymd(today),
+        d30: plusDays(30),
+        d60: plusDays(60),
+        d90: plusDays(90),
+      });
+    }
+
+    return { pipeline, upcoming, recent, funnel, forecast };
   });
 
   const dateFmt = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium" });
   const pipelineMax = Math.max(1, ...data.pipeline.map((s) => s.total));
+  const funnelMax = Math.max(1, ...data.funnel.map((s) => s.count));
 
   return (
     <div>
@@ -141,6 +173,67 @@ export default async function CrmDashboardPage() {
                 ))}
               </ul>
             )}
+          </section>
+        ) : null}
+
+        {/* Widget 4 — Lead conversion funnel */}
+        {canLead ? (
+          <section className="rounded-xl border border-[var(--border)] p-6">
+            <h2 className="text-sm font-semibold tracking-tight">
+              Lead conversion funnel
+            </h2>
+            {data.funnel.every((s) => s.count === 0) ? (
+              <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+                No leads yet.
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {data.funnel.map((stage) => (
+                  <li key={stage.status}>
+                    <div className="flex items-baseline justify-between text-sm">
+                      <span className="font-medium">{stage.label}</span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {stage.count}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-2 w-full rounded-full bg-[var(--muted)]">
+                      <div
+                        className="h-2 rounded-full bg-brand-500"
+                        style={{ width: `${(stage.count / funnelMax) * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+
+        {/* Widget 5 — Weighted revenue forecast */}
+        {canPipeline && data.forecast ? (
+          <section className="rounded-xl border border-[var(--border)] p-6">
+            <h2 className="text-sm font-semibold tracking-tight">
+              Revenue forecast
+            </h2>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Expected revenue (amount × probability) by close date.
+            </p>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {[
+                { label: "Next 30 days", value: data.forecast.next30 },
+                { label: "Next 60 days", value: data.forecast.next60 },
+                { label: "Next 90 days", value: data.forecast.next90 },
+              ].map((w) => (
+                <div key={w.label}>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {w.label}
+                  </p>
+                  <p className="mt-1 text-xl font-semibold">
+                    {formatCurrency(w.value, LOCALE)}
+                  </p>
+                </div>
+              ))}
+            </div>
           </section>
         ) : null}
 

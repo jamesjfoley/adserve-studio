@@ -63,7 +63,7 @@ placeholders retired, idempotent on re-run).
 | 0.7 | AI service layer | ✓ Complete | +15 (`ai-service`) | Anthropic-backed `aiComplete` chokepoint on branch `task/0.7-ai-service-layer`. Per-tenant usage emitted on every path via an injectable `recordUsage` seam. See decisions below. |
 | 0.8 | AI usage metering + limits | ✓ Complete | +13 (ai-service metering, incl. 2 RLS-enforcement) +1 (crm activation) | 3 RLS tables + real metering behind the 0.7 seam + cap enforcement + 4 endpoints + 2 UI pages. See decisions below. |
 | 1.5 | Pipeline kanban | ✓ Complete | +5 (pipeline loader) +5 (move endpoint) | `/crm/pipeline` board; native HTML5 DnD (no new dep); dedicated `pipeline.update` move endpoint. See decisions below. |
-| 1.6b | Dashboard funnel + forecast | Not started | — | |
+| 1.6b | Dashboard funnel + forecast | ✓ Complete | +4 (funnel + forecast queries) | Two widgets added to the 1.6a CRM dashboard. Lead funnel (new→contacted→qualified→converted, `lost` off-funnel); weighted revenue forecast (Σ amount×probability/100) in 30/60/90-day close-date windows. Pure CSS bars (no chart lib). Funnel gated on `lead.read`, forecast on `opportunity.read`. Queries run inside `withTenant` (scoped connection) AND carry explicit `tenantId` predicates. **Known assumption:** the forecast SQL casts `closeDate::date` / `probability::numeric`, so it assumes well-formed values — revisit when AI record creation (1.7a) can write unvalidated fields (a malformed value would error the tenant's forecast query). |
 | 1.7 | AI feature endpoints | Not started | — | Consume `aiComplete`; inject DB-backed metering deps. |
 | 1.8 | — | Not started | — | |
 

@@ -4,8 +4,10 @@ import { activities, records } from "@adserve/database";
 import { getEntityTypeBySlug } from "@adserve/module-framework";
 import { setupCrmTenant, teardownCrmTenant, type CrmTestSetup } from "../helpers/crm";
 import {
+  leadConversionFunnel,
   pipelineValueByStage,
   recentlyModifiedRecords,
+  revenueForecast,
   upcomingActivities,
 } from "@/lib/crm/dashboard";
 
@@ -174,5 +176,90 @@ describe("recentlyModifiedRecords", () => {
       entityTypeIds: [],
     });
     expect(result).toEqual([]);
+  });
+});
+
+describe("leadConversionFunnel", () => {
+  test("counts leads per funnel stage in order; excludes lost + archived", async () => {
+    await insertRecord("lead", { name: "n1", status: "new" });
+    await insertRecord("lead", { name: "n2", status: "new" });
+    await insertRecord("lead", { name: "n3", status: "new" });
+    await insertRecord("lead", { name: "c1", status: "contacted" });
+    await insertRecord("lead", { name: "c2", status: "contacted" });
+    await insertRecord("lead", { name: "q1", status: "qualified" });
+    await insertRecord("lead", { name: "cv1", status: "converted" });
+    await insertRecord("lead", { name: "lost1", status: "lost" }); // off-funnel
+    await insertRecord("lead", { name: "arch", status: "new" }, { archived: true });
+
+    const funnel = await leadConversionFunnel(testDb, {
+      tenantId: crm.tenantId,
+      leadEntityTypeId: await entityId("lead"),
+    });
+
+    expect(funnel.map((s) => [s.status, s.count])).toEqual([
+      ["new", 3],
+      ["contacted", 2],
+      ["qualified", 1],
+      ["converted", 1],
+    ]);
+  });
+
+  test("returns all four stages at 0 when there are no leads", async () => {
+    const funnel = await leadConversionFunnel(testDb, {
+      tenantId: crm.tenantId,
+      leadEntityTypeId: await entityId("lead"),
+    });
+    expect(funnel.map((s) => s.count)).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe("revenueForecast", () => {
+  function ymd(offsetDays: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    return d.toISOString().slice(0, 10);
+  }
+
+  test("weights amount × probability/100 within cumulative close-date windows", async () => {
+    const amt = (n: number) => ({ amount: n, currency: "GBP" });
+    // +10d, £1000 @ 50% → 500  (in 30/60/90)
+    await insertRecord("opportunity", { name: "soon", stage: "proposal", amount: amt(1000), probability: 50, closeDate: ymd(10) });
+    // +45d, £2000 @ 25% → 500  (in 60/90)
+    await insertRecord("opportunity", { name: "mid", stage: "proposal", amount: amt(2000), probability: 25, closeDate: ymd(45) });
+    // +80d, £4000 @ 100% → 4000 (in 90)
+    await insertRecord("opportunity", { name: "late", stage: "negotiation", amount: amt(4000), probability: 100, closeDate: ymd(80) });
+    // +200d → outside all windows
+    await insertRecord("opportunity", { name: "far", stage: "proposal", amount: amt(9999), probability: 100, closeDate: ymd(200) });
+    // past → excluded (closeDate < today)
+    await insertRecord("opportunity", { name: "past", stage: "proposal", amount: amt(9999), probability: 100, closeDate: ymd(-5) });
+    // archived → excluded
+    await insertRecord("opportunity", { name: "arch", stage: "proposal", amount: amt(9999), probability: 100, closeDate: ymd(5) }, { archived: true });
+    // missing probability → contributes 0
+    await insertRecord("opportunity", { name: "noprob", stage: "proposal", amount: amt(9999), closeDate: ymd(5) });
+
+    const f = await revenueForecast(testDb, {
+      tenantId: crm.tenantId,
+      opportunityEntityTypeId: await entityId("opportunity"),
+      today: ymd(0),
+      d30: ymd(30),
+      d60: ymd(60),
+      d90: ymd(90),
+    });
+
+    expect(f.next30).toBe(500); // soon
+    expect(f.next60).toBe(1000); // soon + mid
+    expect(f.next90).toBe(5000); // soon + mid + late (500 + 500 + 4000)
+  });
+
+  test("returns zeroes when there are no opportunities", async () => {
+    const f = await revenueForecast(testDb, {
+      tenantId: crm.tenantId,
+      opportunityEntityTypeId: await entityId("opportunity"),
+      today: ymd(0),
+      d30: ymd(30),
+      d60: ymd(60),
+      d90: ymd(90),
+    });
+    expect(f).toEqual({ next30: 0, next60: 0, next90: 0 });
   });
 });
