@@ -58,7 +58,69 @@ placeholders retired, idempotent on re-run).
 
 ### Phase 1b — AI + advanced UI
 
-Untouched. Tasks 0.7, 0.8, 1.5, 1.6b, 1.7, 1.8 all not started.
+| # | Task | Status | Tests added | Notes |
+|---|---|---|---|---|
+| 0.7 | AI service layer | ✓ Complete | +15 (`ai-service`) | Anthropic-backed `aiComplete` chokepoint on branch `task/0.7-ai-service-layer`. Per-tenant usage emitted on every path via an injectable `recordUsage` seam. See decisions below. |
+| 0.8 | AI usage metering + limits | Not started | — | Owns the `ai_usage_*` tables + RLS + real `checkLimits`/`recordUsage` + cap enforcement + endpoints/UI. Picks up the 0.7 seam (see handoff below). |
+| 1.5 | Pipeline kanban | Not started | — | |
+| 1.6b | Dashboard funnel + forecast | Not started | — | |
+| 1.7 | AI feature endpoints | Not started | — | Consume `aiComplete`; inject DB-backed metering deps. |
+| 1.8 | — | Not started | — | |
+
+#### Task 0.7 — decisions (2026-05-30)
+
+1. **Provider abstraction:** tight coupling to the Anthropic SDK inside
+   `client.ts`; `aiComplete(request): AICompletionResponse` is the single
+   provider-agnostic chokepoint. No `Provider` interface (YAGNI — provider
+   decision is locked; the seam to add one later is localised to
+   `aiComplete`'s body).
+2. **API-key resolution:** read `process.env.ANTHROPIC_API_KEY` in BOTH dev
+   and prod. Traced the codebase — every secret (DATABASE_URL, Clerk keys)
+   flows Secrets Manager → ECS task-def `secrets:` block → env var →
+   `process.env`; there is **no runtime Secrets Manager SDK call anywhere**.
+   **Declined to add `@aws-sdk/client-secrets-manager`** — a runtime resolver
+   would diverge from the established convention. Matches the plan's Task 0.7
+   row ("Reads API key from `process.env.ANTHROPIC_API_KEY`").
+3. **`ai_usage` table ownership:** stays with **Task 0.8** (per plan
+   §616–636). 0.7 delivers the *emission seam* only — `aiComplete` builds a
+   fully-populated usage record on every path (success / error / rate-limit /
+   over-limit / invalid-request) and hands it to an injectable `recordUsage`.
+   Defaults (`checkLimits → {ok:true}`, `recordUsage → no-op`) live locally in
+   `client.ts` (NOT the throwing `metering.ts` stubs). **Not a scope change.**
+4. **Model IDs + pricing (verify):** `cost.ts`/`models.ts` now use real IDs
+   `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-8` with
+   published list prices ($1/$5, $3/$15, $15/$75 per Mtok input/output) dated
+   2026-05-30. **James: eyeball these against the current pricing page** — they
+   feed 0.8's £50 cap, so a wrong number is a real-money error. Re-verify
+   quarterly. Placeholder keys retained for back-compat.
+5. **Errors:** never throws past the boundary. SDK-native retry (maxRetries=2,
+   honours `retry-after`); 30s default timeout (overridable). Mapping:
+   RateLimit→`rate_limited`+retryAfterMs, timeout/abort→`timeout`,
+   400→`invalid_request`, 401→`api_error`/401, connection→`api_error`/0, other
+   APIError→`api_error`/status, missing-key/unknown→`internal`. `UsageStatus`
+   has only 4 values, so timeout/internal/invalid_request all log `status:error`.
+6. **Deferred (NOT in 0.7):** cap enforcement + DB persistence → 0.8;
+   `ai_usage_*` tables + RLS → 0.8; usage endpoints/UI → 0.8; feature endpoints
+   → 1.7; BYOK → out of scope; streaming → deferred (capabilities are
+   single-shot).
+
+**Handoff to 0.8:** implement `metering.checkLimits`/`recordUsage` against the
+new tables, then swap `client.ts`'s `defaultCheckLimits`/`defaultRecordUsage`
+(or inject via `AIServiceDeps` from the 1.7 endpoints). The `recordUsage` arg
+shape is already exported as `RecordUsageInput`.
+
+**SDK version skew (reconcile in 1.7):** `apps/web` pins
+`@anthropic-ai/sdk@^0.39.0` (pre-existing); `@adserve/ai-service` pins
+`0.100.1`. No conflict today — web does not yet import `aiComplete`. When 1.7
+wires the web → `aiComplete` path, reconcile to a single version (bump web to
+`0.100.1`, or drop web's direct dep if it only needs the types ai-service
+re-exports) so one deployable doesn't ship two SDK majors.
+
+**GATED — awaiting James (one-time infra, for prod/0.8):** create Secrets
+Manager secret `adserve/anthropic-api-key` (eu-west-2), add to ECS task-def
+`secrets:` block, add its ARN to the task-role IAM `GetSecretValue` list,
+**no rotation** (Anthropic has no rotation API). Confirmed NOT yet done —
+deploy step 22 was RDS rotation, unrelated.
 
 ## Deferred items
 

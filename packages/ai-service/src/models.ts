@@ -4,22 +4,26 @@ import type { AICapability, AIModel } from "./types";
  * Capability → model mapping. Modules don't choose models; they declare
  * a capability and the service routes to the right tier.
  *
- * Defaults below use placeholder model IDs. Real model names come from
- * env vars at call time (see `resolveModelForCapability`) so model
- * swaps don't require code changes:
+ * Defaults below use real Claude model IDs (Task 0.7) and MUST match a
+ * key in `cost.ts` `MODEL_PRICING`. They can still be overridden per
+ * environment via env vars at call time (see `resolveModelForCapability`)
+ * so model swaps don't require code changes:
  *
  *   AI_MODEL_FIELD_SUGGESTION=claude-haiku-...
  *   AI_MODEL_RECORD_CREATION=claude-sonnet-...
  *   AI_MODEL_ACTIVITY_SUMMARY=claude-sonnet-...
  *   AI_MODEL_SMART_SEARCH=claude-sonnet-...
  *   AI_MODEL_COMPLEX_ANALYSIS=claude-opus-...
+ *
+ * NB: a model resolved from an env var must also exist in `MODEL_PRICING`
+ * or cost is recorded as 0 (see `calculateCostMicros`).
  */
 export const DEFAULT_CAPABILITY_TO_MODEL: Record<AICapability, AIModel> = {
-  field_suggestion: "claude-haiku-placeholder",
-  record_creation: "claude-sonnet-placeholder",
-  activity_summary: "claude-sonnet-placeholder",
-  smart_search: "claude-sonnet-placeholder",
-  complex_analysis: "claude-opus-placeholder",
+  field_suggestion: "claude-haiku-4-5-20251001",
+  record_creation: "claude-sonnet-4-6",
+  activity_summary: "claude-sonnet-4-6",
+  smart_search: "claude-sonnet-4-6",
+  complex_analysis: "claude-opus-4-8",
 };
 
 const ENV_VAR_BY_CAPABILITY: Record<AICapability, string> = {

@@ -35,9 +35,15 @@ export {
 } from "./models";
 
 // ============================================================
-// Client (stub — Task 0.7)
+// Client (Task 0.7)
 // ============================================================
 export { aiComplete } from "./client";
+export type {
+  AIServiceDeps,
+  CheckLimitsFn,
+  RecordUsageFn,
+  RecordUsageInput,
+} from "./client";
 
 // ============================================================
 // Metering (stub — Task 0.8)

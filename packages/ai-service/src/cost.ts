@@ -21,20 +21,21 @@ export interface ModelPricing {
 }
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
-  // Placeholder keys — actual model IDs are env-configured at runtime.
-  // Task 0.7 updates these once concrete model names + prices are
-  // verified.
-  "claude-haiku-placeholder": {
-    inputPerMTokenMicros: 800_000, // $0.80 / 1M input
-    outputPerMTokenMicros: 4_000_000, // $4.00 / 1M output
+  // Real model IDs (Task 0.7). Prices are Anthropic published list
+  // prices as of 2026-05-30 — re-verify quarterly against the pricing
+  // page. These keys MUST match the IDs `models.ts` resolves to, or
+  // `calculateCostMicros` returns 0 and the £50 cap can't be enforced.
+  "claude-haiku-4-5-20251001": {
+    inputPerMTokenMicros: 1_000_000, // $1 / 1M input
+    outputPerMTokenMicros: 5_000_000, // $5 / 1M output
   },
-  "claude-sonnet-placeholder": {
+  "claude-sonnet-4-6": {
     inputPerMTokenMicros: 3_000_000, // $3 / 1M input
     outputPerMTokenMicros: 15_000_000, // $15 / 1M output
   },
-  "claude-opus-placeholder": {
-    inputPerMTokenMicros: 15_000_000, // $15 / 1M input
-    outputPerMTokenMicros: 75_000_000, // $75 / 1M output
+  "claude-opus-4-8": {
+    inputPerMTokenMicros: 5_000_000, // $5 / 1M input
+    outputPerMTokenMicros: 25_000_000, // $25 / 1M output
   },
 };
 
