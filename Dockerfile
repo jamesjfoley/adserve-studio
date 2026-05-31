@@ -9,6 +9,9 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/database/package.json ./packages/database/
+COPY packages/module-framework/package.json ./packages/module-framework/
+COPY packages/ai-service/package.json ./packages/ai-service/
+COPY packages/crm/package.json ./packages/crm/
 
 RUN pnpm install --frozen-lockfile
 
@@ -28,6 +31,9 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
+COPY --from=deps /app/packages/module-framework/node_modules ./packages/module-framework/node_modules
+COPY --from=deps /app/packages/ai-service/node_modules ./packages/ai-service/node_modules
+COPY --from=deps /app/packages/crm/node_modules ./packages/crm/node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
