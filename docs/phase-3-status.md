@@ -5,6 +5,53 @@ working session. Reading this + `docs/phase-3-plan.md` + `CLAUDE.md` is
 enough context to pick up Phase 3 work in a fresh session — no
 conversation-history replay needed.
 
+## End-of-session snapshot — 2026-05-31
+
+Clean shutdown after Phase 1b completed. Working tree **clean**, stash
+**empty**, nothing dangling. Nothing pushed; nothing merged to `main`.
+
+**Branch stack (linear, each built on the previous, all rooted at local `main`):**
+
+| Branch | Head | Sits on |
+|---|---|---|
+| `main` (local) | `90f9445` | — |
+| `task/1.4-crm-detail-pages` (Phase 1a tail) | `e198ac0` | main +11 |
+| `task/0.7-ai-service-layer` | `6296eb4` | task/1.4 |
+| `task/0.8-ai-usage-metering` | `9af7868` | 0.7 |
+| `task/1.5-pipeline-kanban` | `55888a3` | 0.8 |
+| `task/1.6b-dashboard-funnel-forecast` | `2ea37b6` | 1.5 |
+| `task/1.7-ai-features` | `073efbd` | 1.6b |
+| `task/1.8-crm-config` | `89dc635` | 1.7 (current tip) |
+
+**main vs origin/main:** local `main` (`90f9445`) is **0 behind / 4 ahead** of
+`origin/main` (`8d04d30`) — origin has nothing local lacks; the 4 ahead are
+locally-merged Phase 1a work never pushed.
+
+**Rebase scope for tomorrow:** 17 commits sit between local `main` and the
+`task/1.8` tip — **11 pre-Phase-1b** (Phase 1a 1.3/1.4/1.3b/1.6a/1.9a + the
+protocol/chore commits, tail = `task/1.4-crm-detail-pages`) + **6 Phase 1b**
+task heads. The whole thing is one linear chain, so a flatten/rebase onto
+`main` is straightforward (no diverging branches, no merge commits).
+
+**GATED — still outstanding (need James):**
+- Prod `reprovision-crm` run (`adserve_migrator` role) — destructive.
+- RDS migration backlog: `003`/`004`/`005` **+ `006-add-ai-usage-tables.sql`
+  then re-run `001-enable-rls.sql`** (migrator role).
+- Create Secrets Manager `adserve/anthropic-api-key` + ECS task-def `secrets:`
+  + IAM `GetSecretValue` (no rotation) — required before AI features run in prod.
+- Eyeball model list prices in `packages/ai-service/src/cost.ts` (feed the cap).
+- **Scope change to ratify:** `1.7-UI` follow-up — 3 deferred AI front-end
+  affordances (from-nl pre-fill, inline field-suggest, smart-search→table).
+
+**Open review flags (non-blocking, recorded per-task below):**
+- 1.5 drag-to-stage resets a manually-set probability to the stage default.
+- 1.6b forecast SQL assumes well-formed `closeDate`/`probability` (revisit if
+  AI writes unvalidated values).
+- 1.8 pipeline stage-delete orphan-check ignores *archived* opportunities
+  (accepted); DnD→up/down buttons in the config editors (approach choice).
+- Deep branch stack off local `main` — flatten/merge before the next phase.
+- `resolveCtx`/`resolveTenantCtx` duplication (fold into `1.7-UI`).
+
 ## Status as of 2026-05-29
 
 `origin/main` HEAD: `8d04d30` (unchanged — nothing pushed since).
