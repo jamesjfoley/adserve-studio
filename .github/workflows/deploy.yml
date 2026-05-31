@@ -87,7 +87,8 @@ jobs:
             [
               {"name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/database-url-nIrNYH"},
               {"name": "CLERK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-secret-key-gtyEbe"},
-              {"name": "CLERK_WEBHOOK_SECRET", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-webhook-secret-rT5wow"}
+              {"name": "CLERK_WEBHOOK_SECRET", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-webhook-secret-rT5wow"},
+              {"name": "ANTHROPIC_API_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/anthropic-api-key-RVEmVq"}
             ]
           tags: |
             [
