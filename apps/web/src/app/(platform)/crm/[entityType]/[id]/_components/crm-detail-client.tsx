@@ -6,7 +6,8 @@ import type {
   FieldDefinitionWithLabels,
   LayoutConfig,
 } from "@adserve/module-framework";
-import { crmCollectionSegment, type CrmActivityType } from "@adserve/crm";
+import { crmCollectionSegment } from "@adserve/crm/url";
+import type { CrmActivityType } from "@adserve/crm";
 import { DynamicForm } from "@/components/dynamic-form";
 import type { SerializedRecord } from "@/lib/crm/serialize";
 import type { SerializedActivity } from "../page";

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { formatCurrency } from "@/lib/crm/dashboard";
+import { formatCurrency } from "@/lib/crm/format";
 import type { PipelineColumn, PipelineFilters } from "@/lib/crm/pipeline";
 
 interface Member {

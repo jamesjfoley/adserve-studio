@@ -1,10 +1,10 @@
 "use client";
 
 import { useId, useMemo, useState, type FormEvent } from "react";
-import {
-  coerceFieldValue,
-  type FieldDefinitionWithLabels,
-  type LayoutConfig,
+import { coerceFieldValue } from "@adserve/module-framework/client";
+import type {
+  FieldDefinitionWithLabels,
+  LayoutConfig,
 } from "@adserve/module-framework";
 import { cn } from "@/lib/utils";
 import { FieldRenderer } from "./field-renderer";

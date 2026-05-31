@@ -322,15 +322,6 @@ export function heuristicTitle(
   return full !== "" ? full : fallbackId;
 }
 
-/** Format a numeric amount as a localized currency string (pure). */
-export function formatCurrency(
-  amount: number,
-  locale: string,
-  currency = "GBP"
-): string {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+// `formatCurrency` moved to ./format (client-safe, no @adserve/database
+// import). Re-exported here so existing server-side importers are unaffected.
+export { formatCurrency } from "./format";

@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  resolveLabel,
-  type FieldDefinitionWithLabels,
-  type LocalizedLabel,
+import { resolveLabel } from "@adserve/module-framework/client";
+import type {
+  FieldDefinitionWithLabels,
+  LocalizedLabel,
 } from "@adserve/module-framework";
 import {
   operatorsForType,
