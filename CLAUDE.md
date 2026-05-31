@@ -122,3 +122,60 @@ pnpm db:migrate        # drizzle-kit migrate (local dev)
 pnpm db:seed           # seed local dev
 pnpm db:studio         # drizzle studio
 ```
+
+## Review-before-build protocol (autonomous mode)
+
+For all Phase 3 work, the following protocol is mandatory:
+
+1. Before implementing any task, produce a written plan in the established format.
+2. Invoke the architect-reviewer subagent on the plan: `@architect-reviewer review this plan`. Wait for its review before proceeding.
+3. If the reviewer says "needs revision," refine the plan and re-invoke the reviewer. Repeat until approved.
+4. If the reviewer flags "HUMAN ATTENTION REQUIRED," do NOT stop the run. Handle it per the Autonomous execution policy below: decide-and-proceed for anything reversible; queue-and-continue for the short irreversible/external list.
+5. Once approved, implement the task as specified.
+6. After implementation, produce an implementation report (same format as previous tasks).
+7. Invoke the architect-reviewer on the report: `@architect-reviewer review this implementation report`. Wait for its review.
+8. If the reviewer approves, commit on a branch and proceed to the next task. Pushing the feature branch to origin is fine (backup, CI validation, remote review from James's phone). Merging/pushing to `main` is NOT done unattended (see gate list).
+9. If the reviewer flags gate-moment items, handle them per the Autonomous execution policy — never stop the run.
+
+This protocol replaces the previous workflow of relaying plans and reports through James manually. The original "Working protocol — review before build" section above (with its "wait for explicit approval") is superseded by this autonomous mode for all Phase 3 work.
+
+### Autonomous execution policy (overnight / unattended is the DEFAULT)
+
+James sets these phases running overnight or while out of the office and will always go with the recommendation, so a paused run just wastes hours. Run each phase end-to-end with ZERO interrupts or approval questions.
+
+- **Decide every scope, design, and workflow question yourself.** Record the decision + a one-line rationale in `docs/phase-3-status.md` and proceed. Mistakes get corrected afterward — that's fine and expected.
+- **Never pause to ask "should I proceed?"** The answer is always yes. Don't ask permission for routine actions (bash commands, branch pushes, deletions of generated artefacts, etc.).
+- The architect-reviewer's "needs revision" loop is handled by the main agent (refine + re-review), never by pausing for James.
+- **The dividing line for what to run unattended is REVERSIBILITY, not how "basic" the action is.** "We can correct mistakes afterward" only holds for reversible work — so do all reversible work autonomously: writing/editing code, migrations against the LOCAL dev DB only, commits, branch creation/flatten/delete, and pushing FEATURE BRANCHES to origin.
+- **A short list of IRREVERSIBLE / external / costly actions are NOT executed unattended.** They do NOT pause the run either — do everything else, then collect them into a "GATED ACTIONS — awaiting James" list surfaced at the end of the run (and via a phone push). They are:
+  - merging or pushing to `main` (production deploy trigger)
+  - applying migrations to the production RDS database
+  - rotating/changing Clerk keys or Secrets Manager secrets
+  - adding a new paid external service, or a non-trivial new external dependency
+  - destructive/irreversible data ops: dropping tables, deleting data, `git push --force`
+  - any change to production AWS resources
+  - scope changes versus the originally-defined task in `docs/phase-3-plan.md` (architectural pivots that redefine what a task is supposed to deliver)
+  If James has explicitly authorised one of these for a given run, do it.
+- **Phone escalation.** If a genuinely must-have question arises (unresolvable by judgment AND it blocks all further progress), send a `PushNotification` (reaches James's phone when Remote Control is connected), record your best-guess default, and proceed on that default if at all possible rather than halting. Only stop the whole run if proceeding is genuinely impossible. Also send a push at the end of a long unattended run summarising the GATED ACTIONS queue.
+
+## Progress visibility (don't go silent on the product owner)
+
+The main agent must keep its work visible to James at all times. Long silent periods may cause him to assume the process has stalled and intervene, potentially disrupting work in progress. Treat silence as a signal that must be earned — i.e., only justified by genuine waiting for a tool result, not by extended internal reasoning.
+
+1. **Announce intentions before long operations.** Before running tests, typechecks, lint, builds, or any command expected to take more than a few seconds, state what's about to run and roughly how long it should take. Example: "Running full test suite — usually 30–60 seconds."
+
+2. **Narrate transitions between protocol stages.** When moving between stages (planning → reviewer invocation → refinement → implementation → testing → reviewer invocation → commit), state which stage is starting. Example: "Plan approved by reviewer. Beginning implementation now."
+
+3. **Don't disappear into long thinking.** If an analysis or reasoning step is taking more than ~30 seconds of wall-clock time, surface a one-line status: "Still analysing the relationship schema before writing the query builder." A single line is enough; silence is not.
+
+4. **State current focus during multi-step implementation.** When working across multiple files, periodically say what's being worked on. Example: "Now editing apps/web/src/lib/crm/query.ts" or "Writing the activation idempotency test."
+
+5. **Announce reviewer invocations and their outcomes.** Before invoking the architect-reviewer subagent: "Sending the plan to the architect-reviewer now." After it returns: "Reviewer returned: [verdict]." Don't let the gap between invocation and response feel like a stall.
+
+6. **Failures and errors must be announced immediately.** If a test fails, a typecheck errors, or a tool call returns unexpected results, state what happened in the next message before deciding how to handle it. Never silently retry, suppress, or skip past.
+
+7. **End every task with a clear status line.** Examples: "Task 1.3 plan approved, beginning implementation." / "Task 1.3 done, reviewer approved, committed to branch task/1.3-record-pages. Moving to Task 1.4." James should be able to glance at the terminal and know exactly where the build is.
+
+8. **If genuinely blocked or uncertain, say so explicitly.** "I'm uncertain how to proceed because X — pausing for clarification" is far better than going quiet. Silence on a hard problem looks identical to silence on a crashed process; the difference must be stated.
+
+The cost of being slightly verbose is essentially zero. The cost of the product owner intervening at a critical moment because the process appeared stalled is potentially significant. Err on the side of more narration, not less.

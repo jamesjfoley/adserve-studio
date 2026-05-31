@@ -20,8 +20,10 @@ out/
 *.swo
 .DS_Store
 
-# Claude Code local session state
+# Claude Code local session state (but track shared agent definitions)
 .claude/
+!.claude/agents/
+!.claude/agents/**
 
 # Local-only generated state (e.g. AWS resource ID captures)
 *.local

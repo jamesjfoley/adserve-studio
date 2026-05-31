@@ -491,14 +491,34 @@ For each entity type (accounts, contacts, leads, opportunities):
 
 - `/crm/[entityType]` route, server component
 - `<DynamicTable>` with CRM-specific default columns
-- Sidebar filters: status, owner, date range
-- Bulk actions: assign owner, change status, archive
+- Filters: status + date range via the field-type-aware filter bar.
+  **Owner filter deferred to Task 1.3b** (`ownedBy` is a record column,
+  not a JSONB `data` field — needs a query-builder extension).
+- **Bulk actions (assign owner, change status, archive) deferred to Task
+  1.3b** — needs row-selection in `<DynamicTable>` + bulk endpoints.
+  (Both deferrals James-approved 2026-05-29.)
 - "New" button → modal or full-page form using `<DynamicForm>` in
   create mode
 
 Phase 1a covers the **default** experience — no per-user column
 customization (deferred to Phase 1b along with the field/layout admin
 UI).
+
+### Task 1.3b — CRM list bulk actions + owner filter (follow-up)
+
+Split out of Task 1.3 (James-approved 2026-05-29) — sequence after
+1.3/1.4, still Phase 1a. Covers the two 1.3 line items that need new
+infrastructure:
+
+- **Row selection in `<DynamicTable>`** — `selectedIds` /
+  `onSelectionChange` + a checkbox column (the controlled-with-default
+  pattern keeps it additive).
+- **Bulk mutation endpoints** — assign owner / change status / archive
+  across selected records, permission-gated like the single-record
+  routes, audit-logged.
+- **Owner filter** — a bounded query-builder extension to filter the
+  list by the `records.ownedBy` column (bundled here since it and bulk
+  "assign owner" both touch ownership).
 
 ### Task 1.4 — CRM detail pages
 
@@ -763,6 +783,7 @@ Phase 1a:
   1.2  CRM API routes
   1.3  CRM list pages
   1.4  CRM detail pages
+  1.3b CRM list bulk actions + owner filter (follow-up; after 1.3/1.4)
   1.6a Dashboard (3 widgets)
   1.9a Existing-tenant idempotent reprovision
        — Phase 1a milestone — ship —
