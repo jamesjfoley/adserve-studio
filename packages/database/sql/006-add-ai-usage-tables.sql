@@ -64,4 +64,14 @@ CREATE TABLE IF NOT EXISTS ai_usage_limits (
   CONSTRAINT ai_usage_limits_tenant_key UNIQUE (tenant_id)
 );
 
+-- Runtime grants for the non-superuser app role. Schema ownership (these
+-- tables are created by adserve_migrator) does NOT imply privileges, so the
+-- app role must be granted access explicitly. This is idempotent and
+-- harmless if the migrator's ALTER DEFAULT PRIVILEGES already covers new
+-- tables — re-granting an existing privilege is a no-op. Makes 006
+-- self-contained rather than relying on that default-ACL being in place.
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON ai_usage_log, ai_usage_summary, ai_usage_limits
+  TO adserve_app;
+
 COMMIT;
