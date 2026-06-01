@@ -1,8 +1,161 @@
 # AWS deployment status
 
-Snapshot of where the production AWS deployment stands at end of session
-2026-05-28 (final state — all 22 plan steps complete). Reference plan:
-`docs/aws-infrastructure-plan-ecs-express.md`.
+This doc **leads with the current prod state + the reusable DB/cutover runbook**
+(2026-06-01, after the Phase-1b CRM cutover + production-hardening). The
+`## Quick reference` and per-step notes further down are the **2026-05-28
+deployment-history** record (reference plan:
+`docs/aws-infrastructure-plan-ecs-express.md`).
+
+---
+
+## Current prod state — 2026-06-01
+
+### App
+- Cluster `adserve-prod`, service `adserve-studio`, **rev 23 live + healthy**
+  (`rolloutState=COMPLETED`, running == desired == 1).
+- URL `https://d22lq47907kone.cloudfront.net` (CloudFront `E2X21YZ83XP812` →
+  internal ECS Express ALB).
+- **Rollback target: rev 22.**
+  ```bash
+  aws ecs update-service --cluster adserve-prod --service adserve-studio \
+    --task-definition adserve-prod-adserve-studio:22 --force-new-deployment
+  ```
+
+### DB — RDS instance `adserve-db`, database `adserve`
+Endpoint `adserve-db.c32e6wm047ec.eu-west-2.rds.amazonaws.com:5432`.
+- Migrations **003–006 applied**; **RLS enabled on 17 tables**.
+- **`001-enable-rls` is NULLIF-patched and LIVE on prod** — the `tenant_isolation`
+  policies guard the cast as
+  `NULLIF(current_setting('app.current_tenant_id', true), '')::uuid` (fixes the
+  `/crm` `22P02` crash an empty context used to cause).
+- **Gate C complete:** the Phase-2 CRM placeholder perms
+  (`contacts`/`companies`/`deals`/`ai`) are retired; `contact`/`account`/
+  `opportunity` + `crm.admin` granted; `ai_usage.read` created and granted to
+  owner/admin.
+- Data: **2 tenants, 0 records** (pre-launch).
+
+### Branch protection on `main`
+- Required status checks: `Lint`, `Production build`, `Docker image build`,
+  `Tests (RLS-enforced)`. **`enforce_admins = true`** — applies to admins too,
+  so there is **no direct-push bypass**; every change to `main` goes through a
+  green PR.
+- **Break-glass** (emergency only): `gh api -X DELETE
+  repos/jamesjfoley/adserve-studio/branches/main/protection/enforce_admins` →
+  push → re-enable with `gh api -X POST .../enforce_admins`.
+
+### Hardening — dev/CI mirror prod
+- Dev/CI enforce RLS as the NOBYPASSRLS **`adserve_app`** role: the app db
+  client connects via **`TEST_APP_DATABASE_URL`** (RLS enforces), fixtures seed
+  privileged via **`TEST_DATABASE_URL`**. Local setup:
+  `pnpm --filter @adserve/database db:rls-dev-parity` (applies patched 001 +
+  creates the role).
+- CI (`.github/workflows/ci.yml`) runs the real prod `next build`, a prod
+  Docker image build, and the RLS-enforced suite — all four are required checks.
+
+## Reusable bastion runbook (public-subnet / public-IP variant — the one that worked)
+
+**Prereq:** `export AWS_PROFILE=adserve-admin AWS_DEFAULT_REGION=eu-west-2`
+(static keys — **no `aws login`**). DB role `adserve_migrator`, secret
+`adserve/database-url-migrator`. Per-session ids are kept in shell vars
+(`$INSTANCE`/`$BASTION_SG`/`$RULE`), not hardcoded.
+
+### a) Read-only confirms
+```bash
+VPC=$(aws ec2 describe-security-groups --group-ids sg-012023b2c91d23bde --query 'SecurityGroups[0].VpcId' --output text)
+# public subnet (MapPublicIpOnLaunch=true) for the public-IP variant:
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC" \
+  --query 'Subnets[].{id:SubnetId,az:AvailabilityZone,public:MapPublicIpOnLaunch,name:Tags[?Key==`Name`]|[0].Value}' --output table
+# (only if ever using a PRIVATE subnet instead — confirm NAT egress for SSM):
+aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC" --query 'NatGateways[].NatGatewayId' --output text
+AMI=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --query Parameter.Value --output text)
+SUBNET=<public subnet id from the table above>
+```
+
+### b) Bring-up
+```bash
+# IAM role + instance profile (SSM)
+aws iam create-role --role-name adserve-bastion-ssm-role \
+  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+aws iam attach-role-policy --role-name adserve-bastion-ssm-role --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam create-instance-profile --instance-profile-name adserve-bastion-ssm-profile
+aws iam add-role-to-instance-profile --instance-profile-name adserve-bastion-ssm-profile --role-name adserve-bastion-ssm-role
+sleep 10  # let the instance profile propagate
+
+# temp bastion SG
+BASTION_SG=$(aws ec2 create-security-group --vpc-id "$VPC" \
+  --group-name adserve-bastion-temp-sg --description "temp bastion (db session)" --query GroupId --output text)
+
+# allow it into RDS on 5432 — KEEP the rule id for teardown
+RULE=$(aws ec2 authorize-security-group-ingress --group-id sg-012023b2c91d23bde \
+  --ip-permissions "IpProtocol=tcp,FromPort=5432,ToPort=5432,UserIdGroupPairs=[{GroupId=$BASTION_SG}]" \
+  --query 'SecurityGroupRules[0].SecurityGroupRuleId' --output text)
+
+# launch in a PUBLIC subnet with a public IP
+INSTANCE=$(aws ec2 run-instances --image-id "$AMI" --instance-type t3.micro \
+  --iam-instance-profile Name=adserve-bastion-ssm-profile --subnet-id "$SUBNET" \
+  --security-group-ids "$BASTION_SG" --associate-public-ip-address \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=adserve-bastion-temp}]' \
+  --count 1 --query 'Instances[0].InstanceId' --output text)
+aws ec2 wait instance-running --instance-ids "$INSTANCE"
+until [ "$(aws ssm describe-instance-information --filters Key=InstanceIds,Values=$INSTANCE --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null)" = Online ]; do sleep 10; done
+echo "INSTANCE=$INSTANCE  BASTION_SG=$BASTION_SG  RULE=$RULE"   # save these for teardown
+```
+
+### c) Port-forward tunnel (separate terminal; leave open — act promptly, sessions idle out)
+```bash
+aws ssm start-session --target "$INSTANCE" --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters '{"host":["adserve-db.c32e6wm047ec.eu-west-2.rds.amazonaws.com"],"portNumber":["5432"],"localPortNumber":["15432"]}'
+# wait for "Port 15432 opened". If it drops, just re-run this (the bastion stays up).
+```
+
+### d) Connect / run DB work as the migrator
+```bash
+PW=$(aws secretsmanager get-secret-value --secret-id adserve/database-url-migrator --query SecretString --output text | python3 -c 'import sys,json;print(json.load(sys.stdin)["password"])')
+# plain psql (RLS enforces — migrator is non-superuser + FORCE RLS):
+PGSSLMODE=require psql "postgresql://adserve_migrator:$PW@localhost:15432/adserve"
+# re-run the idempotent RLS policy file, for example:
+PGSSLMODE=require psql "postgresql://adserve_migrator:$PW@localhost:15432/adserve" -v ON_ERROR_STOP=1 -f packages/database/sql/001-enable-rls.sql
+# cross-tenant maintenance scripts — session-scoped bypass (auto-clears on disconnect), e.g. Gate C:
+GATEC="postgresql://adserve_migrator:$PW@localhost:15432/adserve?sslmode=require&options=-c%20app.bypass_rls%3Don"
+DATABASE_URL="$GATEC" pnpm --filter @adserve/crm reprovision-crm
+DATABASE_URL="$GATEC" pnpm --filter @adserve/database seed
+DATABASE_URL="$GATEC" pnpm --filter @adserve/database seed:backfill-ai-usage-read
+```
+
+### e) Teardown (run when done)
+```bash
+aws ec2 terminate-instances --instance-ids "$INSTANCE" && aws ec2 wait instance-terminated --instance-ids "$INSTANCE"
+aws ec2 revoke-security-group-ingress --group-id sg-012023b2c91d23bde --security-group-rule-ids "$RULE"
+aws ec2 delete-security-group --group-id "$BASTION_SG"   # retry after a moment if DependencyViolation (ENI still releasing)
+aws iam remove-role-from-instance-profile --instance-profile-name adserve-bastion-ssm-profile --role-name adserve-bastion-ssm-role
+aws iam delete-instance-profile --instance-profile-name adserve-bastion-ssm-profile
+aws iam detach-role-policy --role-name adserve-bastion-ssm-role --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam delete-role --role-name adserve-bastion-ssm-role
+```
+
+## Gotchas (don't relearn these)
+- **`adserve-admin` uses static keys → NO `aws login`.** Just
+  `export AWS_PROFILE=adserve-admin AWS_DEFAULT_REGION=eu-west-2`.
+- **SSM port-forward sessions idle out** — start DB work promptly after
+  "Port 15432 opened"; if it drops, re-run `start-session` (the bastion stays up).
+- **Migrator scripts touching RLS tables need session-scoped bypass** via the
+  connection: `DATABASE_URL=…?options=-c app.bypass_rls=on` (URL-encoded
+  `?options=-c%20app.bypass_rls%3Don`). It sets the GUC in the startup packet →
+  **auto-clears when the connection closes, even on crash.** **NEVER**
+  `ALTER ROLE adserve_migrator SET app.bypass_rls=on` — a crash before `RESET`
+  leaves the migrator silently bypassing RLS (the exact failure class the
+  hardening fixed).
+- **`.env`/`.env.local` set a local `DATABASE_URL`, but nothing calls dotenv to
+  override it**, so an **exported** `DATABASE_URL` wins —
+  `DATABASE_URL=… pnpm …` reliably targets the tunnel.
+- **The seed script is `seed`** (`pnpm --filter @adserve/database seed`), not
+  `db:seed`, inside the package. **Gate C order:** `reprovision-crm` → `seed` →
+  `seed:backfill-ai-usage-read`.
+- **`sql/001-enable-rls.sql` is atomic (single `BEGIN…COMMIT`) + idempotent**
+  (`DROP POLICY IF EXISTS` + `CREATE`) — safe to re-run on prod; the policy swap
+  never leaves a window with policies absent.
+
+---
 
 ## Quick reference
 
