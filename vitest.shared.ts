@@ -1,4 +1,13 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "url";
+
+// `@adserve/database` marks its postgres client with `server-only` (build-time
+// client/server boundary guard). Node/vitest has no react-server condition, so
+// the real package throws on import — alias it to a no-op stub here. The
+// boundary is enforced by `next build`, not unit tests.
+const serverOnlyStub = fileURLToPath(
+  new URL("./test-stubs/server-only.ts", import.meta.url)
+);
 
 /**
  * Shared vitest base config for all workspace packages. Each package's
@@ -6,6 +15,9 @@ import { defineConfig } from "vitest/config";
  * don't drift on common settings.
  */
 export const sharedConfig = defineConfig({
+  resolve: {
+    alias: { "server-only": serverOnlyStub },
+  },
   test: {
     environment: "node",
     // RLS parity (hardening step 1): the test-helpers' privileged `testDb`

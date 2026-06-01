@@ -1,3 +1,11 @@
+// Build-time guard: this module instantiates the `postgres` driver (node
+// net/tls/fs). `server-only` makes `next build` fail loudly if it is ever
+// pulled into a client bundle — the for-sure backstop for the client/server
+// boundary class (the ESLint rule is the fast lint-time guard). Aliased to a
+// no-op in vitest (see vitest.shared.ts) since node has no react-server
+// condition. Importing @adserve/database for VALUES from a client component
+// therefore fails the build; `import type` is erased and stays fine.
+import "server-only";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";

@@ -36,8 +36,9 @@ BEGIN
   END IF;
 END $$;
 
--- Connect + read/write the app tables, exactly like prod's adserve_app grants.
-GRANT CONNECT ON DATABASE adserve TO adserve_app;
+-- Read/write the app tables, exactly like prod's adserve_app grants. (CONNECT
+-- is granted to PUBLIC by default, so it's omitted here to keep this script
+-- database-name-agnostic — it's reused unchanged by CI against adserve_test.)
 GRANT USAGE ON SCHEMA public TO adserve_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO adserve_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO adserve_app;
