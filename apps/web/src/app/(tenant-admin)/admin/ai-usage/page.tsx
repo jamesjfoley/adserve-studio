@@ -1,7 +1,5 @@
-import { aiUsageLog, withTenant } from "@adserve/database";
-import { getCurrentPeriodSummary, getUsageLimits } from "@adserve/ai-service";
-import { and, desc, eq, gte } from "drizzle-orm";
 import { requirePermission } from "@/lib/permissions";
+import { loadAdminAiUsageData } from "@/lib/admin/loaders";
 
 export const dynamic = "force-dynamic";
 
@@ -16,22 +14,7 @@ export default async function TenantAiUsagePage() {
   const ctx = await requirePermission("ai_usage.read");
   const tenantId = ctx.tenant.id;
 
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - 30);
-
-  const { summary, limits, recent } = await withTenant(tenantId, async (tx) => {
-    const summary = await getCurrentPeriodSummary({ tenantId }, tx);
-    const limits = await getUsageLimits({ tenantId }, tx);
-    const recent = await tx
-      .select()
-      .from(aiUsageLog)
-      .where(
-        and(eq(aiUsageLog.tenantId, tenantId), gte(aiUsageLog.createdAt, since))
-      )
-      .orderBy(desc(aiUsageLog.createdAt))
-      .limit(50);
-    return { summary, limits, recent };
-  });
+  const { summary, limits, recent } = await loadAdminAiUsageData(tenantId);
 
   const usedMicros = summary?.totalCostMicros ?? 0;
   const capMicros = limits?.monthlyCostLimitMicros ?? null;

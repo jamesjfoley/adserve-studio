@@ -10,26 +10,58 @@ env:
   NODE_VERSION: "20"
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & type check
+  # ---- Gate 1: lint, incl. the client/server boundary rule -------------------
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
       - uses: pnpm/action-setup@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      # ESLint includes boundary/no-server-in-client — forbids server-only
+      # imports (postgres / @adserve/database) in "use client" files.
+      - run: pnpm lint
 
+  # ---- Gate 2: production build (real next build, the prod bundle) -----------
+  # This is what surfaces client/server boundary errors unit tests can't —
+  # a server-only module pulled into a client bundle fails here.
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
-  test-database:
-    name: Database migrations
+  # ---- Gate 3: production Docker image build (no push) -----------------------
+  # Proves the Dockerfile installs + copies ALL workspace deps and compiles the
+  # standalone output (the workspace-dep copy gap failed the first deploy). The
+  # build runs `pnpm build` inside, so it also re-catches the boundary class.
+  docker-build:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build production image (no push)
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" \
+            -t adserve-studio:ci .
+
+  # ---- Tests under enforced RLS (two-identity model, mirrors prod) -----------
+  test:
+    name: Tests (RLS-enforced)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -46,30 +78,44 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      # Privileged identity (schema + fixture seeding) — superuser of the CI DB.
+      ADMIN_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
+      # testDb (fixture seeding) runs privileged; the app db client runs as the
+      # NOBYPASSRLS adserve_app role so RLS actually enforces — same split as
+      # local dev (step 1) and prod.
+      DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
+      TEST_DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
+      TEST_APP_DATABASE_URL: postgresql://adserve_app:adserve_app_dev@localhost:5432/adserve_test
+
     steps:
       - uses: actions/checkout@v6
-
       - uses: pnpm/action-setup@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
-
       - run: pnpm install --frozen-lockfile
 
-      - name: Run migrations
-        env:
-          DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
+      - name: Apply schema (Drizzle migrations)
         run: pnpm db:generate && pnpm db:migrate
 
-      - name: Run seed
-        env:
-          DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
+      - name: Enable RLS policies (patched 001, NULLIF guard)
+        run: psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/001-enable-rls.sql
+
+      - name: Create the RLS test role (002 — used by ai-service RLS tests)
+        run: psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/002-create-rls-test-role.sql
+
+      - name: Create the NOBYPASSRLS app role (two-identity parity)
+        run: psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/dev-rls-roles.sql
+
+      - name: Seed (privileged)
         run: pnpm db:seed
 
-      - name: Run tests
-        env:
-          DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
-          TEST_DATABASE_URL: postgresql://adserve:test_password@localhost:5432/adserve_test
-        run: pnpm test
+      # --concurrency=1: the package test suites share one CI database, and the
+      # crm reprovisionCrm test is GLOBAL (it scans/acts on every CRM-enabled
+      # tenant). Run serially so it can't race a concurrent web suite that is
+      # creating/tearing down real CRM-enabled tenants (FK violation otherwise).
+      # This is the documented fix for the parallel-turbo DB-test contention.
+      - name: Run tests (app queries enforce RLS as adserve_app)
+        run: pnpm test -- --concurrency=1

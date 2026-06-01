@@ -1,3 +1,12 @@
+// Client/server boundary: this module instantiates the `postgres` driver
+// (node net/tls/fs), so it must never end up in a client bundle. Guarded by
+// (1) the ESLint rule boundary/no-server-in-client (fast, lint-time) and
+// (2) `next build`, which hard-fails when a client component pulls this in —
+// postgres' node built-ins (net/tls/fs) can't resolve for the browser (the
+// exact errors that failed the prod deploy). The Vercel `server-only` marker
+// was tried here but THROWS in plain node, breaking the tsx-run DB tooling
+// (seed / migrate / reprovision / backfills) that legitimately loads this
+// module — so it can't live on a module shared by Next and node scripts.
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";

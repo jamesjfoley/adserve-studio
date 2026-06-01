@@ -1,30 +1,13 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
-import { and, eq, inArray } from "drizzle-orm";
-import { entityTypes, withTenant } from "@adserve/database";
 import { crmCollectionSegment } from "@adserve/crm";
 import { getTenantContextOrNull } from "@/lib/permissions";
-import {
-  formatCurrency,
-  leadConversionFunnel,
-  pipelineValueByStage,
-  recentlyModifiedRecords,
-  revenueForecast,
-  upcomingActivities,
-  type LeadFunnelStage,
-  type PipelineStageValue,
-  type RecentRecord,
-  type RevenueForecast,
-  type UpcomingActivity,
-} from "@/lib/crm/dashboard";
+import { formatCurrency } from "@/lib/crm/dashboard";
+import { loadCrmDashboardData } from "@/lib/crm/load-dashboard-data";
 
 const CRM_ENTITY_SLUGS = ["account", "contact", "lead", "opportunity"] as const;
 const LOCALE = "en-GB";
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export default async function CrmDashboardPage() {
   const { userId } = await auth();
@@ -46,89 +29,12 @@ export default async function CrmDashboardPage() {
     redirect("/dashboard");
   }
 
-  const today = new Date();
-  const weekOut = new Date(today);
-  weekOut.setDate(weekOut.getDate() + 7);
-  const plusDays = (n: number) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + n);
-    return ymd(d);
-  };
-
-  const data = await withTenant(tenant.id, async (tx) => {
-    const types = await tx
-      .select({
-        id: entityTypes.id,
-        slug: entityTypes.slug,
-        settings: entityTypes.settings,
-      })
-      .from(entityTypes)
-      .where(
-        and(
-          eq(entityTypes.tenantId, tenant.id),
-          inArray(entityTypes.slug, [...CRM_ENTITY_SLUGS])
-        )
-      );
-
-    const bySlug = new Map(types.map((t) => [t.slug, t]));
-    const opportunity = bySlug.get("opportunity");
-
-    // Entity types the caller may read — the permission boundary shared by
-    // the upcoming-tasks and recently-modified widgets (a task/record must
-    // not surface if its entity type isn't readable).
-    const readableIds = readableSlugs
-      .map((s) => bySlug.get(s)?.id)
-      .filter((id): id is string => Boolean(id));
-
-    let pipeline: PipelineStageValue[] = [];
-    if (canPipeline && opportunity) {
-      const stages =
-        ((opportunity.settings as { pipelineStages?: { slug: string; name: string }[] })
-          ?.pipelineStages ?? []).map((s) => ({ slug: s.slug, name: s.name }));
-      pipeline = await pipelineValueByStage(tx, {
-        tenantId: tenant.id,
-        opportunityEntityTypeId: opportunity.id,
-        stages,
-      });
-    }
-
-    let upcoming: UpcomingActivity[] = [];
-    if (canActivities) {
-      upcoming = await upcomingActivities(tx, {
-        tenantId: tenant.id,
-        from: ymd(today),
-        to: ymd(weekOut),
-        entityTypeIds: readableIds,
-      });
-    }
-
-    const recent: RecentRecord[] = await recentlyModifiedRecords(tx, {
-      tenantId: tenant.id,
-      entityTypeIds: readableIds,
-    });
-
-    let funnel: LeadFunnelStage[] = [];
-    const lead = bySlug.get("lead");
-    if (canLead && lead) {
-      funnel = await leadConversionFunnel(tx, {
-        tenantId: tenant.id,
-        leadEntityTypeId: lead.id,
-      });
-    }
-
-    let forecast: RevenueForecast | null = null;
-    if (canPipeline && opportunity) {
-      forecast = await revenueForecast(tx, {
-        tenantId: tenant.id,
-        opportunityEntityTypeId: opportunity.id,
-        today: ymd(today),
-        d30: plusDays(30),
-        d60: plusDays(60),
-        d90: plusDays(90),
-      });
-    }
-
-    return { pipeline, upcoming, recent, funnel, forecast };
+  const data = await loadCrmDashboardData({
+    tenantId: tenant.id,
+    readableSlugs,
+    canPipeline,
+    canLead,
+    canActivities,
   });
 
   const dateFmt = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium" });

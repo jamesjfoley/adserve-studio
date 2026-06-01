@@ -25,11 +25,11 @@ DROP POLICY IF EXISTS tenant_isolation ON tenants;
 CREATE POLICY tenant_isolation ON tenants
   USING (
     current_setting('app.bypass_rls', true) = 'on'
-    OR id = current_setting('app.current_tenant_id', true)::uuid
+    OR id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
   )
   WITH CHECK (
     current_setting('app.bypass_rls', true) = 'on'
-    OR id = current_setting('app.current_tenant_id', true)::uuid
+    OR id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
   );
 
 -- ---------- tenant-scoped tables (use tenant_id) --------------------------
@@ -63,11 +63,11 @@ BEGIN
       CREATE POLICY tenant_isolation ON %I
         USING (
           current_setting('app.bypass_rls', true) = 'on'
-          OR tenant_id = current_setting('app.current_tenant_id', true)::uuid
+          OR tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
         )
         WITH CHECK (
           current_setting('app.bypass_rls', true) = 'on'
-          OR tenant_id = current_setting('app.current_tenant_id', true)::uuid
+          OR tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
         )
     $f$, t);
   END LOOP;

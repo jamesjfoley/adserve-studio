@@ -7,7 +7,7 @@ import {
   createTestMembership,
   deleteTestTenant,
 } from "@adserve/database/test-helpers";
-import { tenants } from "@adserve/database";
+import { tenants, modules, tenantModules } from "@adserve/database";
 import { activateCrmForTenant } from "@adserve/crm";
 
 /**
@@ -49,6 +49,26 @@ export async function setupCrmTenant(): Promise<CrmTestSetup> {
   });
 
   await activateCrmForTenant(testDb, { tenantId: tenant.id });
+
+  // Enable the CRM module for the tenant. activateCrmForTenant sets up entity
+  // types/perms but does NOT write tenant_modules. The real provisioning path
+  // (api/dev/provision-tenant/route.ts) is HTTP/Clerk-coupled and provisions a
+  // different role/grant shape than this CRM fixture needs, so it can't be
+  // reused cleanly here. Instead this is the EXACT same enablement insert that
+  // route performs (look up the crm module, insert tenant_modules enabled=true,
+  // onConflictDoNothing) — so the fixture faithfully matches prod and can't
+  // drift on this point. Required by /admin settings, dashboard counts, and the
+  // visible-permissions read (getVisiblePermissions reads tenant_modules).
+  const [crmModule] = await testDb
+    .select({ id: modules.id })
+    .from(modules)
+    .where(eq(modules.slug, "crm"));
+  if (crmModule) {
+    await testDb
+      .insert(tenantModules)
+      .values({ tenantId: tenant.id, moduleId: crmModule.id, enabled: true })
+      .onConflictDoNothing();
+  }
 
   const [row] = await testDb
     .select({ settings: tenants.settings })

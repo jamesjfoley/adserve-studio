@@ -1,13 +1,5 @@
-import { entityTypes, withTenant } from "@adserve/database";
-import { and, eq } from "drizzle-orm";
-import {
-  createLayout,
-  generateDefaultLayoutConfig,
-  getDefaultLayout,
-  listFieldDefinitions,
-  type LayoutConfig,
-} from "@adserve/module-framework";
 import { requirePermission } from "@/lib/permissions";
+import { loadAdminLayoutsData } from "@/lib/admin/loaders";
 import { LayoutEditor } from "./_components/layout-editor";
 
 export const dynamic = "force-dynamic";
@@ -32,51 +24,7 @@ export default async function CrmLayoutsPage({
     ? sp.entity!
     : "account";
 
-  const data = await withTenant(ctx.tenant.id, async (tx) => {
-    const [entity] = await tx
-      .select({ id: entityTypes.id })
-      .from(entityTypes)
-      .where(
-        and(
-          eq(entityTypes.tenantId, ctx.tenant.id),
-          eq(entityTypes.slug, entitySlug)
-        )
-      );
-    if (!entity) return null;
-
-    const fields = await listFieldDefinitions(tx, {
-      tenantId: ctx.tenant.id,
-      entityTypeId: entity.id,
-    });
-
-    // Resolve the default detail layout; bootstrap one if missing (safety
-    // net — provisioning normally creates it). null → create, else → update.
-    let layout = await getDefaultLayout(tx, {
-      tenantId: ctx.tenant.id,
-      entityTypeId: entity.id,
-      layoutType: "detail",
-    });
-    if (!layout) {
-      const config = await generateDefaultLayoutConfig(tx, {
-        tenantId: ctx.tenant.id,
-        entityTypeId: entity.id,
-      });
-      layout = await createLayout(tx, {
-        tenantId: ctx.tenant.id,
-        entityTypeId: entity.id,
-        layoutType: "detail",
-        name: "Detail",
-        isDefault: true,
-        config,
-      });
-    }
-
-    return {
-      layoutId: layout.id,
-      config: layout.config as LayoutConfig,
-      fields: fields.map((f) => ({ id: f.id, name: f.name })),
-    };
-  });
+  const data = await loadAdminLayoutsData({ tenantId: ctx.tenant.id, entitySlug });
 
   return (
     <div>

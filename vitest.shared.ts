@@ -8,6 +8,17 @@ import { defineConfig } from "vitest/config";
 export const sharedConfig = defineConfig({
   test: {
     environment: "node",
+    // RLS parity (hardening step 1): the test-helpers' privileged `testDb`
+    // (fixture seeding + engine tests) connects as the owner/superuser, exactly
+    // as prod seeds run as the privileged migrator. The application's own
+    // runtime queries connect as the NOBYPASSRLS app role — see apps/web's
+    // config, which points DATABASE_URL at adserve_app so RLS actually enforces.
+    // CI overrides via the real env vars; locals fall back to the dev DB.
+    env: {
+      TEST_DATABASE_URL:
+        process.env.TEST_DATABASE_URL ??
+        "postgresql://jamesfoley@localhost:5432/adserve",
+    },
     // Tests can write to the database; run them serially per package so we
     // don't get interleaved transactions on the single-connection testDb.
     pool: "forks",

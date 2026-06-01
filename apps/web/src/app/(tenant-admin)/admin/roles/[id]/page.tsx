@@ -1,9 +1,7 @@
 import { notFound } from "next/navigation";
-import { rolePermissions, roles, withTenant } from "@adserve/database";
-import { and, eq } from "drizzle-orm";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 import { RoleForm } from "../_components/role-form";
-import { getVisiblePermissions } from "../_lib/visible-permissions";
+import { loadAdminRoleEditData } from "@/lib/admin/loaders";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,22 +9,7 @@ export default async function EditRolePage({ params }: Params) {
   const { tenant } = await requireTenantAdmin();
   const { id } = await params;
 
-  const data = await withTenant(tenant.id, async (tx) => {
-    const [role] = await tx
-      .select()
-      .from(roles)
-      .where(and(eq(roles.id, id), eq(roles.tenantId, tenant.id)));
-    if (!role) return null;
-
-    const [allPermissions, currentPermRows] = await Promise.all([
-      getVisiblePermissions(tx, tenant.id),
-      tx
-        .select({ permissionId: rolePermissions.permissionId })
-        .from(rolePermissions)
-        .where(eq(rolePermissions.roleId, role.id)),
-    ]);
-    return { role, allPermissions, currentPermRows };
-  });
+  const data = await loadAdminRoleEditData({ tenantId: tenant.id, roleId: id });
 
   if (!data) notFound();
   const { role, allPermissions, currentPermRows } = data;

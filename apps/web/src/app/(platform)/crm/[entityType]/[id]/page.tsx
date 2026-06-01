@@ -1,14 +1,11 @@
 import { notFound } from "next/navigation";
-import { and, desc, eq } from "drizzle-orm";
-import { activities, withTenant } from "@adserve/database";
 import {
   CRM_ENTITY_TYPES,
   crmCollectionSegment,
   resolveCrmEntitySlug,
 } from "@adserve/crm";
 import { requirePermission } from "@/lib/permissions";
-import { loadEntityForm } from "@/lib/crm/load-entity-form";
-import { loadRecordWithRelationships } from "@/lib/crm/relationships";
+import { loadCrmDetailData } from "@/lib/crm/load-detail-data";
 import { recordTitle } from "@/lib/crm/record-title";
 import { computeRecordCapabilities } from "@/lib/crm/detail-capabilities";
 import { CrmDetailClient } from "./_components/crm-detail-client";
@@ -39,31 +36,11 @@ export default async function CrmDetailPage({ params }: PageProps) {
   // without `activity.read` (mirrors the API boundary).
   const canViewActivities = permissions.has("activity.read");
 
-  const data = await withTenant(tenant.id, async (tx) => {
-    const bundle = await loadEntityForm(tx, { tenantId: tenant.id, slug });
-    if (!bundle) return null;
-
-    const loaded = await loadRecordWithRelationships(tx, {
-      tenantId: tenant.id,
-      entityTypeId: bundle.entity.id,
-      recordId: id,
-    });
-    if (!loaded) return null;
-
-    const activityRows = canViewActivities
-      ? await tx
-          .select()
-          .from(activities)
-          .where(
-            and(
-              eq(activities.tenantId, tenant.id),
-              eq(activities.recordId, id)
-            )
-          )
-          .orderBy(desc(activities.createdAt))
-      : [];
-
-    return { bundle, loaded, activityRows };
+  const data = await loadCrmDetailData({
+    tenantId: tenant.id,
+    slug,
+    recordId: id,
+    canViewActivities,
   });
 
   if (!data) notFound();

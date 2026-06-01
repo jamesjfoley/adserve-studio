@@ -1,6 +1,5 @@
-import { modules, tenantModules, withTenant } from "@adserve/database";
-import { and, asc, eq } from "drizzle-orm";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
+import { loadAdminSettingsData } from "@/lib/admin/loaders";
 import { ProfileForm } from "./_components/profile-form";
 
 const statusStyles: Record<string, string> = {
@@ -13,25 +12,7 @@ export default async function AdminSettingsPage() {
   const { tenant, permissions } = await requireTenantAdmin();
   const canEdit = permissions.has("settings.admin");
 
-  const enabledModules = await withTenant(tenant.id, (tx) =>
-    tx
-      .select({
-        id: modules.id,
-        slug: modules.slug,
-        name: modules.name,
-        description: modules.description,
-        enabledAt: tenantModules.enabledAt,
-      })
-      .from(tenantModules)
-      .innerJoin(modules, eq(modules.id, tenantModules.moduleId))
-      .where(
-        and(
-          eq(tenantModules.tenantId, tenant.id),
-          eq(tenantModules.enabled, true)
-        )
-      )
-      .orderBy(asc(modules.name))
-  );
+  const enabledModules = await loadAdminSettingsData(tenant.id);
 
   return (
     <div>

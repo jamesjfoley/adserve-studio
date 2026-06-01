@@ -1,71 +1,30 @@
-import {
-  tenantMemberships,
-  tenantModules,
-  withTenant,
-} from "@adserve/database";
-import { and, count, eq } from "drizzle-orm";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
+import { loadAdminDashboardData } from "@/lib/admin/loaders";
 
 export default async function TenantAdminDashboardPage() {
   const { tenant } = await requireTenantAdmin();
 
-  const [totalRow, activeRow, invitedRow, modulesRow] = await withTenant(
-    tenant.id,
-    (tx) =>
-      Promise.all([
-        tx
-          .select({ n: count() })
-          .from(tenantMemberships)
-          .where(eq(tenantMemberships.tenantId, tenant.id)),
-        tx
-          .select({ n: count() })
-          .from(tenantMemberships)
-          .where(
-            and(
-              eq(tenantMemberships.tenantId, tenant.id),
-              eq(tenantMemberships.status, "active")
-            )
-          ),
-        tx
-          .select({ n: count() })
-          .from(tenantMemberships)
-          .where(
-            and(
-              eq(tenantMemberships.tenantId, tenant.id),
-              eq(tenantMemberships.status, "invited")
-            )
-          ),
-        tx
-          .select({ n: count() })
-          .from(tenantModules)
-          .where(
-            and(
-              eq(tenantModules.tenantId, tenant.id),
-              eq(tenantModules.enabled, true)
-            )
-          ),
-      ])
-  );
+  const counts = await loadAdminDashboardData(tenant.id);
 
   const cards = [
     {
       label: "Total users",
-      value: totalRow[0]?.n ?? 0,
+      value: counts.total,
       description: "All memberships in this tenant",
     },
     {
       label: "Active users",
-      value: activeRow[0]?.n ?? 0,
+      value: counts.active,
       description: "Membership status = active",
     },
     {
       label: "Pending invitations",
-      value: invitedRow[0]?.n ?? 0,
+      value: counts.invited,
       description: "Membership status = invited",
     },
     {
       label: "Enabled modules",
-      value: modulesRow[0]?.n ?? 0,
+      value: counts.modules,
       description: "Modules enabled by AdServe",
     },
   ];
