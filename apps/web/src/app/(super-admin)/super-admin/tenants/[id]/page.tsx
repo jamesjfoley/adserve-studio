@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { tenants, withSuperAdminBypass } from "@adserve/database";
-import { eq } from "drizzle-orm";
 import { TenantStatusActions } from "../_components/tenant-status-actions";
 import { TenantModuleToggle } from "../_components/tenant-module-toggle";
-import {
-  loadTenantMembers,
-  loadTenantModuleStates,
-} from "@/lib/super-admin-queries";
+import { loadSuperAdminTenantDetail } from "@/lib/super-admin/loaders";
 
 const statusStyles: Record<string, string> = {
   active: "bg-green-100 text-green-800",
@@ -20,19 +15,7 @@ type Params = { params: Promise<{ id: string }> };
 export default async function TenantDetailPage({ params }: Params) {
   const { id } = await params;
 
-  const data = await withSuperAdminBypass(async (tx) => {
-    const [tenant] = await tx
-      .select()
-      .from(tenants)
-      .where(eq(tenants.id, id));
-    if (!tenant) return null;
-
-    const [members, moduleList] = await Promise.all([
-      loadTenantMembers(tx, id),
-      loadTenantModuleStates(tx, id),
-    ]);
-    return { tenant, members, moduleList };
-  });
+  const data = await loadSuperAdminTenantDetail(id);
 
   if (!data) notFound();
   const { tenant, members, moduleList } = data;

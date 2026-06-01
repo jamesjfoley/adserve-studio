@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { aiUsageLog, tenants, withSuperAdminBypass } from "@adserve/database";
-import {
-  getCurrentPeriodSummary,
-  getUsageLimits,
-  DEFAULT_MONTHLY_COST_LIMIT_MICROS,
-} from "@adserve/ai-service";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { DEFAULT_MONTHLY_COST_LIMIT_MICROS } from "@adserve/ai-service";
 import { requireSuperAdmin } from "@/lib/super-admin";
+import { loadSuperAdminAiUsageDetail } from "@/lib/super-admin/loaders";
 import { LimitEditor } from "./limit-editor";
 
 export const dynamic = "force-dynamic";
@@ -22,28 +17,7 @@ export default async function SuperAdminTenantAiUsagePage({ params }: Params) {
   await requireSuperAdmin();
   const { tenantId } = await params;
 
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - 30);
-
-  const data = await withSuperAdminBypass(async (tx) => {
-    const [tenant] = await tx
-      .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId));
-    if (!tenant) return null;
-
-    const summary = await getCurrentPeriodSummary({ tenantId }, tx);
-    const limits = await getUsageLimits({ tenantId }, tx);
-    const recent = await tx
-      .select()
-      .from(aiUsageLog)
-      .where(
-        and(eq(aiUsageLog.tenantId, tenantId), gte(aiUsageLog.createdAt, since))
-      )
-      .orderBy(desc(aiUsageLog.createdAt))
-      .limit(50);
-    return { tenant, summary, limits, recent };
-  });
+  const data = await loadSuperAdminAiUsageDetail(tenantId);
 
   if (!data) notFound();
   const { tenant, summary, limits, recent } = data;

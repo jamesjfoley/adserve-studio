@@ -1,13 +1,7 @@
 import Link from "next/link";
-import {
-  aiUsageLimits,
-  aiUsageSummary,
-  tenants,
-  withSuperAdminBypass,
-} from "@adserve/database";
 import { currentPeriod } from "@adserve/ai-service";
-import { and, eq, sql } from "drizzle-orm";
 import { requireSuperAdmin } from "@/lib/super-admin";
+import { loadSuperAdminAiUsageList } from "@/lib/super-admin/loaders";
 
 export const dynamic = "force-dynamic";
 
@@ -17,30 +11,9 @@ function formatUsd(micros: number): string {
 
 export default async function SuperAdminAiUsagePage() {
   await requireSuperAdmin();
-  const { start } = currentPeriod();
+  const { start } = currentPeriod(); // presentation-only period label
 
-  const rows = await withSuperAdminBypass((tx) =>
-    tx
-      .select({
-        tenantId: tenants.id,
-        tenantName: tenants.name,
-        tenantSlug: tenants.slug,
-        totalCostMicros: aiUsageSummary.totalCostMicros,
-        totalTokens: aiUsageSummary.totalTokens,
-        requestCount: aiUsageSummary.requestCount,
-        monthlyCostLimitMicros: aiUsageLimits.monthlyCostLimitMicros,
-      })
-      .from(tenants)
-      .leftJoin(
-        aiUsageSummary,
-        and(
-          eq(aiUsageSummary.tenantId, tenants.id),
-          eq(aiUsageSummary.periodStart, start)
-        )
-      )
-      .leftJoin(aiUsageLimits, eq(aiUsageLimits.tenantId, tenants.id))
-      .orderBy(sql`${aiUsageSummary.totalCostMicros} desc nulls last`)
-  );
+  const rows = await loadSuperAdminAiUsageList();
 
   return (
     <div>

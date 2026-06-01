@@ -1,11 +1,5 @@
-import {
-  users,
-  tenantMemberships,
-  tenants,
-  withSuperAdminBypass,
-} from "@adserve/database";
-import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { requireSuperAdmin } from "@/lib/super-admin";
+import { loadSuperAdminUsers } from "@/lib/super-admin/loaders";
 import { UserActions } from "./_components/user-actions";
 
 const statusStyles: Record<string, string> = {
@@ -25,39 +19,7 @@ export default async function UsersListPage({
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
 
-  const where =
-    query.length > 0
-      ? or(
-          ilike(users.email, `%${query}%`),
-          ilike(users.fullName, `%${query}%`)
-        )
-      : undefined;
-
-  const { userRows, memberships } = await withSuperAdminBypass(async (tx) => {
-    const userRows = await tx
-      .select()
-      .from(users)
-      .where(where)
-      .orderBy(desc(users.createdAt));
-
-    const userIds = userRows.map((u) => u.id);
-
-    const memberships =
-      userIds.length === 0
-        ? []
-        : await tx
-            .select({
-              userId: tenantMemberships.userId,
-              tenantId: tenants.id,
-              tenantName: tenants.name,
-              tenantSlug: tenants.slug,
-            })
-            .from(tenantMemberships)
-            .innerJoin(tenants, eq(tenants.id, tenantMemberships.tenantId))
-            .where(inArray(tenantMemberships.userId, userIds));
-
-    return { userRows, memberships };
-  });
+  const { userRows, memberships } = await loadSuperAdminUsers(query);
 
   type Membership = (typeof memberships)[number];
   const byUser = new Map<string, Membership[]>();
