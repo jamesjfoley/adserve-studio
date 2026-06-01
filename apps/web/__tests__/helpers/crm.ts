@@ -51,10 +51,14 @@ export async function setupCrmTenant(): Promise<CrmTestSetup> {
   await activateCrmForTenant(testDb, { tenantId: tenant.id });
 
   // Enable the CRM module for the tenant. activateCrmForTenant sets up entity
-  // types/perms but does NOT write tenant_modules — in real provisioning that's
-  // done by provision-tenant / the Clerk webhook. Mirror that here so the
-  // tenant looks fully provisioned (the /admin settings, dashboard counts, and
-  // visible-permissions reads depend on an enabled tenant_modules row).
+  // types/perms but does NOT write tenant_modules. The real provisioning path
+  // (api/dev/provision-tenant/route.ts) is HTTP/Clerk-coupled and provisions a
+  // different role/grant shape than this CRM fixture needs, so it can't be
+  // reused cleanly here. Instead this is the EXACT same enablement insert that
+  // route performs (look up the crm module, insert tenant_modules enabled=true,
+  // onConflictDoNothing) — so the fixture faithfully matches prod and can't
+  // drift on this point. Required by /admin settings, dashboard counts, and the
+  // visible-permissions read (getVisiblePermissions reads tenant_modules).
   const [crmModule] = await testDb
     .select({ id: modules.id })
     .from(modules)
