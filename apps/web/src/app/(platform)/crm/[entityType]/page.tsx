@@ -1,6 +1,4 @@
 import { notFound } from "next/navigation";
-import { asc, desc, sql } from "drizzle-orm";
-import { records, withTenant } from "@adserve/database";
 import {
   CRM_ENTITY_TYPES,
   DEFAULT_LIST_COLUMNS,
@@ -8,15 +6,9 @@ import {
   resolveCrmEntitySlug,
 } from "@adserve/crm";
 import { requirePermission } from "@/lib/permissions";
-import {
-  buildOrderBy,
-  buildWhere,
-  parseListParams,
-  resolveOwnerFilter,
-} from "@/lib/crm/query";
+import { parseListParams } from "@/lib/crm/query";
 import { serializeRecord } from "@/lib/crm/serialize";
-import { loadEntityForm } from "@/lib/crm/load-entity-form";
-import { listActiveMembers } from "@/lib/crm/members";
+import { loadCrmListData } from "@/lib/crm/load-list-data";
 import { CrmListClient } from "./_components/crm-list-client";
 
 type PageProps = {
@@ -45,60 +37,11 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
     parsed = parseListParams(new URLSearchParams()); // bad params → defaults
   }
 
-  const ownerFilter = resolveOwnerFilter(parsed.owner, user.id);
-
-  const data = await withTenant(tenant.id, async (tx) => {
-    const bundle = await loadEntityForm(tx, { tenantId: tenant.id, slug });
-    if (!bundle) return null;
-    const { entity, fields, layoutConfig } = bundle;
-
-    let where;
-    let orderBy;
-    try {
-      where = buildWhere(
-        tenant.id,
-        entity.id,
-        fields,
-        parsed.filters,
-        parsed.includeArchived,
-        ownerFilter
-      );
-      orderBy = buildOrderBy(fields, parsed.sort);
-    } catch {
-      // A filter/sort that doesn't apply to this entity → safe default view.
-      where = buildWhere(
-        tenant.id,
-        entity.id,
-        fields,
-        [],
-        parsed.includeArchived,
-        ownerFilter
-      );
-      orderBy = null;
-    }
-
-    const members = await listActiveMembers(tx, tenant.id);
-
-    const order = orderBy
-      ? [orderBy, asc(records.id)]
-      : [desc(records.createdAt), asc(records.id)];
-
-    const rows = await tx
-      .select()
-      .from(records)
-      .where(where)
-      .orderBy(...order)
-      .limit(parsed.limit)
-      .offset(parsed.offset);
-
-    const [countRow] = await tx
-      .select({ total: sql<number>`count(*)::int` })
-      .from(records)
-      .where(where);
-
-    // Layout for the "New" form is resolved by loadEntityForm above (the
-    // activated default `detail` layout, with a generated fallback).
-    return { fields, rows, total: countRow?.total ?? 0, layoutConfig, members };
+  const data = await loadCrmListData({
+    tenantId: tenant.id,
+    slug,
+    parsed,
+    userId: user.id,
   });
 
   if (!data) notFound();
