@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { tenants, users, withSuperAdminBypass } from "@adserve/database";
-import { count, desc, eq } from "drizzle-orm";
+import { loadSuperAdminDashboard } from "@/lib/super-admin/loaders";
 
 const statusStyles: Record<string, string> = {
   active: "bg-green-100 text-green-800",
@@ -9,52 +8,14 @@ const statusStyles: Record<string, string> = {
 };
 
 export default async function SuperAdminDashboardPage() {
-  const [
-    activeTenantsRow,
-    suspendedTenantsRow,
-    totalUsersRow,
-    activeUsersRow,
-    recentTenants,
-  ] = await withSuperAdminBypass((tx) =>
-    Promise.all([
-      tx
-        .select({ n: count() })
-        .from(tenants)
-        .where(eq(tenants.status, "active")),
-      tx
-        .select({ n: count() })
-        .from(tenants)
-        .where(eq(tenants.status, "suspended")),
-      tx.select({ n: count() }).from(users),
-      tx
-        .select({ n: count() })
-        .from(users)
-        .where(eq(users.status, "active")),
-      tx.select().from(tenants).orderBy(desc(tenants.createdAt)).limit(5),
-    ])
-  );
+  const { activeTenants, suspendedTenants, totalUsers, activeUsers, recentTenants } =
+    await loadSuperAdminDashboard();
 
   const cards = [
-    {
-      label: "Active tenants",
-      value: activeTenantsRow[0]?.n ?? 0,
-      description: "Status = active",
-    },
-    {
-      label: "Suspended tenants",
-      value: suspendedTenantsRow[0]?.n ?? 0,
-      description: "Status = suspended",
-    },
-    {
-      label: "Total users",
-      value: totalUsersRow[0]?.n ?? 0,
-      description: "All users",
-    },
-    {
-      label: "Active users",
-      value: activeUsersRow[0]?.n ?? 0,
-      description: "Status = active",
-    },
+    { label: "Active tenants", value: activeTenants, description: "Status = active" },
+    { label: "Suspended tenants", value: suspendedTenants, description: "Status = suspended" },
+    { label: "Total users", value: totalUsers, description: "All users" },
+    { label: "Active users", value: activeUsers, description: "Status = active" },
   ];
 
   return (

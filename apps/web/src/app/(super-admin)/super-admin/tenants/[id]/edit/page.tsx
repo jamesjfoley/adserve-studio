@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { tenants, withSuperAdminBypass } from "@adserve/database";
-import { eq } from "drizzle-orm";
+import { loadSuperAdminTenantForEdit } from "@/lib/super-admin/loaders";
 import { EditTenantForm } from "./edit-tenant-form";
 
 type Params = { params: Promise<{ id: string }> };
@@ -9,9 +8,7 @@ type Params = { params: Promise<{ id: string }> };
 export default async function EditTenantPage({ params }: Params) {
   const { id } = await params;
 
-  const [tenant] = await withSuperAdminBypass((tx) =>
-    tx.select().from(tenants).where(eq(tenants.id, id))
-  );
+  const tenant = await loadSuperAdminTenantForEdit(id);
   if (!tenant) notFound();
 
   const settings = (tenant.settings ?? {}) as Record<string, unknown>;

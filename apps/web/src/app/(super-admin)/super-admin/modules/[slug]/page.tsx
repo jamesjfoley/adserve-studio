@@ -1,12 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  modules,
-  tenantModules,
-  tenants,
-  withSuperAdminBypass,
-} from "@adserve/database";
-import { and, asc, eq } from "drizzle-orm";
+import { loadSuperAdminModuleDetail } from "@/lib/super-admin/loaders";
 
 const statusStyles: Record<string, string> = {
   active: "bg-green-100 text-green-800",
@@ -25,33 +19,7 @@ type Params = { params: Promise<{ slug: string }> };
 export default async function ModuleDetailPage({ params }: Params) {
   const { slug } = await params;
 
-  const data = await withSuperAdminBypass(async (tx) => {
-    const [moduleRow] = await tx
-      .select()
-      .from(modules)
-      .where(eq(modules.slug, slug));
-    if (!moduleRow) return null;
-
-    const enabledTenants = await tx
-      .select({
-        tenantId: tenants.id,
-        tenantName: tenants.name,
-        tenantSlug: tenants.slug,
-        tenantStatus: tenants.status,
-        enabledAt: tenantModules.enabledAt,
-      })
-      .from(tenantModules)
-      .innerJoin(tenants, eq(tenants.id, tenantModules.tenantId))
-      .where(
-        and(
-          eq(tenantModules.moduleId, moduleRow.id),
-          eq(tenantModules.enabled, true)
-        )
-      )
-      .orderBy(asc(tenants.name));
-
-    return { moduleRow, enabledTenants };
-  });
+  const data = await loadSuperAdminModuleDetail(slug);
 
   if (!data) notFound();
   const { moduleRow, enabledTenants } = data;
