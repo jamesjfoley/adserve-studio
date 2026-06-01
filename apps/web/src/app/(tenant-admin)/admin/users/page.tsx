@@ -1,12 +1,5 @@
-import {
-  tenantMemberships,
-  tenantInvitations,
-  users,
-  roles,
-  withTenant,
-} from "@adserve/database";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
+import { loadAdminUsersData } from "@/lib/admin/loaders";
 import { UsersListClient } from "./_components/users-list-client";
 
 type SearchParams = Promise<{
@@ -14,8 +7,6 @@ type SearchParams = Promise<{
   role?: string;
   status?: string;
 }>;
-
-const ALLOWED_STATUSES = ["active", "invited", "suspended"] as const;
 
 export default async function AdminUsersPage({
   searchParams,
@@ -27,82 +18,12 @@ export default async function AdminUsersPage({
   const { q, role: roleFilter, status: statusFilter } = await searchParams;
   const query = q?.trim() ?? "";
 
-  const conditions = [
-    eq(tenantMemberships.tenantId, tenant.id),
-    eq(users.isSuperAdmin, false),
-  ];
-  if (query.length > 0) {
-    conditions.push(
-      or(
-        ilike(users.email, `%${query}%`),
-        ilike(users.fullName, `%${query}%`)
-      )!
-    );
-  }
-  if (roleFilter) {
-    conditions.push(eq(roles.slug, roleFilter));
-  }
-  if (
-    statusFilter &&
-    (ALLOWED_STATUSES as readonly string[]).includes(statusFilter)
-  ) {
-    conditions.push(
-      eq(
-        tenantMemberships.status,
-        statusFilter as (typeof ALLOWED_STATUSES)[number]
-      )
-    );
-  }
-
-  const [memberships, tenantRoles, pendingInvitations] = await withTenant(
-    tenant.id,
-    (tx) =>
-      Promise.all([
-        tx
-          .select({
-            membershipId: tenantMemberships.id,
-            userId: users.id,
-            fullName: users.fullName,
-            email: users.email,
-            status: tenantMemberships.status,
-            joinedAt: tenantMemberships.joinedAt,
-            roleId: roles.id,
-            roleSlug: roles.slug,
-            roleName: roles.name,
-          })
-          .from(tenantMemberships)
-          .innerJoin(users, eq(users.id, tenantMemberships.userId))
-          .innerJoin(roles, eq(roles.id, tenantMemberships.roleId))
-          .where(and(...conditions))
-          .orderBy(desc(tenantMemberships.joinedAt)),
-
-        tx
-          .select()
-          .from(roles)
-          .where(eq(roles.tenantId, tenant.id))
-          .orderBy(asc(roles.name)),
-
-        tx
-          .select({
-            id: tenantInvitations.id,
-            email: tenantInvitations.email,
-            createdAt: tenantInvitations.createdAt,
-            roleName: roles.name,
-            roleSlug: roles.slug,
-            invitedByName: users.fullName,
-          })
-          .from(tenantInvitations)
-          .innerJoin(roles, eq(roles.id, tenantInvitations.roleId))
-          .leftJoin(users, eq(users.id, tenantInvitations.invitedBy))
-          .where(
-            and(
-              eq(tenantInvitations.tenantId, tenant.id),
-              eq(tenantInvitations.status, "pending")
-            )
-          )
-          .orderBy(desc(tenantInvitations.createdAt)),
-      ])
-  );
+  const [memberships, tenantRoles, pendingInvitations] = await loadAdminUsersData({
+    tenantId: tenant.id,
+    query,
+    roleFilter,
+    statusFilter,
+  });
 
   const memberCount = memberships.length;
 

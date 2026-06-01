@@ -1,8 +1,6 @@
-import { and, asc, eq } from "drizzle-orm";
-import { entityTypes, records, withTenant } from "@adserve/database";
 import { requirePermission } from "@/lib/permissions";
-import { listActiveMembers } from "@/lib/crm/members";
-import { loadPipelineBoard, type PipelineFilters } from "@/lib/crm/pipeline";
+import { type PipelineFilters } from "@/lib/crm/pipeline";
+import { loadPipelineData } from "@/lib/crm/load-pipeline-data";
 import { PipelineBoard } from "./_components/pipeline-board";
 
 export const dynamic = "force-dynamic";
@@ -29,48 +27,7 @@ export default async function PipelinePage({
     closeDateTo: str(sp.closeDateTo),
   };
 
-  const data = await withTenant(ctx.tenant.id, async (tx) => {
-    const board = await loadPipelineBoard(tx, {
-      tenantId: ctx.tenant.id,
-      filters,
-    });
-    const members = await listActiveMembers(tx, ctx.tenant.id);
-
-    // Accounts for the filter dropdown.
-    const [accountType] = await tx
-      .select({ id: entityTypes.id })
-      .from(entityTypes)
-      .where(
-        and(
-          eq(entityTypes.tenantId, ctx.tenant.id),
-          eq(entityTypes.slug, "account")
-        )
-      );
-    const accountRows = accountType
-      ? await tx
-          .select({ id: records.id, data: records.data })
-          .from(records)
-          .where(
-            and(
-              eq(records.tenantId, ctx.tenant.id),
-              eq(records.entityTypeId, accountType.id),
-              eq(records.isArchived, false)
-            )
-          )
-          .orderBy(asc(records.createdAt))
-      : [];
-    const accounts = accountRows
-      .map((r) => ({
-        id: r.id,
-        name:
-          typeof (r.data as Record<string, unknown>)?.name === "string"
-            ? ((r.data as Record<string, unknown>).name as string)
-            : r.id,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    return { board, members, accounts };
-  });
+  const data = await loadPipelineData({ tenantId: ctx.tenant.id, filters });
 
   if (!data.board) {
     return (

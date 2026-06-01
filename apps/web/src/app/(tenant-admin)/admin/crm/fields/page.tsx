@@ -1,7 +1,5 @@
-import { entityTypes, withTenant } from "@adserve/database";
-import { and, eq } from "drizzle-orm";
-import { listFieldDefinitions } from "@adserve/module-framework";
 import { requirePermission } from "@/lib/permissions";
+import { loadAdminFieldsData } from "@/lib/admin/loaders";
 import { FieldsManager } from "./_components/fields-manager";
 
 export const dynamic = "force-dynamic";
@@ -26,22 +24,7 @@ export default async function CrmFieldsPage({
     ? sp.entity!
     : "account";
 
-  const fields = await withTenant(ctx.tenant.id, async (tx) => {
-    const [entity] = await tx
-      .select({ id: entityTypes.id })
-      .from(entityTypes)
-      .where(
-        and(
-          eq(entityTypes.tenantId, ctx.tenant.id),
-          eq(entityTypes.slug, entitySlug)
-        )
-      );
-    if (!entity) return [];
-    return listFieldDefinitions(tx, {
-      tenantId: ctx.tenant.id,
-      entityTypeId: entity.id,
-    });
-  });
+  const fields = await loadAdminFieldsData({ tenantId: ctx.tenant.id, entitySlug });
 
   return (
     <div>

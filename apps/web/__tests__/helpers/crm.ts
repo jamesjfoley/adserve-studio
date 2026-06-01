@@ -7,7 +7,7 @@ import {
   createTestMembership,
   deleteTestTenant,
 } from "@adserve/database/test-helpers";
-import { tenants } from "@adserve/database";
+import { tenants, modules, tenantModules } from "@adserve/database";
 import { activateCrmForTenant } from "@adserve/crm";
 
 /**
@@ -49,6 +49,22 @@ export async function setupCrmTenant(): Promise<CrmTestSetup> {
   });
 
   await activateCrmForTenant(testDb, { tenantId: tenant.id });
+
+  // Enable the CRM module for the tenant. activateCrmForTenant sets up entity
+  // types/perms but does NOT write tenant_modules — in real provisioning that's
+  // done by provision-tenant / the Clerk webhook. Mirror that here so the
+  // tenant looks fully provisioned (the /admin settings, dashboard counts, and
+  // visible-permissions reads depend on an enabled tenant_modules row).
+  const [crmModule] = await testDb
+    .select({ id: modules.id })
+    .from(modules)
+    .where(eq(modules.slug, "crm"));
+  if (crmModule) {
+    await testDb
+      .insert(tenantModules)
+      .values({ tenantId: tenant.id, moduleId: crmModule.id, enabled: true })
+      .onConflictDoNothing();
+  }
 
   const [row] = await testDb
     .select({ settings: tenants.settings })
