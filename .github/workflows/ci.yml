@@ -112,5 +112,10 @@ jobs:
       - name: Seed (privileged)
         run: pnpm db:seed
 
+      # --concurrency=1: the package test suites share one CI database, and the
+      # crm reprovisionCrm test is GLOBAL (it scans/acts on every CRM-enabled
+      # tenant). Run serially so it can't race a concurrent web suite that is
+      # creating/tearing down real CRM-enabled tenants (FK violation otherwise).
+      # This is the documented fix for the parallel-turbo DB-test contention.
       - name: Run tests (app queries enforce RLS as adserve_app)
-        run: pnpm test
+        run: pnpm test -- --concurrency=1
