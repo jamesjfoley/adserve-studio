@@ -103,6 +103,9 @@ jobs:
       - name: Enable RLS policies (patched 001, NULLIF guard)
         run: psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/001-enable-rls.sql
 
+      - name: Create the RLS test role (002 — used by ai-service RLS tests)
+        run: psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/002-create-rls-test-role.sql
+
       - name: Create the NOBYPASSRLS app role (two-identity parity)
         run: psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/dev-rls-roles.sql
 
