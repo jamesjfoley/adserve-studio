@@ -15,8 +15,10 @@ import type { AICapability, AIModel } from "./types";
  *   AI_MODEL_SMART_SEARCH=claude-sonnet-...
  *   AI_MODEL_COMPLEX_ANALYSIS=claude-opus-...
  *
- * NB: a model resolved from an env var must also exist in `MODEL_PRICING`
- * or cost is recorded as 0 (see `calculateCostMicros`).
+ * NB: a model resolved from an env var must also exist in `MODEL_PRICING`,
+ * or the call fails safe — `calculateCostMicros` throws `UnmappedModelError`
+ * and `aiComplete` returns a clean `unmapped_model` error rather than billing
+ * the call at zero (see `calculateCostMicros`).
  */
 export const DEFAULT_CAPABILITY_TO_MODEL: Record<AICapability, AIModel> = {
   field_suggestion: "claude-haiku-4-5-20251001",

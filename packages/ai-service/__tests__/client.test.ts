@@ -109,6 +109,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  // Guard against an env model override leaking into later tests.
+  delete process.env.AI_MODEL_RECORD_CREATION;
 });
 
 // Client initialisation -----------------------------------------------
@@ -294,6 +296,46 @@ describe("error mapping (each class → correct AIError + usage row)", () => {
 
   test("never throws past the boundary even on a non-Error throw", async () => {
     createMock.mockRejectedValue("string failure");
+    await expect(
+      aiComplete(baseRequest(), { recordUsage })
+    ).resolves.toMatchObject({ ok: false });
+  });
+});
+
+// Unmapped model fails safe -------------------------------------------
+
+describe("unmapped model (fail safe)", () => {
+  test("resolved model absent from MODEL_PRICING → unmapped_model error, real token counts on an error row, no silent zero-cost success", async () => {
+    // Env override points record_creation at a model with no pricing entry.
+    process.env.AI_MODEL_RECORD_CREATION = "claude-not-a-real-model";
+    // The API call itself succeeds with real, non-zero tokens; the failure
+    // is post-response, at pricing time.
+    createMock.mockResolvedValue(okResponse(10, 5));
+
+    const res = await aiComplete(baseRequest(), { recordUsage });
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("unreachable");
+    expect(res.error).toMatchObject({
+      code: "unmapped_model",
+      model: "claude-not-a-real-model",
+    });
+    // The Anthropic call ran (the failure is NOT a pre-call short-circuit).
+    expect(createMock).toHaveBeenCalledTimes(1);
+    // Exactly one usage row, status error, cost 0, but the REAL token counts
+    // are preserved (not ZERO_USAGE) so the unpriced attempt stays visible.
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage.mock.calls[0][0]).toMatchObject({
+      status: "error",
+      costMicros: 0,
+      model: "claude-not-a-real-model",
+      tokenUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    });
+  });
+
+  test("never throws past the boundary on an unmapped model", async () => {
+    process.env.AI_MODEL_RECORD_CREATION = "claude-not-a-real-model";
+    createMock.mockResolvedValue(okResponse(10, 5));
     await expect(
       aiComplete(baseRequest(), { recordUsage })
     ).resolves.toMatchObject({ ok: false });

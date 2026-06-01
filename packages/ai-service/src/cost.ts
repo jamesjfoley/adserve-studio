@@ -24,7 +24,8 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Real model IDs (Task 0.7). Prices are Anthropic published list
   // prices as of 2026-05-30 — re-verify quarterly against the pricing
   // page. These keys MUST match the IDs `models.ts` resolves to, or
-  // `calculateCostMicros` returns 0 and the £50 cap can't be enforced.
+  // `calculateCostMicros` throws `UnmappedModelError` (fail safe) and the
+  // call fails cleanly rather than billing at zero under the $50 cap.
   "claude-haiku-4-5-20251001": {
     inputPerMTokenMicros: 1_000_000, // $1 / 1M input
     outputPerMTokenMicros: 5_000_000, // $5 / 1M output
@@ -40,18 +41,39 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
 };
 
 /**
+ * Thrown when a model id has no entry in `MODEL_PRICING`. This is the
+ * fail-safe: an unmapped model MUST surface a clear error rather than
+ * silently bill at zero. A zero-cost row for real token consumption would
+ * never roll into the usage summary and so would slip under the $50 cap —
+ * the exact failure this guards against. `aiComplete` catches this and
+ * maps it to an `unmapped_model` AIError (clean failure, real token counts
+ * preserved on the usage row), so it never escapes the service boundary.
+ */
+export class UnmappedModelError extends Error {
+  readonly model: string;
+  constructor(model: string) {
+    super(
+      `No pricing configured for model '${model}'; refusing to bill at zero.`
+    );
+    this.name = "UnmappedModelError";
+    this.model = model;
+  }
+}
+
+/**
  * Calculate the call cost in microdollars from token usage.
  *
- * Unknown model → returns 0. The call still gets logged with cost 0;
- * ops can investigate via the `model` field on `ai_usage_log` rows.
- * Throwing here would lose visibility into the call entirely.
+ * Unknown model → throws `UnmappedModelError` (fail safe). The attempt is
+ * still recorded by `aiComplete` with its real token counts and a clear
+ * error message, so ops keep visibility via `ai_usage_log` — but the call
+ * fails rather than billing zero and bypassing the cap.
  */
 export function calculateCostMicros(
   model: AIModel,
   usage: TokenUsage
 ): number {
   const pricing = MODEL_PRICING[model];
-  if (!pricing) return 0;
+  if (!pricing) throw new UnmappedModelError(model);
 
   const inputCost =
     (usage.inputTokens / 1_000_000) * pricing.inputPerMTokenMicros;

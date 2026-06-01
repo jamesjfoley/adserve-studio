@@ -58,6 +58,7 @@ export function aiErrorResponse(error: AIError): NextResponse {
     case "invalid_request":
     case "api_error":
     case "internal":
+    case "unmapped_model":
     default:
       return NextResponse.json({ error: "AI service error" }, { status: 502 });
   }

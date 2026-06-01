@@ -17,7 +17,7 @@ import type {
   TokenUsage,
   UsageStatus,
 } from "./types";
-import { calculateCostMicros } from "./cost";
+import { calculateCostMicros, UnmappedModelError } from "./cost";
 import { resolveModelForCapability } from "./models";
 import {
   checkLimits as meteringCheckLimits,
@@ -177,6 +177,9 @@ function retryAfterMs(err: RateLimitError): number {
 function mapError(err: unknown): AIError {
   if (err instanceof MissingApiKeyError) {
     return { code: "internal", message: err.message };
+  }
+  if (err instanceof UnmappedModelError) {
+    return { code: "unmapped_model", model: err.model, message: err.message };
   }
   if (err instanceof RateLimitError) {
     return {
@@ -384,7 +387,24 @@ export async function aiComplete(
       outputTokens: response.usage.output_tokens,
       totalTokens: response.usage.input_tokens + response.usage.output_tokens,
     };
-    const costMicros = calculateCostMicros(model, tokenUsage);
+    // Cost calc fails safe: an unmapped model throws rather than billing 0.
+    // Handle it HERE (not via the generic catch below) so the usage row keeps
+    // the REAL token counts from the response instead of ZERO_USAGE — the
+    // attempt stays visible even though it's unpriced. The line-400 catch
+    // remains the backstop guaranteeing nothing throws past the boundary.
+    let costMicros: number;
+    try {
+      costMicros = calculateCostMicros(model, tokenUsage);
+    } catch (err) {
+      const error = mapError(err);
+      await emit({
+        tokenUsage,
+        costMicros: 0,
+        status: statusForError(error),
+        errorMessage: error.message,
+      });
+      return { ok: false, error };
+    }
     const durationMs = Date.now() - startedAt;
 
     await emit({ tokenUsage, costMicros, status: "success" });
