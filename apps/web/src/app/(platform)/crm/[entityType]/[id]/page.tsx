@@ -71,6 +71,7 @@ export default async function CrmDetailPage({ params }: PageProps) {
 
   return (
     <CrmDetailClient
+      entitySlug={slug}
       collectionSegment={crmCollectionSegment(slug) ?? segment}
       entityName={entityMeta?.name ?? slug}
       recordId={record.id}

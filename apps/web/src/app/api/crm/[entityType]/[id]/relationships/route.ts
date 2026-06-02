@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { auth } from "@clerk/nextjs/server";
 import {
   records,
@@ -14,6 +14,7 @@ import {
   type TenantContext,
 } from "@/lib/permissions";
 import { writeAuditLog } from "@/lib/crm/audit";
+import { createRecordLink } from "@/lib/crm/link-records";
 
 type Params = { params: Promise<{ entityType: string; id: string }> };
 
@@ -177,99 +178,19 @@ export async function POST(req: NextRequest, { params }: Params) {
       return { kind: "type_mismatch" as const };
     }
 
-    // Determine up-front whether this exact link already exists, so the
-    // response distinguishes a brand-new link (201) from an idempotent
-    // no-op/update (200). Done inside the tx before any mutation.
-    const [existingLink] = await tx
-      .select({ id: recordRelationships.id })
-      .from(recordRelationships)
-      .where(
-        and(
-          eq(recordRelationships.tenantId, tenant.id),
-          eq(recordRelationships.relationshipId, rel.id),
-          eq(recordRelationships.sourceRecordId, owningRecord.id),
-          eq(recordRelationships.targetRecordId, targetRecord.id)
-        )
-      );
-
-    // Cardinality guard: many_to_one on the source side means one target per
-    // source — replace any existing link of this relationship for this source
-    // (except the one we're about to (re)create) inside the same tx.
-    if (rel.relationshipType === "many_to_one") {
-      await tx
-        .delete(recordRelationships)
-        .where(
-          and(
-            eq(recordRelationships.tenantId, tenant.id),
-            eq(recordRelationships.relationshipId, rel.id),
-            eq(recordRelationships.sourceRecordId, owningRecord.id),
-            ne(recordRelationships.targetRecordId, targetRecord.id)
-          )
-        );
-    }
-
-    // Single-primary invariant: if this link is being set primary, FIRST clear
-    // isPrimary on ALL sibling links for the same (relationshipId, source),
-    // THEN set it on the target link below. Read-modify-write is racy under
-    // concurrent writers — accepted for v1, all inside this one tx.
-    if (isPrimary) {
-      await tx
-        .update(recordRelationships)
-        .set({
-          metadata: sql`${recordRelationships.metadata} - 'isPrimary'`,
-        })
-        .where(
-          and(
-            eq(recordRelationships.tenantId, tenant.id),
-            eq(recordRelationships.relationshipId, rel.id),
-            eq(recordRelationships.sourceRecordId, owningRecord.id)
-          )
-        );
-    }
-
-    const metadata = isPrimary ? { isPrimary: true } : {};
-
-    // Idempotent insert keyed on the unique index
-    // (relationshipId, sourceRecordId, targetRecordId). A duplicate never
-    // creates a second row; if isPrimary is set we still promote the existing
-    // link (the clear-siblings above + the metadata set here).
-    const inserted = await tx
-      .insert(recordRelationships)
-      .values({
-        tenantId: tenant.id,
-        relationshipId: rel.id,
-        sourceRecordId: owningRecord.id,
-        targetRecordId: targetRecord.id,
-        metadata,
-      })
-      .onConflictDoUpdate({
-        target: [
-          recordRelationships.relationshipId,
-          recordRelationships.sourceRecordId,
-          recordRelationships.targetRecordId,
-        ],
-        set: { metadata },
-      })
-      .returning({ id: recordRelationships.id });
-
-    const [link] = inserted;
-    const isNew = !existingLink;
-
-    await writeAuditLog(tx, {
+    // Cardinality guard, single-primary invariant, idempotent insert, and the
+    // audit row all live in the shared link writer so the contact-create
+    // combined endpoint (WS3) applies identical semantics.
+    const { linkId, isNew } = await createRecordLink(tx, {
       tenantId: tenant.id,
       userId: user.id,
-      action: "link",
-      resourceType: "relationship",
-      resourceId: link.id,
-      changes: {
-        relationshipName,
-        sourceRecordId: owningRecord.id,
-        targetRecordId: targetRecord.id,
-        isPrimary,
-      },
+      relationship: rel,
+      sourceRecordId: owningRecord.id,
+      targetRecordId: targetRecord.id,
+      isPrimary,
     });
 
-    return { kind: "ok" as const, linkId: link.id, isNew };
+    return { kind: "ok" as const, linkId, isNew };
   });
 
   switch (outcome.kind) {

@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./url": "./src/url.ts"
+    "./url": "./src/url.ts",
+    "./relationships": "./src/relationships.ts"
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",

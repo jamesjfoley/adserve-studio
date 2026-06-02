@@ -16,6 +16,8 @@ import type {
 import { DynamicForm } from "@/components/dynamic-form";
 import { stateToQuery, type ListState } from "@/lib/crm/list-params";
 import type { TenantMember } from "@/lib/crm/members";
+import { PermissionGate } from "@/lib/permissions-client";
+import { AccountMultiSelect } from "./account-multi-select";
 
 interface Choice {
   value: string;
@@ -34,6 +36,12 @@ interface CrmListClientProps {
   createLayoutConfig: LayoutConfig;
   members: TenantMember[];
   owner?: string | null;
+  /**
+   * WS3 — when true (the contact list), the create modal shows an account
+   * multi-select and routes create+link through the combined endpoint so the
+   * contact + its account links are written atomically.
+   */
+  enableAccountPicker?: boolean;
   locale: string;
 }
 
@@ -71,12 +79,14 @@ export function CrmListClient({
   createLayoutConfig,
   members,
   owner,
+  enableAccountPicker = false,
   locale,
 }: CrmListClientProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [newOpen, setNewOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -125,17 +135,29 @@ export function CrmListClient({
 
   async function handleCreate(validated: Record<string, unknown>) {
     setCreateError(null);
-    const res = await fetch(`/api/crm/${collectionSegment}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: validated }),
-    });
+    // WS3 — the contact create flow posts to the combined endpoint so the
+    // contact and its account links are written atomically (all-or-nothing).
+    const res = enableAccountPicker
+      ? await fetch(`/api/crm/contacts/with-accounts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: validated,
+            accountIds: selectedAccountIds,
+          }),
+        })
+      : await fetch(`/api/crm/${collectionSegment}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: validated }),
+        });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setCreateError(body.error ?? `Create failed (${res.status})`);
       return;
     }
     setNewOpen(false);
+    setSelectedAccountIds([]);
     startTransition(() => router.refresh());
   }
 
@@ -194,6 +216,7 @@ export function CrmListClient({
             type="button"
             onClick={() => {
               setCreateError(null);
+              setSelectedAccountIds([]);
               setNewOpen(true);
             }}
             className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
@@ -333,7 +356,15 @@ export function CrmListClient({
                 ✕
               </button>
             </div>
-            <div className="mt-4">
+            <div className="mt-4 space-y-4">
+              {enableAccountPicker ? (
+                <PermissionGate permission="contact.create">
+                  <AccountMultiSelect
+                    selectedIds={selectedAccountIds}
+                    onChange={setSelectedAccountIds}
+                  />
+                </PermissionGate>
+              ) : null}
               <DynamicForm
                 layoutConfig={createLayoutConfig}
                 fields={fields}
