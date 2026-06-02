@@ -72,6 +72,9 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
       createLayoutConfig={data.layoutConfig}
       members={data.members}
       owner={parsed.owner}
+      // WS3 — the contact create flow gains an account multi-select that
+      // routes create+link through the combined endpoint atomically.
+      enableAccountPicker={slug === "contact"}
       locale="en-GB"
     />
   );
