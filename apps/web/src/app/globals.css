@@ -8,6 +8,50 @@
   --muted: #f5f5f5;
   --muted-foreground: #737373;
   --border: #e5e5e5;
+
+  /* WS4 design-system tokens — additive. Values are value-for-value with the
+     inline section styles they replace, so the Panel refactor is visually
+     neutral aside from a mild elevation lift. */
+
+  /* Spacing scale (4px base, geometric) */
+  --space-1: 0.25rem; /* 4px  */
+  --space-2: 0.5rem; /* 8px  */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px — current section padding (p-6) */
+  --space-8: 2rem; /* 32px */
+
+  /* Radius */
+  --radius-sm: 0.375rem; /* matches rounded-md controls */
+  --radius-md: 0.5rem; /* matches rounded-lg */
+  --radius-panel: 0.75rem; /* matches the current rounded-xl section */
+  --radius-full: 9999px; /* badges/pills */
+
+  /* Border */
+  --border-width: 1px;
+  --border-color: var(--border); /* alias onto the existing token */
+
+  /* Elevation (box-shadow tokens) */
+  --elevation-0: none;
+  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --elevation-2: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Padding (panel-scoped, layered on the spacing scale) */
+  --panel-padding: var(--space-6); /* default panel inset, = current p-6 */
+  --panel-padding-sm: var(--space-4); /* compact panel inset */
+
+  /* Surface tokens */
+  --panel-bg: var(--background); /* panels sit on the page background today */
+  --panel-border: var(--border);
+  --page-bg: var(--background);
+
+  /* Palette token seam for WS6 (names introduced, NOT wired to any selection
+     mechanism in WS4) */
+  --accent: var(--brand-500, #185fa5); /* mirrors tailwind brand-500 */
+  --accent-foreground: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,6 +61,15 @@
     --muted: #1a1a1a;
     --muted-foreground: #a3a3a3;
     --border: #262626;
+
+    /* WS4 dark-mode elevation — stronger shadows so they read on a dark
+       surface. Surface/border/accent vars resolve through the already-dark
+       base vars above, so they need no explicit override here. */
+    --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --elevation-2: 0 1px 3px 0 rgb(0 0 0 / 0.5),
+      0 1px 2px -1px rgb(0 0 0 / 0.5);
+    --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.6),
+      0 4px 6px -4px rgb(0 0 0 / 0.6);
   }
 }
 

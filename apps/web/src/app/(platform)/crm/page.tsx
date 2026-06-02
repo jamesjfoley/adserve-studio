@@ -5,6 +5,7 @@ import { crmCollectionSegment } from "@adserve/crm";
 import { getTenantContextOrNull } from "@/lib/permissions";
 import { formatCurrency } from "@/lib/crm/dashboard";
 import { loadCrmDashboardData } from "@/lib/crm/load-dashboard-data";
+import { Panel } from "@/components/ui/panel";
 
 const CRM_ENTITY_SLUGS = ["account", "contact", "lead", "opportunity"] as const;
 const LOCALE = "en-GB";
@@ -51,10 +52,7 @@ export default async function CrmDashboardPage() {
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Widget 1 — Pipeline value by stage */}
         {canPipeline ? (
-          <section className="rounded-xl border border-[var(--border)] p-6 lg:col-span-2">
-            <h2 className="text-sm font-semibold tracking-tight">
-              Pipeline value by stage
-            </h2>
+          <Panel title="Pipeline value by stage" className="lg:col-span-2">
             {data.pipeline.length === 0 ? (
               <p className="mt-3 text-sm text-[var(--muted-foreground)]">
                 No pipeline stages configured.
@@ -79,15 +77,12 @@ export default async function CrmDashboardPage() {
                 ))}
               </ul>
             )}
-          </section>
+          </Panel>
         ) : null}
 
         {/* Widget 4 — Lead conversion funnel */}
         {canLead ? (
-          <section className="rounded-xl border border-[var(--border)] p-6">
-            <h2 className="text-sm font-semibold tracking-tight">
-              Lead conversion funnel
-            </h2>
+          <Panel title="Lead conversion funnel">
             {data.funnel.every((s) => s.count === 0) ? (
               <p className="mt-3 text-sm text-[var(--muted-foreground)]">
                 No leads yet.
@@ -112,15 +107,12 @@ export default async function CrmDashboardPage() {
                 ))}
               </ul>
             )}
-          </section>
+          </Panel>
         ) : null}
 
         {/* Widget 5 — Weighted revenue forecast */}
         {canPipeline && data.forecast ? (
-          <section className="rounded-xl border border-[var(--border)] p-6">
-            <h2 className="text-sm font-semibold tracking-tight">
-              Revenue forecast
-            </h2>
+          <Panel title="Revenue forecast">
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               Expected revenue (amount × probability) by close date.
             </p>
@@ -140,15 +132,12 @@ export default async function CrmDashboardPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </Panel>
         ) : null}
 
         {/* Widget 2 — Upcoming activities (next 7 days) */}
         {canActivities ? (
-          <section className="rounded-xl border border-[var(--border)] p-6">
-            <h2 className="text-sm font-semibold tracking-tight">
-              Upcoming tasks (next 7 days)
-            </h2>
+          <Panel title="Upcoming tasks (next 7 days)">
             {data.upcoming.length === 0 ? (
               <p className="mt-3 text-sm text-[var(--muted-foreground)]">
                 Nothing due in the next 7 days.
@@ -173,15 +162,12 @@ export default async function CrmDashboardPage() {
                 })}
               </ul>
             )}
-          </section>
+          </Panel>
         ) : null}
 
         {/* Widget 3 — Recently modified records */}
         {readableSlugs.length > 0 ? (
-          <section className="rounded-xl border border-[var(--border)] p-6">
-            <h2 className="text-sm font-semibold tracking-tight">
-              Recently modified
-            </h2>
+          <Panel title="Recently modified">
             {data.recent.length === 0 ? (
               <p className="mt-3 text-sm text-[var(--muted-foreground)]">
                 No records yet.
@@ -206,7 +192,7 @@ export default async function CrmDashboardPage() {
                 })}
               </ul>
             )}
-          </section>
+          </Panel>
         ) : null}
       </div>
     </div>
