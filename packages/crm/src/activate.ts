@@ -134,9 +134,17 @@ export async function activateCrmForTenant(
     entityTypeIds[entitySpec.slug] = result.entityType.id;
   }
 
-  // Relationships — SELECT-then-INSERT keyed on
-  // (tenantId, sourceEntityTypeId, targetEntityTypeId, relationshipType).
-  // No DB unique constraint exists on that tuple, so we check first.
+  // Relationships — SELECT-then-INSERT keyed on the STABLE NATURAL KEY
+  // (tenantId, name). No DB unique constraint exists on the relationships
+  // table, so we check first. The match deliberately does NOT depend on the
+  // cardinality VALUE: `name` is the stable slug, while `relationship_type`
+  // is mutable (WS1 / sql/007 flips it in place). A value-sensitive match
+  // would miss a pre-existing row during the window where the stored
+  // cardinality ≠ the spec's, and insert a DUPLICATE registry row in either
+  // deploy ordering. Matching on (tenantId, name) makes activation idempotent
+  // regardless of the stored relationship_type. Activation's job is "ensure
+  // the relationship exists" — the migration (sql/007) owns flipping the
+  // stored cardinality, so we skip-on-match and never reconcile here.
   let relationshipsCreated = 0;
   for (const rel of CRM_RELATIONSHIPS) {
     const sourceEntityTypeId = entityTypeIds[rel.sourceEntitySlug];
@@ -151,9 +159,7 @@ export async function activateCrmForTenant(
       .where(
         and(
           eq(schemaRelationships.tenantId, tenantId),
-          eq(schemaRelationships.sourceEntityTypeId, sourceEntityTypeId),
-          eq(schemaRelationships.targetEntityTypeId, targetEntityTypeId),
-          eq(schemaRelationships.relationshipType, relationshipType)
+          eq(schemaRelationships.name, rel.name)
         )
       )
       .limit(1);

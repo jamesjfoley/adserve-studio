@@ -24,9 +24,11 @@ export const CONTACT_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
   name: "contact_belongs_to_account",
   sourceEntitySlug: "contact",
   targetEntitySlug: "account",
-  cardinality: "many_to_one",
+  // WS1: contact↔account is true many-to-many. The "primary" account lives in
+  // record_relationships.metadata.isPrimary, not in the cardinality.
+  cardinality: "many_to_many",
   cascadeDelete: false,
-  description: "A contact belongs to one account",
+  description: "A contact may belong to several accounts",
 };
 
 export const OPPORTUNITY_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
@@ -39,12 +41,18 @@ export const OPPORTUNITY_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
 };
 
 export const OPPORTUNITY_HAS_PRIMARY_CONTACT: CrmRelationshipSpec = {
+  // NOTE: the `name` slug and this exported constant identifier are LOAD-BEARING.
+  // The convert route imports OPPORTUNITY_HAS_PRIMARY_CONTACT and resolves the
+  // relationship row by `.name` ("opportunity_has_primary_contact"); a rename
+  // would silently drop the opp↔contact link (WS1 Condition 1). Only the
+  // cardinality flips to many-to-many — the "primary" contact now lives in
+  // record_relationships.metadata.isPrimary, not in the slug.
   name: "opportunity_has_primary_contact",
   sourceEntitySlug: "opportunity",
   targetEntitySlug: "contact",
-  cardinality: "many_to_one",
+  cardinality: "many_to_many",
   cascadeDelete: false,
-  description: "An opportunity may have a primary contact",
+  description: "An opportunity may have several contacts (one marked primary)",
 };
 
 export const CRM_RELATIONSHIPS: CrmRelationshipSpec[] = [

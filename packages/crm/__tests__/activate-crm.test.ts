@@ -121,7 +121,7 @@ describe("activateCrmForTenant", () => {
     });
   });
 
-  test("creates the 3 CRM relationships as many_to_one with correct entity FKs", async () => {
+  test("creates the 3 CRM relationships with per-spec cardinality + correct entity FKs", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant } = await setupTestContext(tx);
       const result = await activateCrmForTenant(tx, { tenantId: tenant.id });
@@ -131,12 +131,25 @@ describe("activateCrmForTenant", () => {
         .from(schemaRelationships)
         .where(eq(schemaRelationships.tenantId, tenant.id));
       expect(rels).toHaveLength(CRM_RELATIONSHIPS.length);
-      expect(rels.every((r) => r.relationshipType === "many_to_one")).toBe(true);
 
-      // Each spec is represented with source/target resolved to entity ids.
+      // WS1: contact↔account and opportunity↔contact are now many_to_many;
+      // opportunity↔account stays many_to_one. The DB relationship_type must
+      // match each spec's cardinality (the spec is the source of truth).
+      const typeByName = new Map(rels.map((r) => [r.name, r.relationshipType]));
+      expect(typeByName.get("contact_belongs_to_account")).toBe("many_to_many");
+      expect(typeByName.get("opportunity_has_primary_contact")).toBe(
+        "many_to_many"
+      );
+      expect(typeByName.get("opportunity_belongs_to_account")).toBe(
+        "many_to_one"
+      );
+
+      // Each spec is represented with source/target resolved to entity ids,
+      // and the stored relationship_type equals the spec cardinality.
       for (const spec of CRM_RELATIONSHIPS) {
         const match = rels.find((r) => r.name === spec.name);
         expect(match).toBeDefined();
+        expect(match!.relationshipType).toBe(spec.cardinality);
         expect(match!.sourceEntityTypeId).toBe(
           result.entityTypeIds[spec.sourceEntitySlug]
         );
