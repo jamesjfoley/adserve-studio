@@ -22,6 +22,7 @@ export type {
 export {
   MODEL_PRICING,
   calculateCostMicros,
+  UnmappedModelError,
   DEFAULT_MONTHLY_COST_LIMIT_MICROS,
   type ModelPricing,
 } from "./cost";

@@ -55,6 +55,15 @@ export function aiErrorResponse(error: AIError): NextResponse {
         { error: "AI request timed out" },
         { status: 504 }
       );
+    case "unmapped_model":
+      // Server-side billing misconfiguration: the resolved model has no price
+      // entry, so the call was refused before any tokens were spent. This is
+      // not transient — retrying changes nothing. Return a non-retryable 500
+      // with a clear body and NO Retry-After header.
+      return NextResponse.json(
+        { error: "AI model is not configured for billing" },
+        { status: 500 }
+      );
     case "invalid_request":
     case "api_error":
     case "internal":

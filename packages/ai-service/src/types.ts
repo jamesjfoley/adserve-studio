@@ -61,7 +61,8 @@ export type AIErrorCode =
   | "api_error"
   | "timeout"
   | "internal"
-  | "invalid_request";
+  | "invalid_request"
+  | "unmapped_model";
 
 export type AIError =
   | { code: "over_limit"; message: string }
@@ -69,7 +70,8 @@ export type AIError =
   | { code: "api_error"; status: number; message: string }
   | { code: "timeout"; message: string }
   | { code: "internal"; message: string }
-  | { code: "invalid_request"; message: string };
+  | { code: "invalid_request"; message: string }
+  | { code: "unmapped_model"; model: string; message: string };
 
 export type AICompletionResponse =
   | {
