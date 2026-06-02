@@ -12,7 +12,6 @@
       "Bash(rm -rf /:*)",
       "Bash(rm -rf ~:*)",
       "Bash(sudo:*)",
-      "Bash(gh pr merge:*)",
       "Bash(git push origin main:*)"
     ]
   }
