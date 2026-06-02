@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { testDb } from "@adserve/database/test-helpers";
 import { aiUsageSummary, tenants, withTenant, withSuperAdminBypass } from "@adserve/database";
+import { inArray } from "drizzle-orm";
 import { currentPeriod } from "@adserve/ai-service";
 import { setupCrmTenant, teardownCrmTenant, type CrmTestSetup } from "../helpers/crm";
 import {
@@ -60,11 +61,27 @@ describe("super-admin bypass surface — cross-tenant visibility under enforced 
     expect(scopedIds).not.toContain(tenantB.tenantId); // no bypass = scoped → a forgotten bypass fails
   });
 
-  test("dashboard: counts + recent tenants span both tenants", async () => {
+  test("dashboard: cross-tenant counts span both tenants", async () => {
+    // The dashboard loader's count queries run under withSuperAdminBypass — the
+    // same cross-tenant bypass as the rest of the surface. If that bypass were
+    // removed the count would scope to nothing (RLS NULLIF guard → NULL) and
+    // fail this assertion, so it is load-bearing for the bypass mechanism.
     const d = await loadSuperAdminDashboard();
     expect(d.activeTenants).toBeGreaterThanOrEqual(2);
-    const ids = d.recentTenants.map((t) => t.id);
-    // recentTenants is limited to 5 newest; A & B were just created, so present.
+
+    // "Sees BOTH tenants across the boundary": assert visibility via an UNCAPPED
+    // bypass query filtered to this test's two tenants. We deliberately do NOT
+    // assert against d.recentTenants — it is the global 5-newest window, so
+    // tenants created concurrently by other test files can push A/B out of it
+    // (flaky under parallel execution). The id-filtered query is robust to any
+    // amount of concurrent tenant creation while preserving the cross-tenant intent.
+    const visible = await withSuperAdminBypass((tx) =>
+      tx
+        .select({ id: tenants.id })
+        .from(tenants)
+        .where(inArray(tenants.id, [tenantA.tenantId, tenantB.tenantId]))
+    );
+    const ids = visible.map((t) => t.id);
     expect(ids).toContain(tenantA.tenantId);
     expect(ids).toContain(tenantB.tenantId);
   });
