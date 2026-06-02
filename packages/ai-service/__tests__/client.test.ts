@@ -302,14 +302,13 @@ describe("error mapping (each class → correct AIError + usage row)", () => {
   });
 });
 
-// Unmapped model fails safe -------------------------------------------
+// Unmapped RESOLVED model — pre-call fail safe ------------------------
 
-describe("unmapped model (fail safe)", () => {
-  test("resolved model absent from MODEL_PRICING → unmapped_model error, real token counts on an error row, no silent zero-cost success", async () => {
+describe("unmapped resolved model (pre-call fail safe)", () => {
+  test("resolved model absent from MODEL_PRICING → rejected BEFORE any API call (no tokens spent), unmapped_model error, ZERO_USAGE row", async () => {
     // Env override points record_creation at a model with no pricing entry.
     process.env.AI_MODEL_RECORD_CREATION = "claude-not-a-real-model";
-    // The API call itself succeeds with real, non-zero tokens; the failure
-    // is post-response, at pricing time.
+    // Even though the API *would* succeed, the guard must fire first.
     createMock.mockResolvedValue(okResponse(10, 5));
 
     const res = await aiComplete(baseRequest(), { recordUsage });
@@ -320,25 +319,95 @@ describe("unmapped model (fail safe)", () => {
       code: "unmapped_model",
       model: "claude-not-a-real-model",
     });
-    // The Anthropic call ran (the failure is NOT a pre-call short-circuit).
-    expect(createMock).toHaveBeenCalledTimes(1);
-    // Exactly one usage row, status error, cost 0, but the REAL token counts
-    // are preserved (not ZERO_USAGE) so the unpriced attempt stays visible.
+    // The pre-call guard fired: NO Anthropic call, so no tokens were spent.
+    expect(createMock).not.toHaveBeenCalled();
+    // Exactly one usage row: status error, cost 0, ZERO_USAGE (nothing was
+    // consumed — the call never reached the API).
     expect(recordUsage).toHaveBeenCalledTimes(1);
     expect(recordUsage.mock.calls[0][0]).toMatchObject({
       status: "error",
       costMicros: 0,
       model: "claude-not-a-real-model",
-      tokenUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     });
   });
 
-  test("never throws past the boundary on an unmapped model", async () => {
+  test("never throws past the boundary on an unmapped resolved model", async () => {
     process.env.AI_MODEL_RECORD_CREATION = "claude-not-a-real-model";
     createMock.mockResolvedValue(okResponse(10, 5));
     await expect(
       aiComplete(baseRequest(), { recordUsage })
     ).resolves.toMatchObject({ ok: false });
+  });
+});
+
+// Unmapped RESPONSE model — post-call backstop ------------------------
+
+describe("unmapped model returned by the API (post-call backstop)", () => {
+  test("API returns an unpriced model → conservative metering + alert, call still succeeds (cost not dropped)", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Requested model (sonnet) IS priced → the pre-call guard passes. The API
+    // then responds with a DIFFERENT, unpriced model id.
+    createMock.mockResolvedValue({
+      content: [{ type: "text", text: "hello" }],
+      usage: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+      model: "claude-some-new-snapshot",
+    });
+
+    const res = await aiComplete(baseRequest(), { recordUsage });
+
+    // The call succeeded — a paid result is never dropped.
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error("unreachable");
+    expect(createMock).toHaveBeenCalledTimes(1);
+    // Conservative = highest known rate (opus: $5/M in + $25/M out).
+    // 1M + 1M → 5e6 + 25e6 = 30_000_000 micros.
+    expect(res.costMicros).toBe(30_000_000);
+
+    // Ops were alerted, naming the offending model.
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(String(errSpy.mock.calls[0][0])).toContain(
+      "claude-some-new-snapshot"
+    );
+
+    // One usage row: success, conservative cost, REAL tokens, anomaly flagged.
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage.mock.calls[0][0]).toMatchObject({
+      status: "success",
+      costMicros: 30_000_000,
+      tokenUsage: {
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+        totalTokens: 2_000_000,
+      },
+    });
+    expect(recordUsage.mock.calls[0][0].requestMetadata).toMatchObject({
+      conservativePricing: true,
+      unmappedResponseModel: "claude-some-new-snapshot",
+    });
+
+    errSpy.mockRestore();
+  });
+
+  test("API returns a priced model id → normal pricing, no alert, no conservative flag", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    createMock.mockResolvedValue({
+      content: [{ type: "text", text: "hi" }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+      model: "claude-sonnet-4-6",
+    });
+
+    const res = await aiComplete(baseRequest(), { recordUsage });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error("unreachable");
+    expect(res.costMicros).toBe(105);
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(
+      recordUsage.mock.calls[0][0].requestMetadata.conservativePricing
+    ).toBeUndefined();
+
+    errSpy.mockRestore();
   });
 });
 

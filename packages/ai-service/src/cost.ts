@@ -42,12 +42,16 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
 
 /**
  * Thrown when a model id has no entry in `MODEL_PRICING`. This is the
- * fail-safe: an unmapped model MUST surface a clear error rather than
- * silently bill at zero. A zero-cost row for real token consumption would
- * never roll into the usage summary and so would slip under the $50 cap —
- * the exact failure this guards against. `aiComplete` catches this and
- * maps it to an `unmapped_model` AIError (clean failure, real token counts
- * preserved on the usage row), so it never escapes the service boundary.
+ * fail-safe: an unmapped model MUST surface rather than silently bill at zero
+ * (a zero-cost row for real token consumption would never roll into the usage
+ * summary and so would slip under the $50 cap). `aiComplete` enforces this on
+ * two tiers, so this error never escapes the service boundary:
+ *   - PRE-call, it gates on `isModelPriced(resolvedModel)` and refuses with an
+ *     `unmapped_model` AIError before spending any tokens (ZERO_USAGE row).
+ *   - POST-call, `calculateCostMicros` throws this for the model the API
+ *     actually returned; `aiComplete` catches it and meters CONSERVATIVELY
+ *     (see `conservativeCostMicros`) rather than dropping the already-incurred
+ *     cost, then alerts ops.
  */
 export class UnmappedModelError extends Error {
   readonly model: string;
@@ -63,10 +67,10 @@ export class UnmappedModelError extends Error {
 /**
  * Calculate the call cost in microdollars from token usage.
  *
- * Unknown model → throws `UnmappedModelError` (fail safe). The attempt is
- * still recorded by `aiComplete` with its real token counts and a clear
- * error message, so ops keep visibility via `ai_usage_log` — but the call
- * fails rather than billing zero and bypassing the cap.
+ * Unknown model → throws `UnmappedModelError` (fail safe), never returns 0.
+ * Callers must handle the throw: `aiComplete` gates priceability pre-call and
+ * falls back to `conservativeCostMicros` if the API returns an unpriced model
+ * post-call (see `UnmappedModelError`).
  */
 export function calculateCostMicros(
   model: AIModel,
@@ -79,6 +83,37 @@ export function calculateCostMicros(
     (usage.inputTokens / 1_000_000) * pricing.inputPerMTokenMicros;
   const outputCost =
     (usage.outputTokens / 1_000_000) * pricing.outputPerMTokenMicros;
+
+  return Math.round(inputCost + outputCost);
+}
+
+/**
+ * Whether `model` has a pricing entry. Used by `aiComplete` as the PRE-call
+ * gate: a request routed to an unpriceable model is refused before any tokens
+ * are spent, rather than discovered only after the API call.
+ */
+export function isModelPriced(model: AIModel): boolean {
+  return Object.prototype.hasOwnProperty.call(MODEL_PRICING, model);
+}
+
+/**
+ * Conservative fallback cost: price `usage` at the HIGHEST known input and
+ * output rates across `MODEL_PRICING`. Used only as the post-call backstop —
+ * when the API returns a model id we have no price for, the tokens are already
+ * spent, so dropping the cost (billing zero) would let real usage slip under
+ * the cap. Billing the max rate guarantees we never UNDER-charge; slight
+ * over-charging on a genuinely unknown model is the safe direction. Pair it
+ * with a log/alert so the price gets added and the estimate stops being used.
+ */
+export function conservativeCostMicros(usage: TokenUsage): number {
+  const rates = Object.values(MODEL_PRICING);
+  const maxInputMicros = Math.max(...rates.map((p) => p.inputPerMTokenMicros));
+  const maxOutputMicros = Math.max(
+    ...rates.map((p) => p.outputPerMTokenMicros)
+  );
+
+  const inputCost = (usage.inputTokens / 1_000_000) * maxInputMicros;
+  const outputCost = (usage.outputTokens / 1_000_000) * maxOutputMicros;
 
   return Math.round(inputCost + outputCost);
 }

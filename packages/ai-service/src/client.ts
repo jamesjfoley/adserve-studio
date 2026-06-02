@@ -17,7 +17,12 @@ import type {
   TokenUsage,
   UsageStatus,
 } from "./types";
-import { calculateCostMicros, UnmappedModelError } from "./cost";
+import {
+  calculateCostMicros,
+  conservativeCostMicros,
+  isModelPriced,
+  UnmappedModelError,
+} from "./cost";
 import { resolveModelForCapability } from "./models";
 import {
   checkLimits as meteringCheckLimits,
@@ -263,10 +268,12 @@ function resolveSystemPrompt(request: AICompletionRequest): {
  *   1. Validates the request shape
  *   2. Resolves the model from `request.capability`
  *   3. Checks tenant limits (`deps.checkLimits`)
- *   4. Calls the Anthropic API with the capability's prompt template
- *   5. Emits a usage record on EVERY path (`deps.recordUsage`) attributed
+ *   4. Refuses an unpriceable resolved model BEFORE any API call (fail safe —
+ *      no tokens spent on a model we couldn't meter)
+ *   5. Calls the Anthropic API with the capability's prompt template
+ *   6. Emits a usage record on EVERY path (`deps.recordUsage`) attributed
  *      to the calling tenant — success, error, rate-limit, over-limit
- *   6. Returns a structured `AICompletionResponse` — NEVER throws past
+ *   7. Returns a structured `AICompletionResponse` — NEVER throws past
  *      this boundary; errors come back as `{ ok: false, error }`.
  *
  * `deps` is the seam: defaults make it fully operational in Task 0.7;
@@ -292,7 +299,10 @@ export async function aiComplete(
     costMicros: number;
     status: UsageStatus;
     errorMessage?: string;
+    /** Merged into `requestMetadata` — e.g. a conservative-pricing flag. */
+    metadataExtra?: Record<string, unknown>;
   }): Promise<void> => {
+    const { metadataExtra, ...rest } = outcome;
     try {
       await recordUsage({
         tenantId: request.tenantId,
@@ -301,8 +311,10 @@ export async function aiComplete(
         capability: request.capability,
         model,
         durationMs: Date.now() - startedAt,
-        requestMetadata,
-        ...outcome,
+        requestMetadata: metadataExtra
+          ? { ...requestMetadata, ...metadataExtra }
+          : requestMetadata,
+        ...rest,
       });
     } catch {
       // Intentionally swallowed — see comment above.
@@ -367,7 +379,24 @@ export async function aiComplete(
     return { ok: false, error };
   }
 
-  // 4. Call Anthropic.
+  // 4. Pre-call cost guard. Refuse a model we can't price BEFORE spending a
+  //    single token. An unpriceable model can't be metered, and billing it at
+  //    zero would let real usage slip under the cap — the exact fail-safe
+  //    invariant. This is the PRIMARY unmapped-model gate; the post-call
+  //    pricing below is a secondary backstop for the model the API actually
+  //    returns. No API call has happened here, so ZERO_USAGE is correct.
+  if (!isModelPriced(model)) {
+    const error = mapError(new UnmappedModelError(model));
+    await emit({
+      tokenUsage: ZERO_USAGE,
+      costMicros: 0,
+      status: statusForError(error),
+      errorMessage: error.message,
+    });
+    return { ok: false, error };
+  }
+
+  // 5. Call Anthropic.
   try {
     const response = await client.messages.create(
       {
@@ -387,27 +416,37 @@ export async function aiComplete(
       outputTokens: response.usage.output_tokens,
       totalTokens: response.usage.input_tokens + response.usage.output_tokens,
     };
-    // Cost calc fails safe: an unmapped model throws rather than billing 0.
-    // Handle it HERE (not via the generic catch below) so the usage row keeps
-    // the REAL token counts from the response instead of ZERO_USAGE — the
-    // attempt stays visible even though it's unpriced. The line-400 catch
-    // remains the backstop guaranteeing nothing throws past the boundary.
+    // Post-call pricing backstop. The pre-call guard already proved the
+    // REQUESTED model is priceable; price here off the model the API actually
+    // returned (it can differ — e.g. an alias resolving to a dated snapshot).
+    // If THAT model is unmapped the tokens are already spent, so we must NOT
+    // drop the cost: meter conservatively at the highest known rate (never
+    // under-bill the cap) and alert ops, rather than failing a call that
+    // succeeded. calculateCostMicros only ever throws UnmappedModelError.
+    const responseModel = response.model ?? model;
     let costMicros: number;
+    let metadataExtra: Record<string, unknown> | undefined;
     try {
-      costMicros = calculateCostMicros(model, tokenUsage);
+      costMicros = calculateCostMicros(responseModel, tokenUsage);
     } catch (err) {
-      const error = mapError(err);
-      await emit({
-        tokenUsage,
-        costMicros: 0,
-        status: statusForError(error),
-        errorMessage: error.message,
-      });
-      return { ok: false, error };
+      if (!(err instanceof UnmappedModelError)) throw err;
+      costMicros = conservativeCostMicros(tokenUsage);
+      metadataExtra = {
+        conservativePricing: true,
+        unmappedResponseModel: responseModel,
+      };
+      // Log/alert — surfaces to CloudWatch in prod so ops add the price and
+      // the conservative estimate stops being used.
+      console.error(
+        `[ai-service] Anthropic returned unpriced model '${responseModel}'; ` +
+          `metered conservatively at ${costMicros} micros ` +
+          `(input=${tokenUsage.inputTokens}, output=${tokenUsage.outputTokens}). ` +
+          `Add it to MODEL_PRICING.`
+      );
     }
     const durationMs = Date.now() - startedAt;
 
-    await emit({ tokenUsage, costMicros, status: "success" });
+    await emit({ tokenUsage, costMicros, status: "success", metadataExtra });
 
     return {
       ok: true,

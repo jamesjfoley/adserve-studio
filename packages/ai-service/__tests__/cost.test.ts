@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { calculateCostMicros, UnmappedModelError } from "../src/cost";
+import {
+  calculateCostMicros,
+  conservativeCostMicros,
+  isModelPriced,
+  UnmappedModelError,
+} from "../src/cost";
 import type { AIModel, TokenUsage } from "../src/types";
 
 /**
@@ -57,5 +62,55 @@ describe("calculateCostMicros — fail safe on unmapped model", () => {
     expect(() =>
       calculateCostMicros("claude-not-a-real-model", ONE_MILLION_EACH)
     ).toThrow("claude-not-a-real-model");
+  });
+});
+
+describe("isModelPriced — pre-call gate predicate", () => {
+  test("true for every mapped model", () => {
+    expect(isModelPriced("claude-haiku-4-5-20251001")).toBe(true);
+    expect(isModelPriced("claude-sonnet-4-6")).toBe(true);
+    expect(isModelPriced("claude-opus-4-8")).toBe(true);
+  });
+
+  test("false for an unmapped model id", () => {
+    expect(isModelPriced("claude-not-a-real-model")).toBe(false);
+  });
+
+  test("false for inherited Object.prototype keys (own-property check)", () => {
+    // Guards against `"toString" in MODEL_PRICING`-style false positives.
+    expect(isModelPriced("toString")).toBe(false);
+    expect(isModelPriced("constructor")).toBe(false);
+  });
+});
+
+describe("conservativeCostMicros — highest-rate fallback (never under-bills)", () => {
+  // The most expensive known rate is opus-4-8: $5/M in + $25/M out.
+  // 1M in + 1M out → 5_000_000 + 25_000_000 = 30_000_000 micros.
+  test("bills 1M in + 1M out at the most expensive known rate ($30)", () => {
+    expect(conservativeCostMicros(ONE_MILLION_EACH)).toBe(30_000_000);
+  });
+
+  test("is >= every individual model's exact cost for the same usage", () => {
+    const usage: TokenUsage = {
+      inputTokens: 1_000,
+      outputTokens: 500,
+      totalTokens: 1_500,
+    };
+    const conservative = conservativeCostMicros(usage);
+    for (const model of [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-4-6",
+      "claude-opus-4-8",
+    ]) {
+      expect(conservative).toBeGreaterThanOrEqual(
+        calculateCostMicros(model, usage)
+      );
+    }
+  });
+
+  test("zero usage costs zero even at the conservative rate", () => {
+    expect(
+      conservativeCostMicros({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+    ).toBe(0);
   });
 });
