@@ -1,19 +1,28 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type {
   FieldDefinitionWithLabels,
   LayoutConfig,
 } from "@adserve/module-framework";
 import { crmCollectionSegment } from "@adserve/crm/url";
+import {
+  CONTACT_BELONGS_TO_ACCOUNT,
+  OPPORTUNITY_BELONGS_TO_ACCOUNT,
+  OPPORTUNITY_HAS_PRIMARY_CONTACT,
+} from "@adserve/crm/relationships";
 import type { CrmActivityType } from "@adserve/crm";
 import { DynamicForm } from "@/components/dynamic-form";
 import type { SerializedRecord } from "@/lib/crm/serialize";
+import type { RelatedRecord } from "@/lib/crm/relationships";
 import type { SerializedActivity } from "../page";
 import { AiActivitySummary } from "./ai-activity-summary";
+import { DetailTabs, type DetailTab } from "./detail-tabs";
+import { RelatedRecordsPanel } from "./related-records-panel";
 
 interface CrmDetailClientProps {
+  entitySlug: string;
   collectionSegment: string;
   entityName: string;
   recordId: string;
@@ -21,7 +30,7 @@ interface CrmDetailClientProps {
   record: SerializedRecord;
   fields: FieldDefinitionWithLabels[];
   layoutConfig: LayoutConfig;
-  relationships: Record<string, SerializedRecord[]>;
+  relationships: Record<string, RelatedRecord[]>;
   activities: SerializedActivity[];
   canEdit: boolean;
   canArchive: boolean;
@@ -56,6 +65,7 @@ function relatedLabel(rec: SerializedRecord): string {
 }
 
 export function CrmDetailClient({
+  entitySlug,
   collectionSegment,
   entityName,
   recordId,
@@ -193,6 +203,228 @@ export function CrmDetailClient({
 
   const relationshipSlugs = Object.keys(relationships).sort();
 
+  // The "Details" form, reused as the first tab (account/opportunity variants)
+  // and as the main column (contact/lead).
+  const formNode: ReactNode = (
+    <div>
+      <DynamicForm
+        key={mode}
+        layoutConfig={layoutConfig}
+        fields={fields}
+        initialData={record.data}
+        mode={mode}
+        onSubmit={mode === "edit" ? handleSave : undefined}
+        submitError={editError}
+        submitLabel="Save changes"
+        locale={locale}
+      />
+      {mode === "edit" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setEditError(null);
+            setMode("view");
+          }}
+          className="mt-2 text-sm text-[var(--muted-foreground)] hover:underline"
+        >
+          Cancel
+        </button>
+      ) : null}
+    </div>
+  );
+
+  const activityNode: ReactNode = canViewActivities ? (
+    <section aria-label="Activity timeline">
+      <h2 className="text-sm font-semibold tracking-tight">Activity</h2>
+      {showAiSummary ? <AiActivitySummary accountId={recordId} /> : null}
+      {activities.length === 0 ? (
+        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+          No activity yet.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {activities.map((a) => {
+            const text = typeof a.body.text === "string" ? a.body.text : "";
+            return (
+              <li
+                key={a.id}
+                className="border-l-2 border-[var(--border)] pl-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs font-medium">
+                    {titleCase(a.activityType)}
+                  </span>
+                  <time className="text-xs text-[var(--muted-foreground)]">
+                    {dateFmt.format(new Date(a.createdAt))}
+                  </time>
+                </div>
+                {a.subject ? (
+                  <p className="mt-1 text-sm font-medium">{a.subject}</p>
+                ) : null}
+                {text ? (
+                  <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                    {text}
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  ) : null;
+
+  // The legacy "Related" sidebar list (contact / lead variants keep this).
+  const legacyRelatedNode: ReactNode = (
+    <section>
+      <h2 className="text-sm font-semibold tracking-tight">Related</h2>
+      {relationshipSlugs.length === 0 ? (
+        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+          No related records.
+        </p>
+      ) : (
+        relationshipSlugs.map((relSlug) => {
+          const segment = crmCollectionSegment(relSlug) ?? relSlug;
+          return (
+            <div key={relSlug} className="mt-3">
+              <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                {titleCase(relSlug)}
+              </p>
+              <ul className="mt-1 space-y-1">
+                {relationships[relSlug].map((rec) => (
+                  <li key={rec.id}>
+                    <a
+                      href={`/crm/${segment}/${rec.id}`}
+                      className={
+                        rec.isArchived
+                          ? "text-sm text-[var(--muted-foreground)] line-through hover:underline"
+                          : "text-sm text-brand-600 hover:underline"
+                      }
+                    >
+                      {relatedLabel(rec)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })
+      )}
+    </section>
+  );
+
+  // Account/opportunity variants get a tabbed layout managing linked records.
+  const isAccount = entitySlug === "account";
+  const isOpportunity = entitySlug === "opportunity";
+  const useTabs = isAccount || isOpportunity;
+
+  let tabs: DetailTab[] = [];
+  if (isAccount) {
+    tabs = [
+      { id: "details", label: "Details", content: formNode },
+      ...(activityNode
+        ? [{ id: "activity", label: "Activity", content: activityNode }]
+        : []),
+      {
+        id: "contacts",
+        label: "Contacts",
+        content: (
+          // Account is the TARGET of contact_belongs_to_account (contact is the
+          // source). The WS2 route is source-scoped, so add/remove is issued
+          // scoped to the contact with the account as the target id.
+          //
+          // Cosmetic gate: server authorizes link/unlink on the SOURCE record's
+          // permission-or-ownership (WS2 contract) — here the contact — so we
+          // gate on `contact.update`, NOT `account.update`, to predict the real
+          // rule and avoid showing a control the server then 403s. The plan's
+          // "account.update for account-side management" is a deferred product
+          // decision, intentionally not implemented in v1. `canMutate` on the
+          // server remains the real enforcement (incl. the ownership escape-hatch).
+          <RelatedRecordsPanel
+            relatedSlug="contact"
+            relatedPluralLabel="contacts"
+            owningSegment={collectionSegment}
+            owningId={recordId}
+            relationshipName={CONTACT_BELONGS_TO_ACCOUNT.name}
+            direction="owner-is-target"
+            items={relationships.contact ?? []}
+            editPermission="contact.update"
+            supportsPrimary={false}
+            canEdit={canEdit}
+          />
+        ),
+      },
+      {
+        id: "opportunities",
+        label: "Opportunities",
+        content: (
+          // Account is the TARGET of opportunity_belongs_to_account (opportunity
+          // is the source). Same source-scoped WS2 contract as above: gate on
+          // `opportunity.update`, NOT `account.update`. See the Contacts tab note.
+          <RelatedRecordsPanel
+            relatedSlug="opportunity"
+            relatedPluralLabel="opportunities"
+            owningSegment={collectionSegment}
+            owningId={recordId}
+            relationshipName={OPPORTUNITY_BELONGS_TO_ACCOUNT.name}
+            direction="owner-is-target"
+            items={relationships.opportunity ?? []}
+            editPermission="opportunity.update"
+            supportsPrimary={false}
+            canEdit={canEdit}
+          />
+        ),
+      },
+    ];
+  } else if (isOpportunity) {
+    tabs = [
+      { id: "details", label: "Details", content: formNode },
+      ...(activityNode
+        ? [{ id: "activity", label: "Activity", content: activityNode }]
+        : []),
+      {
+        id: "account",
+        label: "Account",
+        content: (
+          // Opportunity is the SOURCE of opportunity_belongs_to_account
+          // (many_to_one → at most one account; linking replaces).
+          <RelatedRecordsPanel
+            relatedSlug="account"
+            relatedPluralLabel="account"
+            owningSegment={collectionSegment}
+            owningId={recordId}
+            relationshipName={OPPORTUNITY_BELONGS_TO_ACCOUNT.name}
+            direction="owner-is-source"
+            items={relationships.account ?? []}
+            editPermission="opportunity.update"
+            supportsPrimary={false}
+            canEdit={canEdit}
+          />
+        ),
+      },
+      {
+        id: "contacts",
+        label: "Contacts",
+        content: (
+          // Opportunity is the SOURCE of opportunity_has_primary_contact; the
+          // single-primary invariant is per opportunity, so set-primary applies.
+          <RelatedRecordsPanel
+            relatedSlug="contact"
+            relatedPluralLabel="contacts"
+            owningSegment={collectionSegment}
+            owningId={recordId}
+            relationshipName={OPPORTUNITY_HAS_PRIMARY_CONTACT.name}
+            direction="owner-is-source"
+            items={relationships.contact ?? []}
+            editPermission="opportunity.update"
+            supportsPrimary
+            canEdit={canEdit}
+          />
+        ),
+      },
+    ];
+  }
+
   return (
     <div>
       {/* Header */}
@@ -264,119 +496,22 @@ export function CrmDetailClient({
         </p>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* Main form */}
-        <div className="lg:col-span-2">
-          <DynamicForm
-            key={mode}
-            layoutConfig={layoutConfig}
-            fields={fields}
-            initialData={record.data}
-            mode={mode}
-            onSubmit={mode === "edit" ? handleSave : undefined}
-            submitError={editError}
-            submitLabel="Save changes"
-            locale={locale}
-          />
-          {mode === "edit" ? (
-            <button
-              type="button"
-              onClick={() => {
-                setEditError(null);
-                setMode("view");
-              }}
-              className="mt-2 text-sm text-[var(--muted-foreground)] hover:underline"
-            >
-              Cancel
-            </button>
-          ) : null}
+      {useTabs ? (
+        <div className="mt-6">
+          <DetailTabs tabs={tabs} />
         </div>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {/* Main form */}
+          <div className="lg:col-span-2">{formNode}</div>
 
-        {/* Sidebar */}
-        <aside className="space-y-6">
-          {/* Related records */}
-          <section>
-            <h2 className="text-sm font-semibold tracking-tight">Related</h2>
-            {relationshipSlugs.length === 0 ? (
-              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                No related records.
-              </p>
-            ) : (
-              relationshipSlugs.map((relSlug) => {
-                const segment = crmCollectionSegment(relSlug) ?? relSlug;
-                return (
-                  <div key={relSlug} className="mt-3">
-                    <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-                      {titleCase(relSlug)}
-                    </p>
-                    <ul className="mt-1 space-y-1">
-                      {relationships[relSlug].map((rec) => (
-                        <li key={rec.id}>
-                          <a
-                            href={`/crm/${segment}/${rec.id}`}
-                            className={
-                              rec.isArchived
-                                ? "text-sm text-[var(--muted-foreground)] line-through hover:underline"
-                                : "text-sm text-brand-600 hover:underline"
-                            }
-                          >
-                            {relatedLabel(rec)}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })
-            )}
-          </section>
-
-          {/* Activity timeline */}
-          {canViewActivities ? (
-            <section aria-label="Activity timeline">
-              <h2 className="text-sm font-semibold tracking-tight">Activity</h2>
-              {showAiSummary ? (
-                <AiActivitySummary accountId={recordId} />
-              ) : null}
-              {activities.length === 0 ? (
-                <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                  No activity yet.
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {activities.map((a) => {
-                    const text =
-                      typeof a.body.text === "string" ? a.body.text : "";
-                    return (
-                      <li
-                        key={a.id}
-                        className="border-l-2 border-[var(--border)] pl-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs font-medium">
-                            {titleCase(a.activityType)}
-                          </span>
-                          <time className="text-xs text-[var(--muted-foreground)]">
-                            {dateFmt.format(new Date(a.createdAt))}
-                          </time>
-                        </div>
-                        {a.subject ? (
-                          <p className="mt-1 text-sm font-medium">{a.subject}</p>
-                        ) : null}
-                        {text ? (
-                          <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                            {text}
-                          </p>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          ) : null}
-        </aside>
-      </div>
+          {/* Sidebar */}
+          <aside className="space-y-6">
+            {legacyRelatedNode}
+            {activityNode}
+          </aside>
+        </div>
+      )}
 
       {/* Log activity modal */}
       {logOpen ? (

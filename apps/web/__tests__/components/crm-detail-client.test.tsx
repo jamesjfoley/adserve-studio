@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "../setup/jest-dom";
 
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -17,6 +18,16 @@ const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, refresh }),
 }));
+
+// PermissionGate is cosmetic; render children so the editing controls are
+// present and testable. Server enforcement is covered by the API tests.
+vi.mock("@/lib/permissions-client", () => ({
+  PermissionGate: ({ children }: { children: ReactNode }) => <>{children}</>,
+  usePermissions: () => ({ hasPermission: () => true, isLoading: false }),
+}));
+
+// The link/picker components fetch lists on mount; stub fetch globally so the
+// tab panels render their empty/loaded states without real network calls.
 
 function fieldDef(args: {
   id: string;
@@ -74,6 +85,7 @@ function record(overrides: Partial<SerializedRecord> = {}): SerializedRecord {
 function renderDetail(overrides: Record<string, unknown> = {}) {
   return render(
     <CrmDetailClient
+      entitySlug="contact"
       collectionSegment="accounts"
       entityName="Account"
       recordId="r1"
@@ -262,5 +274,133 @@ describe("CrmDetailClient", () => {
     expect(
       screen.queryByRole("region", { name: /activity timeline/i })
     ).not.toBeInTheDocument();
+  });
+});
+
+function relatedContact(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "c1",
+    data: { firstName: "Jo", lastName: "Bloggs" },
+    isArchived: false,
+    ownedBy: null,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z",
+    relationshipName: "contact_belongs_to_account",
+    metadata: {},
+    isPrimary: false,
+    ...overrides,
+  };
+}
+
+describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
+  test("account variant renders tabs and lists linked contacts under Contacts", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderDetail({
+      entitySlug: "account",
+      relationships: {
+        contact: [
+          relatedContact({ id: "ca", data: { name: "Alpha" } }),
+          relatedContact({ id: "cb", data: { name: "Bravo" }, isPrimary: true }),
+        ],
+      },
+    });
+
+    // Accessible tablist with the four tabs.
+    const tablist = screen.getByRole("tablist", { name: /record sections/i });
+    expect(within(tablist).getByRole("tab", { name: "Details" })).toBeInTheDocument();
+    expect(within(tablist).getByRole("tab", { name: "Contacts" })).toBeInTheDocument();
+    expect(
+      within(tablist).getByRole("tab", { name: "Opportunities" })
+    ).toBeInTheDocument();
+
+    await user.click(within(tablist).getByRole("tab", { name: "Contacts" }));
+
+    // Both contacts listed; the primary one carries a Primary badge.
+    expect(screen.getByRole("link", { name: "Alpha" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Bravo" })).toBeInTheDocument();
+    expect(screen.getByText("Primary")).toBeInTheDocument();
+  });
+
+  test("primary-linked contact sorts first", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [] }),
+    })));
+    const user = userEvent.setup();
+
+    renderDetail({
+      entitySlug: "account",
+      relationships: {
+        contact: [
+          relatedContact({ id: "ca", data: { name: "Alpha" } }),
+          relatedContact({ id: "cb", data: { name: "Bravo" }, isPrimary: true }),
+        ],
+      },
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Contacts" }));
+    const links = screen.getAllByRole("link", { name: /Alpha|Bravo/ });
+    // Bravo (primary) is rendered before Alpha.
+    expect(links[0]).toHaveTextContent("Bravo");
+    expect(links[1]).toHaveTextContent("Alpha");
+  });
+
+  test("empty Contacts tab shows the explicit empty state (AC 14)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [] }),
+    })));
+    const user = userEvent.setup();
+
+    renderDetail({ entitySlug: "account", relationships: {} });
+    await user.click(screen.getByRole("tab", { name: "Contacts" }));
+    expect(screen.getByText(/no contacts linked yet/i)).toBeInTheDocument();
+  });
+
+  test("opportunity variant shows Account and Contacts tabs", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [] }),
+    })));
+    renderDetail({
+      entitySlug: "opportunity",
+      collectionSegment: "opportunities",
+      entityName: "Opportunity",
+      relationships: {},
+    });
+    const tablist = screen.getByRole("tablist", { name: /record sections/i });
+    expect(within(tablist).getByRole("tab", { name: "Account" })).toBeInTheDocument();
+    expect(within(tablist).getByRole("tab", { name: "Contacts" })).toBeInTheDocument();
+  });
+
+  test("converted lead lacking data.convertedTo renders without error (AC 15)", () => {
+    // Lead is non-tabbed; the back-link section is absent and nothing reads
+    // convertedTo, so the detail view renders gracefully.
+    renderDetail({
+      entitySlug: "lead",
+      collectionSegment: "leads",
+      entityName: "Lead",
+      title: "Jo Bloggs",
+      canConvert: true,
+      record: record({ data: { name: "Jo", status: "converted" } }),
+    });
+    expect(
+      screen.getByRole("heading", { name: /Jo Bloggs/ })
+    ).toBeInTheDocument();
+    // No convert button (already converted) and no "undefined" leaked.
+    expect(
+      screen.queryByRole("button", { name: /convert lead/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
   });
 });
