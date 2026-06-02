@@ -293,4 +293,62 @@ describe("WS1 — cardinality reconciliation (sql/007)", () => {
       expect(flipped.relationshipType).toBe("many_to_many");
     });
   });
+
+  test("acceptance 3b: re-activation is idempotent ACROSS a cardinality mismatch (no duplicate registry row)", async () => {
+    await withTestTransaction(async (tx) => {
+      const { tenant } = await setupTestContext(tx);
+
+      // Fresh activation: spec is many_to_many for the two M2M relationships.
+      await activateCrmForTenant(tx, { tenantId: tenant.id });
+
+      // Simulate the pre-migration / old-code-written state for ONE M2M
+      // relationship: force the stored row back to many_to_one. The spec still
+      // computes many_to_many, so the stored value now MISMATCHES the spec.
+      await tx
+        .update(schemaRelationships)
+        .set({ relationshipType: "many_to_one" })
+        .where(
+          and(
+            eq(schemaRelationships.tenantId, tenant.id),
+            eq(schemaRelationships.name, "contact_belongs_to_account")
+          )
+        );
+
+      // Re-run activation. The OLD value-sensitive check (which keyed on
+      // relationship_type) would NOT find the stored many_to_one row when the
+      // spec computes many_to_many, and would insert a SECOND row. The new
+      // natural-key (tenantId, name) match finds it and skips.
+      const reactivate = await activateCrmForTenant(tx, {
+        tenantId: tenant.id,
+      });
+      expect(reactivate.relationshipsCreated).toBe(0);
+
+      // Exactly ONE registry row for (tenantId, contact_belongs_to_account)
+      // — no duplicate from the mismatch window.
+      const mismatched = await tx
+        .select()
+        .from(schemaRelationships)
+        .where(
+          and(
+            eq(schemaRelationships.tenantId, tenant.id),
+            eq(schemaRelationships.name, "contact_belongs_to_account")
+          )
+        );
+      expect(mismatched).toHaveLength(1);
+
+      // Activation is skip-on-match: it does NOT reconcile the stored value.
+      // The row keeps its forced many_to_one (the migration owns the flip).
+      expect(mismatched[0].relationshipType).toBe("many_to_one");
+
+      // And the total registry remains one row per relationship name.
+      const finalRels = await tx
+        .select()
+        .from(schemaRelationships)
+        .where(eq(schemaRelationships.tenantId, tenant.id));
+      expect(finalRels).toHaveLength(CRM_RELATIONSHIPS.length);
+      for (const name of [...M2M_NAMES, "opportunity_belongs_to_account"]) {
+        expect(finalRels.filter((r) => r.name === name)).toHaveLength(1);
+      }
+    });
+  });
 });
