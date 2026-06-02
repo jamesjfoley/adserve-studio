@@ -741,3 +741,57 @@ plural URLs from `@adserve/crm/url`.)
 No conversation history replay required. Pick the next-not-started
 task from the table above and follow the existing protocol: plan →
 approve → implement → tests → commit.
+
+## CRM Relationships / Conversion / Design System — locked decisions (WS0)
+
+New feature, planned in `docs/plans/crm-relationships-conversion-design-system.md`
+(architect-reviewer-approved, REVISED round 2 — folds in all 9 reviewer
+conditions; the 7 prior open decisions are now LOCKED). The plan is committed
+alongside this WS0 entry. Work is sequenced WS0 → WS1 → … → WS6; **WS0 is
+documentation only (this section) — no code, no schema, no protected-path
+touch.** WS1 is the next workstream and is a PROTECTED PATH (see end).
+
+Read this section + the plan doc to pick up the feature in a fresh session. The
+7 locked answers + the member link/unlink rule + the scope reconciliation:
+
+1. **Convert with an existing account/contact → LINK to existing on user
+   confirm** (no duplicate create). The confirmed POST links to the matched
+   account/contact and creates only what is missing; matched entities emit
+   `link` audit rows. (Open Decision 1, option a.)
+2. **Converted lead → server-side read-only**, enforced in the generic record
+   PATCH path (reviewer Condition 8). Back-links are stored as
+   `records.data.convertedTo = { accountId, contactId, opportunityId }` — an
+   **ordinary JSONB `records.data` write inside the convert `withTenant` tx.
+   NO new relationship type, NO schema/seed change, NO protected-path touch.**
+   (Must not be confused with the rejected "new relationship type" option.)
+3. **contact↔account = TRUE many-to-many; opportunity↔contact = many-to-many.**
+   BOTH carry a "primary" concept via `record_relationships.metadata.isPrimary`
+   (the junction already has a `metadata jsonb` column — no schema change to add
+   it). **Single-primary-per-source is enforced app-level** in the same
+   transaction (Condition 5).
+4. **Admin-selectable palette stored per-org in `tenants.settings.theme`**,
+   applied whole-app, **resolved per-request server-side with NO cross-request
+   caching** (Condition 6).
+5. **Nav pinned-state → `localStorage` for v1.** Hydration flash accepted.
+6. **Convert stays a single bundled `lead.convert` permission** (it creates all
+   3 records — account + contact + opportunity). The three-creates coupling is
+   documented in the convert route; a test pins `lead.convert` to exactly
+   `{owner, admin}` (Condition 3).
+7. **Scope reconciliation accepted: extend, not greenfield.** Relationships +
+   conversion already exist. The **in-place cardinality-flip migration** and the
+   **two-phase convert flow (409 warn → confirm → proceed)** are approved in
+   principle. The CRM permission matrix is **22** — the brief's "23rd"
+   (`ai_usage.read`) is platform-level, outside the CRM matrix.
+
+**Member link/unlink rule (Condition 4):** the link/unlink path honours the
+same permission-OR-ownership escape-hatch (`canMutate`) as the generic record
+PATCH/DELETE — a member can relate records they own; a member lacking BOTH the
+`.update` permission AND ownership gets `403`. Chosen over the `.update`-only
+option, which would silently strip members of edit rights that
+`packages/crm/src/role-assignments.ts` grants.
+
+**Next workstream is PROTECTED.** WS1 (relationship cardinality flip + the
+idempotent reconciliation migration `packages/database/sql/NNN-reconcile-crm-cardinality.sql`,
+landing as `007-…`, plus edits to `packages/crm/src/relationships.ts`) is a
+PROTECTED PATH. Its production-RDS apply is human-gated — do not apply to prod
+RDS unattended; queue it for James.
