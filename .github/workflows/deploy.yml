@@ -3,6 +3,10 @@ name: Deploy to ECS Express Mode
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.claude/**'
   workflow_dispatch:
 
 # One deploy at a time. Don't cancel in-flight deploys mid-rollout.
