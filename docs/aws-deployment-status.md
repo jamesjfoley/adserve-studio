@@ -24,6 +24,12 @@ deployment-history** record (reference plan:
 ### DB — RDS instance `adserve-db`, database `adserve`
 Endpoint `adserve-db.c32e6wm047ec.eu-west-2.rds.amazonaws.com:5432`.
 - Migrations **003–006 applied**; **RLS enabled on 17 tables**.
+- **2026-06-02:** `sql/007-reconcile-crm-cardinality.sql` applied to prod RDS for
+  both tenants — `contact_belongs_to_account` and `opportunity_has_primary_contact`
+  flipped to `many_to_many` (UPDATE 4); `opportunity_belongs_to_account` unchanged.
+  Pre/post verified; no `(tenant_id, name)` duplicates found in prod. Temporary
+  bastion torn down (verified). Optional `UNIQUE(tenant_id, name)` hardening
+  migration still pending (not yet applied).
 - **`001-enable-rls` is NULLIF-patched and LIVE on prod** — the `tenant_isolation`
   policies guard the cast as
   `NULLIF(current_setting('app.current_tenant_id', true), '')::uuid` (fixes the
