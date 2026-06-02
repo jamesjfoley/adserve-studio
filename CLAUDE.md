@@ -179,3 +179,19 @@ The main agent must keep its work visible to James at all times. Long silent per
 8. **If genuinely blocked or uncertain, say so explicitly.** "I'm uncertain how to proceed because X — pausing for clarification" is far better than going quiet. Silence on a hard problem looks identical to silence on a crashed process; the difference must be stated.
 
 The cost of being slightly verbose is essentially zero. The cost of the product owner intervening at a critical moment because the process appeared stalled is potentially significant. Err on the side of more narration, not less.
+
+## Agent workflow (see docs/agent-workflow.md)
+- Development runs through named agents: planner → architect-reviewer (plan review) → builder →
+  qa → architect-reviewer (diff review + open PR + gate-check), orchestrated by the lead session.
+  Agents do not converse peer-to-peer; the lead delegates. architect-reviewer is ONE combined
+  role, not a separate architect and reviewer.
+- The plan at docs/plans/<feature>.md with explicit acceptance criteria is the contract.
+  Build to it, test from it, review against it.
+- ARCHITECTURE.md holds the invariants. A change that violates one is a blocking defect.
+- Autonomous up to opening the PR. Merging to main and deploying to prod are each a human gate;
+  architect-reviewer opens PRs but NEVER merges or deploys.
+- Standing human gates (any time): prod deploys, destructive/irreversible DB ops, RLS/policy
+  changes, IAM/secrets/permission changes, infra changes.
+- Protected paths builder must not edit without an explicit human go-ahead:
+  packages/database/sql/**, RLS-table Drizzle schema, .github/workflows/**, infra/secrets config.
+- Tests run under the RLS-enforced adserve_app harness, never a superuser DB.
