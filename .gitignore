@@ -27,6 +27,8 @@ out/
 .claude/*
 !.claude/agents/
 !.claude/agents/**
+!.claude/skills/
+!.claude/skills/**
 
 # Local-only generated state (e.g. AWS resource ID captures)
 *.local
