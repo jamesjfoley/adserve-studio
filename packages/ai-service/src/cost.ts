@@ -24,7 +24,8 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Real model IDs (Task 0.7). Prices are Anthropic published list
   // prices as of 2026-05-30 — re-verify quarterly against the pricing
   // page. These keys MUST match the IDs `models.ts` resolves to, or
-  // `calculateCostMicros` returns 0 and the £50 cap can't be enforced.
+  // `calculateCostMicros` throws `UnmappedModelError` (fail safe) and the
+  // call fails cleanly rather than billing at zero under the $50 cap.
   "claude-haiku-4-5-20251001": {
     inputPerMTokenMicros: 1_000_000, // $1 / 1M input
     outputPerMTokenMicros: 5_000_000, // $5 / 1M output
@@ -40,23 +41,79 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
 };
 
 /**
+ * Thrown when a model id has no entry in `MODEL_PRICING`. This is the
+ * fail-safe: an unmapped model MUST surface rather than silently bill at zero
+ * (a zero-cost row for real token consumption would never roll into the usage
+ * summary and so would slip under the $50 cap). `aiComplete` enforces this on
+ * two tiers, so this error never escapes the service boundary:
+ *   - PRE-call, it gates on `isModelPriced(resolvedModel)` and refuses with an
+ *     `unmapped_model` AIError before spending any tokens (ZERO_USAGE row).
+ *   - POST-call, `calculateCostMicros` throws this for the model the API
+ *     actually returned; `aiComplete` catches it and meters CONSERVATIVELY
+ *     (see `conservativeCostMicros`) rather than dropping the already-incurred
+ *     cost, then alerts ops.
+ */
+export class UnmappedModelError extends Error {
+  readonly model: string;
+  constructor(model: string) {
+    super(
+      `No pricing configured for model '${model}'; refusing to bill at zero.`
+    );
+    this.name = "UnmappedModelError";
+    this.model = model;
+  }
+}
+
+/**
  * Calculate the call cost in microdollars from token usage.
  *
- * Unknown model → returns 0. The call still gets logged with cost 0;
- * ops can investigate via the `model` field on `ai_usage_log` rows.
- * Throwing here would lose visibility into the call entirely.
+ * Unknown model → throws `UnmappedModelError` (fail safe), never returns 0.
+ * Callers must handle the throw: `aiComplete` gates priceability pre-call and
+ * falls back to `conservativeCostMicros` if the API returns an unpriced model
+ * post-call (see `UnmappedModelError`).
  */
 export function calculateCostMicros(
   model: AIModel,
   usage: TokenUsage
 ): number {
   const pricing = MODEL_PRICING[model];
-  if (!pricing) return 0;
+  if (!pricing) throw new UnmappedModelError(model);
 
   const inputCost =
     (usage.inputTokens / 1_000_000) * pricing.inputPerMTokenMicros;
   const outputCost =
     (usage.outputTokens / 1_000_000) * pricing.outputPerMTokenMicros;
+
+  return Math.round(inputCost + outputCost);
+}
+
+/**
+ * Whether `model` has a pricing entry. Used by `aiComplete` as the PRE-call
+ * gate: a request routed to an unpriceable model is refused before any tokens
+ * are spent, rather than discovered only after the API call.
+ */
+export function isModelPriced(model: AIModel): boolean {
+  return Object.prototype.hasOwnProperty.call(MODEL_PRICING, model);
+}
+
+/**
+ * Conservative fallback cost: price `usage` at the HIGHEST known input and
+ * output rates across `MODEL_PRICING`. Used only as the post-call backstop —
+ * when the API returns a model id we have no price for, the tokens are already
+ * spent, so dropping the cost (billing zero) would let real usage slip under
+ * the cap. Billing the max rate guarantees we never UNDER-charge; slight
+ * over-charging on a genuinely unknown model is the safe direction. Pair it
+ * with a log/alert so the price gets added and the estimate stops being used.
+ */
+export function conservativeCostMicros(usage: TokenUsage): number {
+  const rates = Object.values(MODEL_PRICING);
+  const maxInputMicros = Math.max(...rates.map((p) => p.inputPerMTokenMicros));
+  const maxOutputMicros = Math.max(
+    ...rates.map((p) => p.outputPerMTokenMicros)
+  );
+
+  const inputCost = (usage.inputTokens / 1_000_000) * maxInputMicros;
+  const outputCost = (usage.outputTokens / 1_000_000) * maxOutputMicros;
 
   return Math.round(inputCost + outputCost);
 }
