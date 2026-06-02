@@ -795,3 +795,61 @@ idempotent reconciliation migration `packages/database/sql/NNN-reconcile-crm-car
 landing as `007-…`, plus edits to `packages/crm/src/relationships.ts`) is a
 PROTECTED PATH. Its production-RDS apply is human-gated — do not apply to prod
 RDS unattended; queue it for James.
+
+## Workstream delivery tracker (CRM Relationships / Conversion / Design System)
+
+| WS | Title | Status | Landed via |
+|---|---|---|---|
+| WS0 | Decision capture | ✓ Complete | recorded above |
+| WS1 | Cardinality flip + reconcile migration | ✓ Merged | [#9](https://github.com/jamesjfoley/adserve-studio/pull/9) (prod-RDS apply queued — `007` recorded #10) |
+| WS2 | Relationship link/unlink write API | ✓ Merged | [#11](https://github.com/jamesjfoley/adserve-studio/pull/11) |
+| WS3 | Contact-create account picker + account/opportunity detail tabs | ✓ Merged | [#12](https://github.com/jamesjfoley/adserve-studio/pull/12) |
+| WS4 | Design-system tokens + server-safe `Panel` primitive | **PR open — awaiting human merge gate** | branch `ws4-design-tokens-panel` |
+| WS5 | Collapsible / pinnable nav | ☐ Not started | — |
+| WS6 | Admin-selectable per-org palette | ☐ Not started | — |
+
+### WS4 — Design-system tokens + Panel primitive (2026-06-02)
+
+Frontend-only, low risk. No DB/RLS/protected-path/infra changes; no new
+dependency. Branch `ws4-design-tokens-panel` off `main` (`c8f07cc`, includes
+WS2/WS3 from PRs #11–#13).
+
+**Delivered:**
+- **Tokens** (`apps/web/src/app/globals.css`): added spacing (`--space-1..8`),
+  radius (`--radius-sm/md/panel/full`), border (`--border-width`/`--border-color`),
+  elevation (`--elevation-0..3` box-shadows + dark-mode overrides), panel surface
+  (`--panel-padding`/`-sm`, `--panel-bg`/`--panel-border`/`--page-bg`), and the
+  WS6 seam (`--accent`/`--accent-foreground` = `brand.500` `#185FA5`). Values are
+  **value-for-value** with the prior inline styles (`--radius-panel: 0.75rem` =
+  `rounded-xl`, `--panel-padding: 1.5rem` = `p-6`) so the refactor is a wrapper
+  swap, not a redesign. The 5 existing palette vars + `prefers-color-scheme: dark`
+  block are preserved.
+- **`Panel` primitive** (`apps/web/src/components/ui/panel.tsx`, NEW): pure
+  presentational wrapper applying the elevation/border/radius/padding tokens, with
+  optional `title`/`actions` slots, `elevation` (0–3, default 1), `compact`,
+  polymorphic `as`, and `className`/`aria-label` passthrough. Imports only `react`
+  types — no `postgres`/`@adserve/database` value import — so it is server-safe and
+  usable from both server and client components (**criterion #17**, boundary lint
+  gate green).
+- **CRM section refactors** (**criterion #16**): dashboard `crm/page.tsx` (5
+  widgets), list `crm-list-client.tsx` (table region), detail
+  `related-records-panel.tsx` (preserving its aria-label, heading classes, Add
+  button, empty-state copy). `detail-tabs.tsx` deliberately left unwrapped (it is
+  a tablist, not a card surface) — documented deviation, reviewer-approved.
+
+**Acceptance criteria #16 + #17 (LOCKED): both PASS.** Verified by automated
+assertions: `panel.test.tsx` (9 tests, incl. a real file-read source guard for
+#17), `panel-adoption.test.ts` (proves all three sections import + render
+`<Panel>`, legacy literal gone), `design-tokens.test.ts` (tokens defined, palette
+preserved, elevation resolves light + dark).
+
+**Gates:** lint (`boundary/no-server-in-client`) green, production `next build`
+green, full monorepo test suite green under the RLS-enforced `adserve_app`
+(NOBYPASSRLS) harness; Docker build deferred to CI per repo policy. WS4 adds no
+tenant-scoped query or `withSuperAdminBypass` path, so the cross-tenant isolation
+obligation is **N/A by design**; existing RLS page tests remain the regression
+guard and stay green.
+
+**Commits:** `d365d49` (builder — tokens + Panel + refactor), `1f5b51e`
+(qa — adoption + token tests). **GATED:** merge to `main` is the standing human
+gate — PR opened, not merged.
