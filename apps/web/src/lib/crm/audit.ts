@@ -21,8 +21,17 @@ import type { db } from "@adserve/database";
  * `action` is the verb (create/update/archive); `resourceType` is the CRM
  * entity slug (account/contact/lead/opportunity); `resourceId` is the
  * record id. Runs inside the caller's tenant transaction.
+ *
+ * WS2 adds `link` / `unlink` (resourceType: "relationship") for the
+ * record-to-record link/unlink write API. `changes` for those carries the
+ * relationship name + source/target record ids (+ isPrimary on link).
  */
-export type AuditAction = "create" | "update" | "archive";
+export type AuditAction =
+  | "create"
+  | "update"
+  | "archive"
+  | "link"
+  | "unlink";
 
 export interface WriteAuditLogArgs {
   tenantId: string;
