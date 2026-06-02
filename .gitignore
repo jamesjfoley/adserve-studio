@@ -20,8 +20,11 @@ out/
 *.swo
 .DS_Store
 
-# Claude Code local session state (but track shared agent definitions)
-.claude/
+# Claude Code local session state (but track shared agent definitions).
+# Ignore the CONTENTS of .claude (.claude/*), not the dir itself, so the
+# negations below can re-include .claude/agents/** — a trailing-slash `.claude/`
+# excludes the parent dir and makes the re-includes ineffective for new files.
+.claude/*
 !.claude/agents/
 !.claude/agents/**
 
