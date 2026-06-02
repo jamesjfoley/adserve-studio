@@ -17,6 +17,7 @@ import { DynamicForm } from "@/components/dynamic-form";
 import { stateToQuery, type ListState } from "@/lib/crm/list-params";
 import type { TenantMember } from "@/lib/crm/members";
 import { PermissionGate } from "@/lib/permissions-client";
+import { Panel } from "@/components/ui/panel";
 import { AccountMultiSelect } from "./account-multi-select";
 
 interface Choice {
@@ -314,7 +315,7 @@ export function CrmListClient({
         </div>
       ) : null}
 
-      <div className="mt-6">
+      <Panel className="mt-6">
         <DynamicTable
           fields={fields}
           records={records}
@@ -332,7 +333,7 @@ export function CrmListClient({
           locale={locale}
           emptyMessage={`No ${entityName.toLowerCase()}s yet.`}
         />
-      </div>
+      </Panel>
 
       {newOpen ? (
         <div

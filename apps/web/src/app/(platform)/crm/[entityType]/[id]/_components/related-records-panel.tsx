@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { crmCollectionSegment } from "@adserve/crm/url";
 import type { RelatedRecord } from "@/lib/crm/relationships";
 import { PermissionGate } from "@/lib/permissions-client";
+import { Panel } from "@/components/ui/panel";
 import { LinkRecordPicker } from "./link-record-picker";
 
 /** Best-effort human label for a related record, presentation-only. */
@@ -139,15 +140,14 @@ export function RelatedRecordsPanel({
   const excludeIds = useMemo(() => items.map((i) => i.id), [items]);
 
   return (
-    <section
+    <Panel
+      as="section"
       aria-label={`Linked ${relatedPluralLabel}`}
-      className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-6"
-    >
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-tight">
-          {relatedPluralLabel.charAt(0).toUpperCase() + relatedPluralLabel.slice(1)}
-        </h2>
-        {canEdit ? (
+      title={
+        relatedPluralLabel.charAt(0).toUpperCase() + relatedPluralLabel.slice(1)
+      }
+      actions={
+        canEdit ? (
           <PermissionGate permission={editPermission}>
             <button
               type="button"
@@ -160,9 +160,9 @@ export function RelatedRecordsPanel({
               {adding ? "Cancel" : `Add ${relatedSlug}`}
             </button>
           </PermissionGate>
-        ) : null}
-      </div>
-
+        ) : null
+      }
+    >
       {error ? (
         <p className="mt-3 text-sm text-red-600" role="alert">
           {error}
@@ -240,6 +240,6 @@ export function RelatedRecordsPanel({
           ))}
         </ul>
       )}
-    </section>
+    </Panel>
   );
 }
