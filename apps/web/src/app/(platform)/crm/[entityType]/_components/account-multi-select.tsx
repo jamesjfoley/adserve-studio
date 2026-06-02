@@ -39,8 +39,9 @@ export function AccountMultiSelect({
     let cancelled = false;
     (async () => {
       try {
-        // Pull a generous page of accounts; the picker is a convenience and
-        // does not need full pagination for v1.
+        // v1 limitation: loads up to 200 candidate accounts without pagination.
+        // Tenants with >200 accounts won't see the overflow in this picker —
+        // accepted for v1; revisit with a typeahead/search-backed picker later.
         const res = await fetch("/api/crm/accounts?limit=200", {
           cache: "no-store",
         });

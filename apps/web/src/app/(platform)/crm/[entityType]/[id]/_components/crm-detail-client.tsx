@@ -332,6 +332,14 @@ export function CrmDetailClient({
           // Account is the TARGET of contact_belongs_to_account (contact is the
           // source). The WS2 route is source-scoped, so add/remove is issued
           // scoped to the contact with the account as the target id.
+          //
+          // Cosmetic gate: server authorizes link/unlink on the SOURCE record's
+          // permission-or-ownership (WS2 contract) — here the contact — so we
+          // gate on `contact.update`, NOT `account.update`, to predict the real
+          // rule and avoid showing a control the server then 403s. The plan's
+          // "account.update for account-side management" is a deferred product
+          // decision, intentionally not implemented in v1. `canMutate` on the
+          // server remains the real enforcement (incl. the ownership escape-hatch).
           <RelatedRecordsPanel
             relatedSlug="contact"
             relatedPluralLabel="contacts"
@@ -340,7 +348,7 @@ export function CrmDetailClient({
             relationshipName={CONTACT_BELONGS_TO_ACCOUNT.name}
             direction="owner-is-target"
             items={relationships.contact ?? []}
-            editPermission="account.update"
+            editPermission="contact.update"
             supportsPrimary={false}
             canEdit={canEdit}
           />
@@ -350,7 +358,9 @@ export function CrmDetailClient({
         id: "opportunities",
         label: "Opportunities",
         content: (
-          // Account is the TARGET of opportunity_belongs_to_account.
+          // Account is the TARGET of opportunity_belongs_to_account (opportunity
+          // is the source). Same source-scoped WS2 contract as above: gate on
+          // `opportunity.update`, NOT `account.update`. See the Contacts tab note.
           <RelatedRecordsPanel
             relatedSlug="opportunity"
             relatedPluralLabel="opportunities"
@@ -359,7 +369,7 @@ export function CrmDetailClient({
             relationshipName={OPPORTUNITY_BELONGS_TO_ACCOUNT.name}
             direction="owner-is-target"
             items={relationships.opportunity ?? []}
-            editPermission="account.update"
+            editPermission="opportunity.update"
             supportsPrimary={false}
             canEdit={canEdit}
           />

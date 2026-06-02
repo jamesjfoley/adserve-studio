@@ -52,7 +52,13 @@ interface RelatedRecordsPanelProps {
   direction: LinkDirection;
   /** Related records (with edge metadata) for this tab. */
   items: RelatedRecord[];
-  /** The owning entity's update permission, gating the editing controls cosmetically. */
+  /**
+   * Permission gating the editing controls cosmetically. This must mirror the
+   * server's real rule: WS2 authorizes link/unlink on the SOURCE record's
+   * `.update`-or-ownership, so callers pass the SOURCE slug's `.update` (e.g.
+   * `contact.update` when an account manages its contacts), NOT `account.update`.
+   * Server-side `canMutate` (incl. the ownership escape-hatch) is the real gate.
+   */
   editPermission: string;
   /** Whether this relationship supports a "primary" marker (set-primary control). */
   supportsPrimary: boolean;

@@ -32,6 +32,9 @@ export function LinkRecordPicker({
     let cancelled = false;
     (async () => {
       try {
+        // v1 limitation: loads up to 200 candidates without pagination. Tenants
+        // with >200 linkable records of this type won't see the overflow in the
+        // picker — accepted for v1; revisit with a typeahead/search-backed picker.
         const res = await fetch(`/api/crm/${segment}?limit=200`, {
           cache: "no-store",
         });
