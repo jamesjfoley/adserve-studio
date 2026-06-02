@@ -7,7 +7,7 @@ Multi-tenant advertising operations platform. This file is the orientation docum
 - **Framework:** Next.js 15 (App Router), TypeScript
 - **Database:** PostgreSQL 16, Drizzle ORM (`drizzle-kit push` for schema)
 - **Auth:** Clerk (organisations + users)
-- **Styling:** Tailwind CSS
+- **Styling:** Tailwind CSS. In-app product UI (CRM / `/admin` / `/super-admin` under `apps/web`) follows the **`adserve-design`** skill (locked tokens + `Panel`), which **governs** product surfaces; the `frontend-design` skill is for marketing pages / throwaway prototypes only.
 - **Build:** Turborepo with pnpm workspaces
 - **Runtime (prod):** AWS ECS Express Mode (Fargate), eu-west-2
 
