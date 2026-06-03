@@ -21,6 +21,7 @@
     "sql:rls-test-role": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/002-create-rls-test-role.sql",
     "sql:dev-rls-roles": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/dev-rls-roles.sql",
     "sql:reconcile-cardinality": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/007-reconcile-crm-cardinality.sql",
+    "sql:unique-relationship-name": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/008-unique-relationship-name.sql",
     "db:rls-dev-parity": "pnpm sql:rls && pnpm sql:dev-rls-roles",
     "studio": "drizzle-kit studio",
     "test": "vitest run"

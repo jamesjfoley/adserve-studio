@@ -168,6 +168,10 @@ export const schemaRelationships = pgTable(
     index("idx_relationships_tenant").on(table.tenantId),
     index("idx_relationships_source").on(table.sourceEntityTypeId),
     index("idx_relationships_target").on(table.targetEntityTypeId),
+    // One registry row per (tenant, name) — DB-level enforcement of AC 3
+    // (previously held only by WS1's migration predicate + the activation
+    // existing-row check). Applied by sql/008-unique-relationship-name.sql.
+    uniqueIndex("idx_relationships_tenant_name").on(table.tenantId, table.name),
   ]
 );
 
