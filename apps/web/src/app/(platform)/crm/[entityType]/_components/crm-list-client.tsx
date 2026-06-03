@@ -220,7 +220,7 @@ export function CrmListClient({
               setSelectedAccountIds([]);
               setNewOpen(true);
             }}
-            className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
           >
             New {entityName.toLowerCase()}
           </button>

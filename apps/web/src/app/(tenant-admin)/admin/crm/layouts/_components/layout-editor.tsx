@@ -205,7 +205,7 @@ export function LayoutEditor({
         <button
           onClick={save}
           disabled={saving}
-          className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save layout"}
         </button>

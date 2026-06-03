@@ -22,7 +22,7 @@ export default async function AdminRolesPage() {
         </div>
         <Link
           href="/admin/roles/new"
-          className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
+          className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
         >
           Create role
         </Link>
@@ -57,7 +57,7 @@ export default async function AdminRolesPage() {
                   </td>
                   <td className="px-4 py-3">
                     {r.isSystem ? (
-                      <span className="inline-flex rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
+                      <span className="inline-flex rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">
                         System
                       </span>
                     ) : (

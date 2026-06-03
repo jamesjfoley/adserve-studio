@@ -135,7 +135,7 @@ export function ProfileForm({
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95 disabled:opacity-50"
           >
             {submitting ? "Saving…" : "Save changes"}
           </button>

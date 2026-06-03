@@ -37,6 +37,9 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
+  // Generous per-test timeout: a cold `next dev` compiles routes on first hit
+  // and the Clerk sign-in FAPI round-trip can be slow on a fresh server.
+  timeout: 60_000,
   reporter: [["list"]],
   use: { baseURL: BASE_URL, trace: "on-first-retry" },
   projects: [

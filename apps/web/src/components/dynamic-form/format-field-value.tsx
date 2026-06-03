@@ -167,7 +167,7 @@ export function formatFieldValue(
       return str ? (
         <a
           href={`mailto:${str}`}
-          className="text-sm text-brand-600 hover:underline"
+          className="text-sm text-[var(--accent)] hover:underline"
         >
           {str}
         </a>
@@ -183,7 +183,7 @@ export function formatFieldValue(
           href={str}
           target="_blank"
           rel="noopener noreferrer"
-          className="truncate text-sm text-brand-600 hover:underline"
+          className="truncate text-sm text-[var(--accent)] hover:underline"
         >
           {str}
         </a>

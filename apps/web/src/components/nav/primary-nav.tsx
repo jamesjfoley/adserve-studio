@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import {
   useCallback,
@@ -57,6 +58,11 @@ export function PrimaryNav({
   footer,
 }: PrimaryNavProps) {
   const { pinned, toggle } = useNavPinned();
+  const pathname = usePathname();
+  // Active when the path equals the link or sits beneath it (e.g.
+  // /crm/accounts/123 → Accounts). Accent shortcut chips are never "active".
+  const isActive = (href: string) =>
+    !!pathname && (pathname === href || pathname.startsWith(`${href}/`));
   // Overlay expansion (unpinned desktop only) and the mobile drawer are pure
   // interaction state — they are never persisted and never affect first paint.
   const [expanded, setExpanded] = useState(false);
@@ -121,20 +127,25 @@ export function PrimaryNav({
   ) {
     return list.map((item) => {
       const Icon = NAV_ICONS[item.iconName];
+      const active = !item.accent && isActive(item.href);
+      // Accent shortcut chip, active route, or neutral — all accent treatment
+      // flows through var(--accent) so it follows the per-org palette.
+      const tone = item.accent
+        ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)] hover:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)]"
+        : active
+          ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]"
+          : "text-[var(--foreground)] hover:bg-[var(--background)]";
       return (
         <Link
           key={item.name}
           href={item.href}
           onClick={opts?.onNavigate}
-          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-            item.accent
-              ? "bg-brand-50 text-brand-700 hover:bg-brand-100"
-              : "text-[var(--foreground)] hover:bg-[var(--background)]"
-          }`}
+          aria-current={active ? "page" : undefined}
+          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${tone}`}
         >
           <Icon
             className={`h-4 w-4 shrink-0 ${
-              item.accent ? "" : "text-[var(--muted-foreground)]"
+              item.accent || active ? "" : "text-[var(--muted-foreground)]"
             }`}
           />
           {/* The label stays in the DOM when the rail is collapsed (CSS only

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
   DEFAULT_PALETTE,
@@ -7,6 +10,9 @@ import {
   readTenantPalette,
   resolvePaletteId,
 } from "@/lib/theme/palettes";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const GLOBALS_CSS = path.resolve(__dirname, "../../src/app/globals.css");
 
 describe("WS6 palette catalog", () => {
   test("default is grey-blue", () => {
@@ -46,5 +52,24 @@ describe("WS6 palette catalog", () => {
       expect(PALETTES[id].accentForeground).toBe("#ffffff");
       expect(PALETTES[id].accent).toMatch(/^#[0-9a-f]{6}$/);
     }
+  });
+
+  // WS6 follow-up: the :root baseline accent must equal grey-blue's, so the
+  // default palette (no data-palette attribute) renders identically to an
+  // explicit grey-blue selection.
+  test("globals.css :root baseline accent equals grey-blue", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const greyBlue = PALETTES["grey-blue"].accent; // #185fa5
+
+    // :root baseline references brand-500 / the grey-blue hex.
+    const root = css.match(/:root\s*\{[\s\S]*?\}/)?.[0] ?? "";
+    expect(root).toMatch(
+      new RegExp(`--accent:[^;]*${greyBlue}`, "i")
+    );
+
+    // The explicit grey-blue catalog rule sets the same hex.
+    const rule =
+      css.match(/\[data-palette="grey-blue"\]\s*\{[\s\S]*?\}/)?.[0] ?? "";
+    expect(rule).toMatch(new RegExp(`--accent:\\s*${greyBlue}`, "i"));
   });
 });

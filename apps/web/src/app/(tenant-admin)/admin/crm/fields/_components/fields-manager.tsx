@@ -211,7 +211,7 @@ export function FieldsManager({
                 <button
                   onClick={addField}
                   disabled={busy}
-                  className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                  className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                 >
                   Add field
                 </button>
@@ -221,7 +221,7 @@ export function FieldsManager({
         ) : (
           <button
             onClick={() => setAdding(true)}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white"
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white"
           >
             + Add field
           </button>

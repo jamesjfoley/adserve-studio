@@ -13,6 +13,7 @@ import {
   KanbanSquare,
 } from "lucide-react";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
+import { readTenantPalette } from "@/lib/theme/palettes";
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -31,9 +32,13 @@ export default async function TenantAdminLayout({
   children: React.ReactNode;
 }) {
   const { tenant, role } = await requireTenantAdmin();
+  // Per-request palette from THIS request's tenant context (requireTenantAdmin →
+  // getTenantContextOrNull is keyed to the request's Clerk org and not memoised,
+  // so no tenant's palette leaks into another's — same rule as WS6 / Condition 6).
+  const palette = readTenantPalette(tenant.settings);
 
   return (
-    <div className="flex h-screen">
+    <div data-palette={palette} className="flex h-screen">
       <aside className="flex w-64 flex-col bg-brand-700 text-white">
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center gap-2">
