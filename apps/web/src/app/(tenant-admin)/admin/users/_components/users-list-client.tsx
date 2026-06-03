@@ -190,7 +190,7 @@ export function UsersListClient({
           </div>
           <button
             type="submit"
-            className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
+            className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
           >
             Apply
           </button>
@@ -199,7 +199,7 @@ export function UsersListClient({
         <button
           type="button"
           onClick={() => setInviteOpen(true)}
-          className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
+          className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
         >
           Invite user
         </button>
@@ -508,7 +508,7 @@ function InviteModal({
             <button
               type="submit"
               disabled={submitting || !email || !roleId}
-              className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+              className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95 disabled:opacity-50"
             >
               {submitting ? "Sending…" : "Send invitation"}
             </button>
