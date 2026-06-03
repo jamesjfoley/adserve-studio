@@ -123,6 +123,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       );
     if (!existing) return { kind: "not_found" as const };
 
+    // AC 24: a converted lead is server-side read-only — reject edits for
+    // EVERYONE (before the permission/ownership gate). Precise: only the lead
+    // entity type, only when its status is "converted"; other entity types and
+    // non-converted records are unaffected.
+    if (
+      slug === "lead" &&
+      ((existing.data as Record<string, unknown>) ?? {}).status === "converted"
+    ) {
+      return { kind: "converted" as const };
+    }
+
     if (!canMutate(ctx, `${slug}.update`, existing.ownedBy ?? null)) {
       return { kind: "forbidden" as const };
     }
@@ -170,6 +181,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (outcome.kind === "not_found") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (outcome.kind === "converted") {
+    return NextResponse.json(
+      { error: "Lead is converted and read-only" },
+      { status: 409 }
+    );
   }
   if (outcome.kind === "forbidden") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
