@@ -15,7 +15,26 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
+        <head>
+          {/* WS5 no-flash: set the nav-pinned state on the document element
+              BEFORE paint so the CSS-driven sidebar width matches the stored
+              value on first paint (no FOUC). Inlined as a string literal —
+              never imported into an RSC. Storage access is wrapped so blocked
+              storage degrades to the pinned default. */}
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `(function () {
+  try {
+    var v = localStorage.getItem('adserve:nav:pinned');
+    document.documentElement.dataset.navPinned = v === null ? 'true' : v;
+  } catch (e) {
+    document.documentElement.dataset.navPinned = 'true';
+  }
+})();`,
+            }}
+          />
+        </head>
         <body className="min-h-screen antialiased">
           <PermissionsProvider>{children}</PermissionsProvider>
         </body>

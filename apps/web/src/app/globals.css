@@ -78,3 +78,81 @@ body {
   color: var(--foreground);
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* ===== WS5 — collapsible/pinnable primary nav (CRM shell only) =====
+   All rules below are scoped to .primary-nav-* selectors that only the CRM
+   PrimaryNav carries, so the /super-admin and /admin sidebars are untouched.
+   Width is keyed off html[data-nav-pinned], which the inline <head> script in
+   app/layout.tsx sets BEFORE paint — so first paint matches the stored state
+   with no expand->rail animation (no FOUC). */
+:root {
+  --nav-width: 16rem; /* pinned sidebar width (= the former w-64) */
+  --nav-rail-width: 3.5rem; /* collapsed icon rail */
+}
+
+/* In-flow dock — the ONLY element that affects content layout width, so the
+   expanded overlay (below) never reflows main content. */
+.primary-nav-dock {
+  position: relative;
+  height: 100vh;
+  flex-shrink: 0;
+  width: var(--nav-width);
+  transition: width 150ms ease;
+}
+html[data-nav-pinned="false"] .primary-nav-dock {
+  width: var(--nav-rail-width);
+}
+
+/* The visual panel, absolutely positioned within the dock. When unpinned it
+   stays rail-width; expanding widens it beyond the dock as an overlay WITHOUT
+   changing the dock width — hence no reflow. */
+.primary-nav-panel {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: var(--nav-width);
+  background: var(--muted);
+  border-right: var(--border-width) solid var(--border);
+  overflow: hidden;
+  transition: width 150ms ease, box-shadow 150ms ease;
+}
+html[data-nav-pinned="false"] .primary-nav-panel {
+  width: var(--nav-rail-width);
+}
+html[data-nav-pinned="false"] .primary-nav-panel.is-expanded {
+  width: var(--nav-width);
+  box-shadow: var(--elevation-3);
+  z-index: 40;
+}
+
+/* Collapsed rail hides labels + header + footer via CSS keyed on the pre-paint
+   attribute (so first paint is correct), keeping them in the DOM for assistive
+   tech. They reappear when the overlay expands or when pinned. */
+html[data-nav-pinned="false"]
+  .primary-nav-panel:not(.is-expanded)
+  .primary-nav-label,
+html[data-nav-pinned="false"]
+  .primary-nav-panel:not(.is-expanded)
+  .primary-nav-header,
+html[data-nav-pinned="false"]
+  .primary-nav-panel:not(.is-expanded)
+  .primary-nav-footer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-nav-dock,
+  .primary-nav-panel {
+    transition: none;
+  }
+}
