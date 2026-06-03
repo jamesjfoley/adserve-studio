@@ -1,24 +1,15 @@
 import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
-import Link from "next/link";
-import {
-  Users,
-  Building2,
-  UserPlus,
-  TrendingUp,
-  LayoutDashboard,
-  Shield,
-  KanbanSquare,
-} from "lucide-react";
 import { getSuperAdminOrNull } from "@/lib/super-admin";
 import { getTenantAdminContextOrNull } from "@/lib/tenant-admin";
+import { PrimaryNav, type NavItem } from "@/components/nav/primary-nav";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Accounts", href: "/crm/accounts", icon: Building2 },
-  { name: "Contacts", href: "/crm/contacts", icon: Users },
-  { name: "Leads", href: "/crm/leads", icon: UserPlus },
-  { name: "Opportunities", href: "/crm/opportunities", icon: TrendingUp },
-  { name: "Pipeline", href: "/crm/pipeline", icon: KanbanSquare },
+const navigation: NavItem[] = [
+  { name: "Dashboard", href: "/dashboard", iconName: "dashboard" },
+  { name: "Accounts", href: "/crm/accounts", iconName: "accounts" },
+  { name: "Contacts", href: "/crm/contacts", iconName: "contacts" },
+  { name: "Leads", href: "/crm/leads", iconName: "leads" },
+  { name: "Opportunities", href: "/crm/opportunities", iconName: "opportunities" },
+  { name: "Pipeline", href: "/crm/pipeline", iconName: "pipeline" },
 ];
 
 export default async function PlatformLayout({
@@ -34,12 +25,33 @@ export default async function PlatformLayout({
     getTenantAdminContextOrNull(),
   ]);
 
+  // Accent shortcut links — mutually exclusive (role separation guarantees at
+  // most one of these contexts is non-null).
+  const topItems: NavItem[] = [];
+  if (superAdmin) {
+    topItems.push({
+      name: "Super Admin",
+      href: "/super-admin",
+      iconName: "shield",
+      accent: true,
+    });
+  }
+  if (tenantAdminCtx) {
+    topItems.push({
+      name: "Admin",
+      href: "/admin",
+      iconName: "shield",
+      accent: true,
+    });
+  }
+
   return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <aside className="flex w-64 flex-col border-r border-[var(--border)] bg-[var(--muted)]">
-        {/* Org switcher (tenant selector) */}
-        <div className="border-b border-[var(--border)] p-4">
+    <div className="flex h-screen flex-col md:flex-row">
+      <PrimaryNav
+        items={navigation}
+        topItems={topItems}
+        groupLabel="CRM"
+        header={
           <OrganizationSwitcher
             hidePersonal
             afterSelectOrganizationUrl="/dashboard"
@@ -51,51 +63,8 @@ export default async function PlatformLayout({
               },
             }}
           />
-        </div>
-
-        {superAdmin && (
-          <div className="border-b border-[var(--border)] p-3">
-            <Link
-              href="/super-admin"
-              className="flex items-center gap-3 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 transition-colors"
-            >
-              <Shield className="h-4 w-4" />
-              Super Admin
-            </Link>
-          </div>
-        )}
-
-        {tenantAdminCtx && (
-          <div className="border-b border-[var(--border)] p-3">
-            <Link
-              href="/admin"
-              className="flex items-center gap-3 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 transition-colors"
-            >
-              <Shield className="h-4 w-4" />
-              Admin
-            </Link>
-          </div>
-        )}
-
-        {/* Main navigation */}
-        <nav className="flex-1 space-y-1 p-3">
-          <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-            CRM
-          </p>
-          {navigation.map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)] transition-colors"
-            >
-              <item.icon className="h-4 w-4 text-[var(--muted-foreground)]" />
-              {item.name}
-            </Link>
-          ))}
-        </nav>
-
-        {/* User menu at bottom */}
-        <div className="border-t border-[var(--border)] p-4">
+        }
+        footer={
           <UserButton
             showName
             appearance={{
@@ -105,8 +74,8 @@ export default async function PlatformLayout({
               },
             }}
           />
-        </div>
-      </aside>
+        }
+      />
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
