@@ -1,6 +1,8 @@
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 import { loadAdminSettingsData } from "@/lib/admin/loaders";
+import { readTenantPalette } from "@/lib/theme/palettes";
 import { ProfileForm } from "./_components/profile-form";
+import { PaletteForm } from "./_components/palette-form";
 
 const statusStyles: Record<string, string> = {
   active: "bg-green-100 text-green-800",
@@ -11,6 +13,11 @@ const statusStyles: Record<string, string> = {
 export default async function AdminSettingsPage() {
   const { tenant, permissions } = await requireTenantAdmin();
   const canEdit = permissions.has("settings.admin");
+  // WS6: palette edits are gated by tenant.admin OR crm.admin (Locked Decision 4),
+  // matching the /api/admin/theme write-path authz.
+  const canEditPalette =
+    permissions.has("tenant.admin") || permissions.has("crm.admin");
+  const currentPalette = readTenantPalette(tenant.settings);
 
   const enabledModules = await loadAdminSettingsData(tenant.id);
 
@@ -43,7 +50,18 @@ export default async function AdminSettingsPage() {
         </div>
       </section>
 
-      {/* Section 2: Modules */}
+      {/* Section 2: Appearance (WS6 — per-org accent palette) */}
+      <section className="mt-12">
+        <h2 className="text-lg font-semibold tracking-tight">Appearance</h2>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Accent palette applied across this organisation.
+        </p>
+        <div className="mt-4 rounded-xl border border-[var(--border)] p-6">
+          <PaletteForm current={currentPalette} canEdit={canEditPalette} />
+        </div>
+      </section>
+
+      {/* Section 3: Modules */}
       <section className="mt-12">
         <h2 className="text-lg font-semibold tracking-tight">Modules</h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">

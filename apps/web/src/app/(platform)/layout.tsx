@@ -1,7 +1,8 @@
 import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { getSuperAdminOrNull } from "@/lib/super-admin";
-import { getTenantAdminContextOrNull } from "@/lib/tenant-admin";
+import { getTenantContextOrNull } from "@/lib/permissions";
 import { PrimaryNav, type NavItem } from "@/components/nav/primary-nav";
+import { readTenantPalette } from "@/lib/theme/palettes";
 
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", iconName: "dashboard" },
@@ -20,13 +21,18 @@ export default async function PlatformLayout({
   // Role separation: getSuperAdminOrNull and getTenantAdminContextOrNull
   // are mutually exclusive at the data layer (Task 0 + Task 2), so at most
   // one of these is non-null for any user.
-  const [superAdmin, tenantAdminCtx] = await Promise.all([
+  const [superAdmin, tenantCtx] = await Promise.all([
     getSuperAdminOrNull(),
-    getTenantAdminContextOrNull(),
+    getTenantContextOrNull(),
   ]);
 
+  // WS6: resolve the palette PER REQUEST from THIS request's tenant context
+  // (Condition 6 — getTenantContextOrNull is keyed to the request's Clerk org
+  // and is not memoised, so no tenant's palette can leak into another's).
+  const palette = readTenantPalette(tenantCtx?.tenant.settings);
+
   // Accent shortcut links — mutually exclusive (role separation guarantees at
-  // most one of these contexts is non-null).
+  // most one of these is shown).
   const topItems: NavItem[] = [];
   if (superAdmin) {
     topItems.push({
@@ -36,7 +42,7 @@ export default async function PlatformLayout({
       accent: true,
     });
   }
-  if (tenantAdminCtx) {
+  if (tenantCtx?.permissions.has("admin.access")) {
     topItems.push({
       name: "Admin",
       href: "/admin",
@@ -46,7 +52,7 @@ export default async function PlatformLayout({
   }
 
   return (
-    <div className="flex h-screen flex-col md:flex-row">
+    <div data-palette={palette} className="flex h-screen flex-col md:flex-row">
       <PrimaryNav
         items={navigation}
         topItems={topItems}

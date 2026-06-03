@@ -156,3 +156,29 @@ html[data-nav-pinned="false"]
     transition: none;
   }
 }
+
+/* ===== WS6 — admin-selectable per-org palette catalog =====
+   Each palette overrides ONLY the WS4 colour-accent seam tokens
+   (--accent / --accent-foreground) — never spacing/type. The (platform) layout
+   sets data-palette="<id>" on its root wrapper per request, resolved from the
+   tenant's validated settings.theme.palette. Setting the custom properties on
+   that wrapper cascades --accent to the whole authenticated subtree. An
+   unknown/absent id falls back to the :root default (grey-blue). Values are
+   WCAG-AA: white foreground on each accent background is ≥ 4.5:1. The accent
+   hexes here mirror src/lib/theme/palettes.ts. */
+[data-palette="grey-blue"] {
+  --accent: #185fa5;
+  --accent-foreground: #ffffff;
+}
+[data-palette="slate"] {
+  --accent: #334155;
+  --accent-foreground: #ffffff;
+}
+[data-palette="emerald"] {
+  --accent: #047857;
+  --accent-foreground: #ffffff;
+}
+[data-palette="violet"] {
+  --accent: #6d28d9;
+  --accent-foreground: #ffffff;
+}
