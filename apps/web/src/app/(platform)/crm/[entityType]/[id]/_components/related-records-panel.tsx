@@ -201,13 +201,13 @@ export function RelatedRecordsPanel({
                   className={
                     rec.isArchived
                       ? "text-sm text-[var(--muted-foreground)] line-through hover:underline"
-                      : "text-sm text-brand-600 hover:underline"
+                      : "text-sm text-[var(--accent)] hover:underline"
                   }
                 >
                   {relatedLabel(rec)}
                 </a>
                 {rec.isPrimary ? (
-                  <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-600">
+                  <span className="rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">
                     Primary
                   </span>
                 ) : null}

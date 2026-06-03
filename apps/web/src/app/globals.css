@@ -163,9 +163,11 @@ html[data-nav-pinned="false"]
    sets data-palette="<id>" on its root wrapper per request, resolved from the
    tenant's validated settings.theme.palette. Setting the custom properties on
    that wrapper cascades --accent to the whole authenticated subtree. An
-   unknown/absent id falls back to the :root default (grey-blue). Values are
-   WCAG-AA: white foreground on each accent background is ≥ 4.5:1. The accent
-   hexes here mirror src/lib/theme/palettes.ts. */
+   unknown/absent id falls back to the :root default (grey-blue). Accent values
+   must satisfy WCAG-AA contrast in BOTH directions: white foreground on the
+   accent fill (buttons), AND the accent as text on a white surface (links,
+   active nav) — both ≥ 4.5:1. The accent hexes here mirror
+   src/lib/theme/palettes.ts. */
 [data-palette="grey-blue"] {
   --accent: #185fa5;
   --accent-foreground: #ffffff;

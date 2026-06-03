@@ -100,7 +100,7 @@ export interface FieldComponentProps {
 export const inputClassName = cn(
   "w-full rounded-md border border-[var(--border)] bg-[var(--background)]",
   "px-3 py-2 text-sm",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
   "disabled:opacity-60"
 );
 

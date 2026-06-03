@@ -298,7 +298,7 @@ export function CrmDetailClient({
                       className={
                         rec.isArchived
                           ? "text-sm text-[var(--muted-foreground)] line-through hover:underline"
-                          : "text-sm text-brand-600 hover:underline"
+                          : "text-sm text-[var(--accent)] hover:underline"
                       }
                     >
                       {relatedLabel(rec)}
@@ -460,7 +460,7 @@ export function CrmDetailClient({
               type="button"
               onClick={handleConvert}
               disabled={busy}
-              className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+              className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95 disabled:opacity-50"
             >
               Convert lead
             </button>
@@ -586,7 +586,7 @@ export function CrmDetailClient({
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                  className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
                 >
                   Save activity
                 </button>

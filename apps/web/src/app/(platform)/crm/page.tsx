@@ -69,7 +69,7 @@ export default async function CrmDashboardPage() {
                     </div>
                     <div className="mt-1 h-2 w-full rounded-full bg-[var(--muted)]">
                       <div
-                        className="h-2 rounded-full bg-brand-500"
+                        className="h-2 rounded-full bg-[var(--accent)]"
                         style={{ width: `${(stage.total / pipelineMax) * 100}%` }}
                       />
                     </div>
@@ -99,7 +99,7 @@ export default async function CrmDashboardPage() {
                     </div>
                     <div className="mt-1 h-2 w-full rounded-full bg-[var(--muted)]">
                       <div
-                        className="h-2 rounded-full bg-brand-500"
+                        className="h-2 rounded-full bg-[var(--accent)]"
                         style={{ width: `${(stage.count / funnelMax) * 100}%` }}
                       />
                     </div>
@@ -150,7 +150,7 @@ export default async function CrmDashboardPage() {
                     <li key={a.id} className="text-sm">
                       <Link
                         href={`/crm/${seg}/${a.recordId}`}
-                        className="font-medium text-brand-600 hover:underline"
+                        className="font-medium text-[var(--accent)] hover:underline"
                       >
                         {a.subject ?? "(no subject)"}
                       </Link>
@@ -180,7 +180,7 @@ export default async function CrmDashboardPage() {
                     <li key={r.id} className="flex items-baseline justify-between text-sm">
                       <Link
                         href={`/crm/${seg}/${r.id}`}
-                        className="font-medium text-brand-600 hover:underline"
+                        className="font-medium text-[var(--accent)] hover:underline"
                       >
                         {r.title}
                       </Link>

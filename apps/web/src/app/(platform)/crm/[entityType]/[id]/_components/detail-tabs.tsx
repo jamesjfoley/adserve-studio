@@ -61,9 +61,9 @@ export function DetailTabs({ tabs }: { tabs: DetailTab[] }) {
               onClick={() => setActive(tab.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
               className={
-                "rounded-t-md px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 " +
+                "rounded-t-md px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] " +
                 (selected
-                  ? "border-b-2 border-brand-500 text-[var(--foreground)]"
+                  ? "border-b-2 border-[var(--accent)] text-[var(--foreground)]"
                   : "border-b-2 border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]")
               }
             >
