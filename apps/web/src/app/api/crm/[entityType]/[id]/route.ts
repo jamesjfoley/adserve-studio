@@ -16,6 +16,7 @@ import {
 import { loadRecordWithRelationships } from "@/lib/crm/relationships";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
+import { applyContactAccount } from "@/lib/crm/contact-account";
 
 type Params = { params: Promise<{ entityType: string; id: string }> };
 
@@ -99,13 +100,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { ctx } = guard;
   const { tenant, user } = ctx;
 
-  let body: { data?: Record<string, unknown> };
+  let body: {
+    data?: Record<string, unknown>;
+    account?: { accountId?: string; newAccountName?: string } | null;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   const input = body.data ?? {};
+  // The `account` relationship is routed separately from records.data (same
+  // contract as create). Presence of the key (even `null`) is the signal to
+  // apply it; absence leaves existing links untouched (partial update).
+  const accountProvided = slug === "contact" && "account" in body;
 
   const outcome = await withTenant(tenant.id, async (tx) => {
     const entity = await getEntityTypeBySlug(tx, { tenantId: tenant.id, slug });
@@ -147,6 +155,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const fieldErrors: Record<string, string> = {};
 
     for (const field of fields) {
+      // Relationship fields (e.g. `account`) live in record_relationships, not
+      // records.data — applied below via accountProvided. Never coerce/store.
+      if (field.fieldType === "relationship") continue;
       if (!(field.slug in input)) continue; // partial update
       const result = coerceFieldValue(field, input[field.slug]);
       if (!result.ok) {
@@ -159,6 +170,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     if (Object.keys(fieldErrors).length > 0) {
       return { kind: "invalid" as const, fieldErrors };
+    }
+
+    // Apply the account relationship (replace/clear/create-new) BEFORE the data
+    // write, so a duplicate/invalid account returns with nothing persisted
+    // (same tx → atomic with the data update on success).
+    if (accountProvided) {
+      const acc = body.account ?? {};
+      const accountResult = await applyContactAccount(tx, {
+        tenantId: tenant.id,
+        userId: user.id,
+        contactId: id,
+        selection: {
+          accountId: acc?.accountId ?? null,
+          newAccountName: acc?.newAccountName ?? null,
+        },
+      });
+      if (accountResult.kind === "not_activated") {
+        return { kind: "not_activated" as const };
+      }
+      if (accountResult.kind === "invalid_account") {
+        return { kind: "invalid_account" as const };
+      }
+      if (accountResult.kind === "duplicate_account") {
+        return {
+          kind: "duplicate_account" as const,
+          existing: accountResult.existing,
+        };
+      }
     }
 
     const [row] = await tx
@@ -195,6 +234,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json(
       { error: "Validation failed", fieldErrors: outcome.fieldErrors },
       { status: 422 }
+    );
+  }
+  if (outcome.kind === "not_activated") {
+    return NextResponse.json(
+      { error: "CRM is not fully activated for this tenant" },
+      { status: 409 }
+    );
+  }
+  if (outcome.kind === "invalid_account") {
+    return NextResponse.json(
+      { error: "Selected account was not found" },
+      { status: 422 }
+    );
+  }
+  if (outcome.kind === "duplicate_account") {
+    return NextResponse.json(
+      {
+        error: `An account named "${outcome.existing.name}" already exists`,
+        existing: outcome.existing,
+      },
+      { status: 409 }
     );
   }
   return NextResponse.json({ record: serializeRecord(outcome.row) });

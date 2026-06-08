@@ -61,6 +61,28 @@ the admin, not sit in its own Panel above the form. Reworked so:
   placed). Existing tenants were reprovisioned (`pnpm --filter @adserve/crm reprovision-crm`) so
   the field exists; new tenants get it via activation.
 
+## Iteration 3 — detail + edit parity for the account field
+
+The account field was create-only (showed "—" on detail, not saved on edit). Now wired for
+create/detail/edit parity, reusing the create-path machinery:
+
+- **Load / hydrate** — `lib/crm/account-hydration.ts` (`accountSelectionFromRelationships`, a pure,
+  client-safe, type-only-import helper) derives the field value from the contact's existing
+  `contact_belongs_to_account` link. The detail client seeds `DynamicForm` `initialData.account`
+  with it, so view shows the account name and edit pre-selects it.
+- **Save on edit** — `lib/crm/contact-account.ts` (`applyContactAccount`) is the shared writer used
+  by the contact PATCH route. It routes the same `accountId` / `newAccountName` selection as create
+  and enforces one account via the link layer's **many_to_one REPLACE** branch: `createRecordLink`
+  deletes the prior link and inserts the new one. Create-new validates uniqueness via the shared
+  `findAccountByName`. Clearing the field removes the link. All in the existing single `withTenant`
+  tx — a duplicate/invalid account returns before the data write, so nothing is persisted.
+- **Contract** — the PATCH body carries an optional `account` directive
+  (`{ accountId } | { newAccountName } | null`); its **presence** is the signal to apply (null =
+  clear), its absence leaves links untouched (partial-update safe). Relationship fields are skipped
+  in the PATCH `records.data` loop (same as create).
+- The detail page's existing "Related" sidebar still lists the linked account; the field is the
+  editable surface.
+
 ## Data model touched
 
 No schema change. No migration. The `relationships` registry is **not** touched. Adding the
@@ -107,11 +129,10 @@ aborts). Smoke test runs under the `adserve_app` NOBYPASSRLS harness.
   (e.g. `{ relationshipName, targetEntitySlug, allowCreate }`) so ANY relationship field gets an
   appropriate picker. That needs `ProvisionFieldSpec` / `createFieldDefinition` to carry `settings`
   (they currently do not) — a small `@adserve/module-framework` change deliberately skipped here.
-- **EDIT / DETAIL PARITY NOT WIRED:** because `account` is now a layout field, it also appears on
-  the contact **detail/edit** form. There, its value is NOT hydrated from `record_relationships`,
-  so it shows "—" / an empty picker even when the contact has an account, and editing it does not
-  persist a link (the create endpoint is the only writer). Production must hydrate the relationship
-  value into the form and persist add/replace/remove on edit. Prototype scope is create-only.
+- **EDIT / DETAIL PARITY — DONE (iteration 3):** detail/edit now hydrate the `account` field from
+  the existing link and persist add/replace/clear on edit. See "Iteration 3" below. (Remaining
+  production gap: only the single contact→account link is handled — the many_to_many model could
+  in principle hold several; the prototype intentionally collapses to one.)
 - **RELATIONSHIP COERCION BYPASS:** `DynamicForm` skips `coerceFieldValue` for relationship fields
   (pass-through). Production needs real validation for relationship fields (required handling, valid
   selection shape) rather than trusting the caller.

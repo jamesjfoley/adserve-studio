@@ -16,6 +16,8 @@ import type { CrmActivityType } from "@adserve/crm";
 import { DynamicForm } from "@/components/dynamic-form";
 import type { SerializedRecord } from "@/lib/crm/serialize";
 import type { RelatedRecord } from "@/lib/crm/relationships";
+import { accountSelectionFromRelationships } from "@/lib/crm/account-hydration";
+import type { AccountSelection } from "@/components/crm/account-picker";
 import type { SerializedActivity } from "../page";
 import { AiActivitySummary } from "./ai-activity-summary";
 import { DetailTabs, type DetailTab } from "./detail-tabs";
@@ -106,10 +108,27 @@ export function CrmDetailClient({
 
   async function handleSave(validated: Record<string, unknown>) {
     setEditError(null);
+    // The `account` relationship is a form field but not records.data — pull it
+    // out and route it as the account directive (same shape as create). Its
+    // presence in `validated` (the form had the field) is the signal to apply;
+    // null clears the link.
+    const hasAccount = "account" in validated;
+    const sel = validated.account as AccountSelection | null | undefined;
+    delete validated.account;
+    const account = hasAccount
+      ? sel?.kind === "existing"
+        ? { accountId: sel.id }
+        : sel?.kind === "new"
+          ? { newAccountName: sel.name }
+          : null
+      : undefined;
+
     const res = await fetch(`/api/crm/${collectionSegment}/${recordId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: validated }),
+      body: JSON.stringify(
+        hasAccount ? { data: validated, account } : { data: validated }
+      ),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -203,6 +222,13 @@ export function CrmDetailClient({
 
   const relationshipSlugs = Object.keys(relationships).sort();
 
+  // Hydrate the account relationship field (contacts) from the existing link so
+  // the detail/edit form shows the linked account instead of "—".
+  const formInitialData =
+    entitySlug === "contact"
+      ? { ...record.data, account: accountSelectionFromRelationships(relationships) }
+      : record.data;
+
   // The "Details" form, reused as the first tab (account/opportunity variants)
   // and as the main column (contact/lead).
   const formNode: ReactNode = (
@@ -211,7 +237,7 @@ export function CrmDetailClient({
         key={mode}
         layoutConfig={layoutConfig}
         fields={fields}
-        initialData={record.data}
+        initialData={formInitialData}
         mode={mode}
         onSubmit={mode === "edit" ? handleSave : undefined}
         submitError={editError}
