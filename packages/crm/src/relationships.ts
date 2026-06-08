@@ -24,11 +24,30 @@ export const CONTACT_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
   name: "contact_belongs_to_account",
   sourceEntitySlug: "contact",
   targetEntitySlug: "account",
-  // WS1: contact↔account is true many-to-many. The "primary" account lives in
-  // record_relationships.metadata.isPrimary, not in the cardinality.
+  // The PRIMARY (home/employer) account — exactly one per contact. WS1/007 had
+  // overloaded this to many_to_many to capture the multi-account case; that case
+  // now has its own relationship (CONTACT_RELATED_TO_ACCOUNT), so primary is a
+  // true many_to_one. New tenants activate as M2O; existing tenants are flipped
+  // by a gated migration (prod) / a local SQL UPDATE (prototype) — activate
+  // skips-on-match by name and never reconciles cardinality.
+  cardinality: "many_to_one",
+  cascadeDelete: false,
+  description: "A contact's primary (home/employer) account — exactly one",
+};
+
+export const CONTACT_RELATED_TO_ACCOUNT: CrmRelationshipSpec = {
+  // The contact's RELATED accounts — accounts worked with but not belonged to
+  // (e.g. an auditor's client accounts). Many-to-many: zero or many, add/remove,
+  // no replace. Shares the record_relationships junction with the primary
+  // relationship but is a distinct registry row (distinct relationshipId), so
+  // the two never bleed. A contact may NOT be related to its own primary account
+  // (self-overlap is rejected at write).
+  name: "contact_related_to_account",
+  sourceEntitySlug: "contact",
+  targetEntitySlug: "account",
   cardinality: "many_to_many",
   cascadeDelete: false,
-  description: "A contact may belong to several accounts",
+  description: "Accounts a contact works with but does not belong to",
 };
 
 export const OPPORTUNITY_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
@@ -57,6 +76,7 @@ export const OPPORTUNITY_HAS_PRIMARY_CONTACT: CrmRelationshipSpec = {
 
 export const CRM_RELATIONSHIPS: CrmRelationshipSpec[] = [
   CONTACT_BELONGS_TO_ACCOUNT,
+  CONTACT_RELATED_TO_ACCOUNT,
   OPPORTUNITY_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
 ];

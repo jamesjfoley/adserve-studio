@@ -9,6 +9,7 @@ import type {
 import { crmCollectionSegment } from "@adserve/crm/url";
 import {
   CONTACT_BELONGS_TO_ACCOUNT,
+  CONTACT_RELATED_TO_ACCOUNT,
   OPPORTUNITY_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
 } from "@adserve/crm/relationships";
@@ -220,7 +221,33 @@ export function CrmDetailClient({
     startTransition(() => router.refresh());
   }
 
-  const relationshipSlugs = Object.keys(relationships).sort();
+  // For contacts, accounts are surfaced via the primary field (form) + the
+  // Related Accounts panel, so drop them from the generic "Related" sidebar to
+  // avoid duplication.
+  const relationshipSlugs = Object.keys(relationships)
+    .filter((s) => !(entitySlug === "contact" && s === "account"))
+    .sort();
+
+  // Editable Related Accounts panel for the contact detail (M2M, owner-is-
+  // source). Reuses the WS2 add/remove route; the server rejects relating a
+  // contact to its own primary account.
+  const relatedAccountsNode: ReactNode =
+    entitySlug === "contact" ? (
+      <RelatedRecordsPanel
+        relatedSlug="account"
+        relatedPluralLabel="related accounts"
+        owningSegment={collectionSegment}
+        owningId={recordId}
+        relationshipName={CONTACT_RELATED_TO_ACCOUNT.name}
+        direction="owner-is-source"
+        items={(relationships.account ?? []).filter(
+          (a) => a.relationshipName === CONTACT_RELATED_TO_ACCOUNT.name
+        )}
+        editPermission="contact.update"
+        supportsPrimary={false}
+        canEdit={canEdit}
+      />
+    ) : null;
 
   // Hydrate the account relationship field (contacts) from the existing link so
   // the detail/edit form shows the linked account instead of "—".
@@ -352,28 +379,45 @@ export function CrmDetailClient({
         ? [{ id: "activity", label: "Activity", content: activityNode }]
         : []),
       {
-        id: "contacts",
-        label: "Contacts",
+        // Employees: contacts whose PRIMARY account is this account.
+        id: "employees",
+        label: "Employees",
         content: (
           // Account is the TARGET of contact_belongs_to_account (contact is the
           // source). The WS2 route is source-scoped, so add/remove is issued
-          // scoped to the contact with the account as the target id.
-          //
-          // Cosmetic gate: server authorizes link/unlink on the SOURCE record's
-          // permission-or-ownership (WS2 contract) — here the contact — so we
-          // gate on `contact.update`, NOT `account.update`, to predict the real
-          // rule and avoid showing a control the server then 403s. The plan's
-          // "account.update for account-side management" is a deferred product
-          // decision, intentionally not implemented in v1. `canMutate` on the
-          // server remains the real enforcement (incl. the ownership escape-hatch).
+          // scoped to the contact with the account as the target id. Cosmetic
+          // gate mirrors the server's source-side rule → `contact.update`.
           <RelatedRecordsPanel
             relatedSlug="contact"
-            relatedPluralLabel="contacts"
+            relatedPluralLabel="employees"
             owningSegment={collectionSegment}
             owningId={recordId}
             relationshipName={CONTACT_BELONGS_TO_ACCOUNT.name}
             direction="owner-is-target"
-            items={relationships.contact ?? []}
+            items={(relationships.contact ?? []).filter(
+              (c) => c.relationshipName === CONTACT_BELONGS_TO_ACCOUNT.name
+            )}
+            editPermission="contact.update"
+            supportsPrimary={false}
+            canEdit={canEdit}
+          />
+        ),
+      },
+      {
+        // Related contacts: contacts RELATED to (not employed by) this account.
+        id: "related-contacts",
+        label: "Related Contacts",
+        content: (
+          <RelatedRecordsPanel
+            relatedSlug="contact"
+            relatedPluralLabel="related contacts"
+            owningSegment={collectionSegment}
+            owningId={recordId}
+            relationshipName={CONTACT_RELATED_TO_ACCOUNT.name}
+            direction="owner-is-target"
+            items={(relationships.contact ?? []).filter(
+              (c) => c.relationshipName === CONTACT_RELATED_TO_ACCOUNT.name
+            )}
             editPermission="contact.update"
             supportsPrimary={false}
             canEdit={canEdit}
@@ -533,6 +577,7 @@ export function CrmDetailClient({
 
           {/* Sidebar */}
           <aside className="space-y-6">
+            {relatedAccountsNode}
             {legacyRelatedNode}
             {activityNode}
           </aside>

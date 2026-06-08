@@ -71,8 +71,12 @@ describe("WS1 — cardinality reconciliation (sql/007)", () => {
       "opportunity_belongs_to_account"
     );
 
-    // The spec-level cardinality reflects the WS1 flip.
-    expect(CONTACT_BELONGS_TO_ACCOUNT.cardinality).toBe("many_to_many");
+    // Spec-level cardinality. contact_belongs_to_account is now the PRIMARY
+    // many_to_one (the multi-account case moved to contact_related_to_account);
+    // sql/007 historically flipped prod to many_to_many, and the prod re-flip
+    // to many_to_one is gated migration 010. opportunity↔contact stays
+    // many_to_many; opportunity↔account stays many_to_one.
+    expect(CONTACT_BELONGS_TO_ACCOUNT.cardinality).toBe("many_to_one");
     expect(OPPORTUNITY_HAS_PRIMARY_CONTACT.cardinality).toBe("many_to_many");
     expect(OPPORTUNITY_BELONGS_TO_ACCOUNT.cardinality).toBe("many_to_one");
 

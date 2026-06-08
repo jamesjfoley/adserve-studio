@@ -8,7 +8,10 @@ import {
   schemaRelationships,
 } from "@adserve/database";
 import { getEntityTypeBySlug } from "@adserve/module-framework";
-import { CONTACT_BELONGS_TO_ACCOUNT } from "@adserve/crm";
+import {
+  CONTACT_BELONGS_TO_ACCOUNT,
+  CONTACT_RELATED_TO_ACCOUNT,
+} from "@adserve/crm";
 import {
   setupCrmTenant,
   teardownCrmTenant,
@@ -16,15 +19,13 @@ import {
 } from "../helpers/crm";
 
 /**
- * WS3 — combined contact-create-with-accounts endpoint (acceptance 11).
- *
- * Runs under the ENFORCED `adserve_app` harness, so the route's `withTenant`
- * queries are subject to RLS exactly as in prod. Asserts:
- *  - N selected accounts → contact created + exactly N contact↔account links,
- *  - the create+link is ATOMIC (a cross-tenant accountId rejects → zero contact
- *    AND zero links — no half-created contact),
- *  - zero accounts → an unlinked contact,
- *  - cross-tenant accountIds never create a cross-tenant link.
+ * Combined contact-create endpoint — primary (`account`, many_to_one) +
+ * `relatedAccounts` (many_to_many). Runs under the ENFORCED `adserve_app`
+ * harness, so the route's `withTenant` queries are subject to RLS as in prod.
+ * Asserts the new model: one primary + N related, create-new + uniqueness,
+ * self-overlap filtering, and atomic rollback (a cross-tenant id → no contact).
+ * The legacy `accountIds[]` multi-primary path is gone — multi-account is now
+ * `relatedAccounts`.
  */
 
 const authMock = vi.hoisted(() => vi.fn());
@@ -149,17 +150,27 @@ async function linkedAccountId(
 }
 
 async function linksFor(crm: CrmTestSetup, contactId: string): Promise<number> {
+  return (await targetsByRel(crm, contactId, CONTACT_BELONGS_TO_ACCOUNT.name))
+    .length;
+}
+
+/** Target account ids linked to a contact by a given relationship name. */
+async function targetsByRel(
+  crm: CrmTestSetup,
+  contactId: string,
+  relName: string
+): Promise<string[]> {
   const [rel] = await testDb
     .select({ id: schemaRelationships.id })
     .from(schemaRelationships)
     .where(
       and(
         eq(schemaRelationships.tenantId, crm.tenantId),
-        eq(schemaRelationships.name, CONTACT_BELONGS_TO_ACCOUNT.name)
+        eq(schemaRelationships.name, relName)
       )
     );
   const rows = await testDb
-    .select({ id: recordRelationships.id })
+    .select({ target: recordRelationships.targetRecordId })
     .from(recordRelationships)
     .where(
       and(
@@ -167,7 +178,12 @@ async function linksFor(crm: CrmTestSetup, contactId: string): Promise<number> {
         eq(recordRelationships.sourceRecordId, contactId)
       )
     );
-  return rows.length;
+  return rows.map((r) => r.target);
+}
+
+/** Related (M2M) account ids for a contact. */
+function relatedTargets(crm: CrmTestSetup, contactId: string): Promise<string[]> {
+  return targetsByRel(crm, contactId, CONTACT_RELATED_TO_ACCOUNT.name);
 }
 
 beforeAll(async () => {
@@ -179,28 +195,32 @@ afterAll(async () => {
   if (tenantB?.tenantId) await teardownCrmTenant(tenantB.tenantId);
 });
 
-describe("WS3 — contact create with N accounts (AC 11)", () => {
-  test("N accounts → contact + exactly N links", async () => {
+describe("contact create — N accounts → 1 primary + (N-1) related", () => {
+  test("primary + related set → exactly one primary, the rest related", async () => {
     actAs(tenantA, tenantA.owner.authProviderId);
-    const accountIds = [
-      await seedAccount(tenantA),
-      await seedAccount(tenantA),
-      await seedAccount(tenantA),
-    ];
+    const primary = await seedAccount(tenantA);
+    const relatedA = await seedAccount(tenantA);
+    const relatedB = await seedAccount(tenantA);
     const lastName = uniqueToken();
 
     const res = await createContact(
       jsonReq({
         data: { firstName: "Multi", lastName, status: "active" },
-        accountIds,
+        accountId: primary,
+        relatedAccounts: [{ accountId: relatedA }, { accountId: relatedB }],
       })
     );
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.linkedAccountCount).toBe(3);
+    expect(body.primaryAccountId).toBe(primary);
+    expect(body.relatedAccountCount).toBe(2);
 
     expect(await contactCount(tenantA, lastName)).toBe(1);
-    expect(await linksFor(tenantA, body.record.id)).toBe(3);
+    expect(await linksFor(tenantA, body.record.id)).toBe(1); // one primary
+    expect(await linkedAccountId(tenantA, body.record.id)).toBe(primary);
+    expect((await relatedTargets(tenantA, body.record.id)).sort()).toEqual(
+      [relatedA, relatedB].sort()
+    );
   });
 
   test("zero accounts → an unlinked contact", async () => {
@@ -213,24 +233,44 @@ describe("WS3 — contact create with N accounts (AC 11)", () => {
     const body = await res.json();
     expect(await contactCount(tenantA, lastName)).toBe(1);
     expect(await linksFor(tenantA, body.record.id)).toBe(0);
+    expect(await relatedTargets(tenantA, body.record.id)).toHaveLength(0);
   });
 
-  test("atomic: a cross-tenant accountId rejects → NO contact, NO links", async () => {
+  test("self-overlap: a related entry equal to the primary is filtered out", async () => {
     actAs(tenantA, tenantA.owner.authProviderId);
-    const goodAccount = await seedAccount(tenantA);
+    const primary = await seedAccount(tenantA);
+    const lastName = uniqueToken();
+
+    const res = await createContact(
+      jsonReq({
+        data: { firstName: "Overlap", lastName, status: "active" },
+        accountId: primary,
+        relatedAccounts: [{ accountId: primary }], // same as primary → dropped
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.relatedAccountCount).toBe(0);
+    expect(await linkedAccountId(tenantA, body.record.id)).toBe(primary);
+    expect(await relatedTargets(tenantA, body.record.id)).toHaveLength(0);
+  });
+
+  test("atomic: a cross-tenant related accountId rejects → NO contact", async () => {
+    actAs(tenantA, tenantA.owner.authProviderId);
+    const primary = await seedAccount(tenantA);
     const foreignAccount = await seedAccount(tenantB);
     const lastName = uniqueToken();
 
     const res = await createContact(
       jsonReq({
         data: { firstName: "Atomic", lastName, status: "active" },
-        // One valid + one cross-tenant id → whole tx must abort.
-        accountIds: [goodAccount, foreignAccount],
+        accountId: primary,
+        relatedAccounts: [{ accountId: foreignAccount }],
       })
     );
     expect(res.status).toBe(422);
 
-    // No half-created contact, and no cross-tenant link to the foreign account.
+    // Whole tx rolled back — no contact, no link to the foreign account.
     expect(await contactCount(tenantA, lastName)).toBe(0);
     const foreignLinks = await testDb
       .select({ id: recordRelationships.id })
@@ -239,7 +279,7 @@ describe("WS3 — contact create with N accounts (AC 11)", () => {
     expect(foreignLinks).toHaveLength(0);
   });
 
-  test("cross-tenant: a foreign accountId alone never links and rejects", async () => {
+  test("cross-tenant: a foreign PRIMARY accountId rejects → NO contact", async () => {
     actAs(tenantA, tenantA.owner.authProviderId);
     const foreignAccount = await seedAccount(tenantB);
     const lastName = uniqueToken();
@@ -247,21 +287,16 @@ describe("WS3 — contact create with N accounts (AC 11)", () => {
     const res = await createContact(
       jsonReq({
         data: { firstName: "Cross", lastName, status: "active" },
-        accountIds: [foreignAccount],
+        accountId: foreignAccount,
       })
     );
     expect(res.status).toBe(422);
     expect(await contactCount(tenantA, lastName)).toBe(0);
-    const foreignLinks = await testDb
-      .select({ id: recordRelationships.id })
-      .from(recordRelationships)
-      .where(eq(recordRelationships.targetRecordId, foreignAccount));
-    expect(foreignLinks).toHaveLength(0);
   });
 });
 
-describe("prototype — single account + inline create-new", () => {
-  test("single existing accountId → contact + exactly 1 link to it", async () => {
+describe("contact create — primary single account + inline create-new", () => {
+  test("single existing accountId → contact + exactly 1 primary link", async () => {
     actAs(tenantA, tenantA.owner.authProviderId);
     const accountId = await seedAccount(tenantA);
     const lastName = uniqueToken();
@@ -274,12 +309,12 @@ describe("prototype — single account + inline create-new", () => {
     );
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.linkedAccountCount).toBe(1);
+    expect(body.primaryAccountId).toBe(accountId);
     expect(await linksFor(tenantA, body.record.id)).toBe(1);
     expect(await linkedAccountId(tenantA, body.record.id)).toBe(accountId);
   });
 
-  test("create-new: typed name → account created + contact linked, atomically", async () => {
+  test("create-new primary: typed name → account created + linked, atomically", async () => {
     actAs(tenantA, tenantA.owner.authProviderId);
     const newName = `New Co ${uniqueToken()}`;
     const lastName = uniqueToken();
@@ -292,13 +327,29 @@ describe("prototype — single account + inline create-new", () => {
     );
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.createdAccount).toBeTruthy();
-    expect(body.createdAccount.data.name).toBe(newName);
-    expect(body.linkedAccountCount).toBe(1);
+    expect(body.primaryAccountId).toBeTruthy();
     expect(await accountCountByName(tenantA, newName)).toBe(1);
     expect(await linkedAccountId(tenantA, body.record.id)).toBe(
-      body.createdAccount.id
+      body.primaryAccountId
     );
+  });
+
+  test("create-new related: typed names become related accounts", async () => {
+    actAs(tenantA, tenantA.owner.authProviderId);
+    const relName = `Rel Co ${uniqueToken()}`;
+    const lastName = uniqueToken();
+
+    const res = await createContact(
+      jsonReq({
+        data: { firstName: "RelMaker", lastName, status: "active" },
+        relatedAccounts: [{ newAccountName: relName }],
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.relatedAccountCount).toBe(1);
+    expect(await accountCountByName(tenantA, relName)).toBe(1);
+    expect(await relatedTargets(tenantA, body.record.id)).toHaveLength(1);
   });
 
   test("create-new duplicate (case/space-insensitive) → 409, nothing written", async () => {

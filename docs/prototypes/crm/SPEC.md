@@ -83,13 +83,51 @@ create/detail/edit parity, reusing the create-path machinery:
 - The detail page's existing "Related" sidebar still lists the linked account; the field is the
   editable surface.
 
+## Iteration 4 — Primary + Related accounts (two relationships)
+
+Per the Rev-5 plan, contact↔account is split into TWO relationships sharing the junction:
+
+- **`contact_belongs_to_account` → `many_to_one`** (PRIMARY, "Primary Account") — exactly one.
+  The spec cardinality was flipped from M2M to M2O in `relationships.ts`; the local dev tenant's
+  existing registry row was flipped with a one-off SQL `UPDATE` (activate skips-on-match by name).
+  The forced `relationshipType: "many_to_one"` override in `applyContactAccount` was **dropped** —
+  the real (M2O) relationship now drives the REPLACE branch.
+- **`contact_related_to_account` → `many_to_many`** (NEW, "Related Accounts" / "Related Contacts")
+  — zero or many; registered in `relationships.ts` + provisioned via `activate.ts`.
+- **No self-overlap:** a contact may not be RELATED to its own PRIMARY account. Enforced at write
+  (the WS2 link route rejects it 422; `applyRelatedAccounts` filters the desired set against the
+  primary; setting a primary drops any related link to that account — primary wins).
+- **Read path is edge-driven:** `loadRecordWithRelationships` now emits one `RelatedRecord` per
+  relationship EDGE (group by `(otherId, relationshipName)`), so primary vs related to the same
+  account stay distinct. Detail UI splits the lists in-memory by `relationshipName` (no extra
+  queries).
+- **API:** the create + PATCH contracts take a primary `account` directive
+  (`{accountId}|{newAccountName}|null`) plus `relatedAccounts` (a full desired set keyed by
+  presence; entries are `{accountId}` or `{newAccountName}`). Combined PATCH applies **primary
+  first, then related** filtered against it. All in one `withTenant` tx; a duplicate/invalid/
+  cross-tenant id throws `ContactAccountAbort` → the whole tx rolls back (atomic). The **legacy
+  `accountIds[]` multi-primary path is REMOVED**.
+- **UI:** account detail now shows **Employees** (primary) + **Related Contacts** (related) tabs;
+  contact detail shows an editable **Related Accounts** panel. All reuse `RelatedRecordsPanel` +
+  the WS2 link route (add/remove existing). Primary stays the inline single-select field.
+
+### Deferred from this iteration (logged — rebuild scope)
+
+- **Create-FORM related control:** the create endpoint accepts `relatedAccounts`, but the contact
+  *create form* has no related multi-select control yet — related accounts are added on the contact
+  detail page post-create. (Covered by endpoint tests.)
+- **Inline create-new on the detail Related panels:** `RelatedRecordsPanel` / `LinkRecordPicker`
+  link EXISTING records only (and still 200-cap, no typeahead). Create-new for related is supported
+  by the `relatedAccounts` endpoint directive, not the detail panel. Rebuild should give the related
+  panels the same searchable + create-new control as the primary picker.
+
 ## Data model touched
 
-No schema change. No migration. The `relationships` registry is **not** touched. Adding the
-`account` field definition is done through the existing idempotent activation path (a
-`field_definitions` row per tenant). Only `records` (insert one account) and `record_relationships`
-(insert one link) rows are written at create time, via the existing `createRecordLink` writer,
-inside the caller's `withTenant` tx.
+Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
+`contact_belongs_to_account` registry row, and `activate.ts` registering the new
+`contact_related_to_account` row per tenant (idempotent). No prod migration. Row writes go to
+`records` (accounts) and `record_relationships` (links) inside `withTenant`. The PRODUCTION registry
+flip + reconciliation are gated migrations 009/010 (below) — NOT done here.
 
 ## Auth & permissions
 
@@ -106,11 +144,28 @@ aborts). Smoke test runs under the `adserve_app` NOBYPASSRLS harness.
 
 ## Production Considerations log (DO NOT build in prototype — handoff to the rebuild)
 
-- **DATA-MODEL DEFERRED:** contact↔account is `many_to_many` in the shipped model (WS1 / `sql/007`).
-  This prototype enforces single-account in the UX + endpoint only. Whether it should be
-  `many_to_one` at the data level is a rebuild decision — if yes, it is a **gated migration (009)**
-  on the `relationships` registry **plus destructive reconciliation** of any existing contacts
-  linked to >1 account (pick `isPrimary`, else first; deletes the rest).
+- **GATED MIGRATIONS 009 + 010 (prod registry + reconciliation):** the prototype flipped the model
+  locally; prod still has `contact_belongs_to_account = many_to_many` (WS1 / `sql/007`) and no
+  related row. The rebuild must run, on prod via the `adserve_migrator` bastion (human-gated):
+  - **009** — add the `contact_related_to_account` (M2M) registry row. Self-idempotent
+    (SELECT-then-INSERT on `(tenant_id, name)`); does NOT depend on 008's index.
+  - **010** — flip `contact_belongs_to_account` M2M→M2O **+ reconcile**: for any contact with
+    multiple primary links, keep the **oldest** (`record_relationships.createdAt`; `isPrimary` is
+    never written, so it won't apply) and **convert the rest to `contact_related_to_account`** —
+    no data deleted. Idempotent: convert-inserts use `ON CONFLICT DO NOTHING`; "keep oldest" is a
+    no-op once one primary remains. Filenames sort 009 before 010 (apply order). The enum flip is
+    advisory only (see M2O hardening below) — the reconciliation is what makes data single-primary.
+- **008 PROD-APPLY PENDING / UNVERIFIED:** `sql/008` (`UNIQUE(tenant_id, name)` on the relationships
+  registry) is merged to `main` (PR #20) and applied to LOCAL dev, but the **prod RDS apply is
+  pending/unverified** per `aws-deployment-status.md:31`. Do NOT assume the index exists on prod.
+  The 009/010 bastion session must run a read-only `pg_indexes` check first and apply 008
+  (idempotent `IF NOT EXISTS`) if absent. Leave the `aws-deployment-status.md:31` "pending" line as
+  is — it flips ONLY when an actual bastion query confirms/applies it on prod.
+- **M2O IS NOT DB-ENFORCED:** flipping the registry `relationship_type` to `many_to_one` is a label
+  only — Postgres won't stop a buggy writer creating two primary links. Single-primary is enforced
+  by `createRecordLink`'s replace branch + the reconciliation. Rebuild hardening: a partial unique
+  index on `(tenant_id, relationship_id, source_record_id)` scoped to the primary relationship makes
+  it a true DB invariant.
 - **ACCOUNT NAME UNIQUENESS IS RACY:** there is no DB unique constraint on accounts'
   `records.data->>'name'` (the `sql/008` UNIQUE is on the `relationships` registry — a different
   table). The create-new uniqueness check is read-then-insert and can race under concurrent

@@ -11,6 +11,7 @@ import {
 import { getEntityTypeBySlug } from "@adserve/module-framework";
 import {
   CONTACT_BELONGS_TO_ACCOUNT,
+  CONTACT_RELATED_TO_ACCOUNT,
   OPPORTUNITY_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
 } from "@adserve/crm";
@@ -352,12 +353,14 @@ describe("WS2 — unlink semantics (AC 7)", () => {
       name: uniqueToken(),
       status: "active",
     });
-    const rid = await relId(tenantA, CONTACT_BELONGS_TO_ACCOUNT.name);
+    // Use the M2M related relationship so two links legitimately coexist
+    // (contact_belongs_to_account is now many_to_one → linking replaces).
+    const rid = await relId(tenantA, CONTACT_RELATED_TO_ACCOUNT.name);
 
     for (const acc of [accountX, accountY]) {
       await linkRel(
         jsonReq("POST", {
-          relationshipName: CONTACT_BELONGS_TO_ACCOUNT.name,
+          relationshipName: CONTACT_RELATED_TO_ACCOUNT.name,
           targetRecordId: acc,
         }),
         contactsParams(contactId)
@@ -368,7 +371,7 @@ describe("WS2 — unlink semantics (AC 7)", () => {
     // DELETE only X.
     const delX = await unlinkRel(
       jsonReq("DELETE", {
-        relationshipName: CONTACT_BELONGS_TO_ACCOUNT.name,
+        relationshipName: CONTACT_RELATED_TO_ACCOUNT.name,
         targetRecordId: accountX,
       }),
       contactsParams(contactId)
@@ -379,7 +382,7 @@ describe("WS2 — unlink semantics (AC 7)", () => {
     // DELETE the sole remaining link → allowed, record left orphaned.
     const delY = await unlinkRel(
       jsonReq("DELETE", {
-        relationshipName: CONTACT_BELONGS_TO_ACCOUNT.name,
+        relationshipName: CONTACT_RELATED_TO_ACCOUNT.name,
         targetRecordId: accountY,
       }),
       contactsParams(contactId)

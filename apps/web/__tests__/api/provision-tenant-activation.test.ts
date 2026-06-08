@@ -83,7 +83,7 @@ describe("GET /api/dev/provision-tenant → CRM activation", () => {
     vi.unstubAllEnvs();
   });
 
-  test("provisioning a tenant registers 4 entity types + 3 relationships", async () => {
+  test("provisioning a tenant registers 4 entity types + 4 relationships", async () => {
     const { GET } = await import(
       "@/app/api/dev/provision-tenant/route"
     );
@@ -110,7 +110,7 @@ describe("GET /api/dev/provision-tenant → CRM activation", () => {
       .select()
       .from(schemaRelationships)
       .where(eq(schemaRelationships.tenantId, tenantId));
-    expect(rels).toHaveLength(3);
+    expect(rels).toHaveLength(4);
 
     // Member role got exactly the 7 CRM grants from activation (the
     // provisioning route itself grants member nothing).

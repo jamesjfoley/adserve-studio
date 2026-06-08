@@ -8,7 +8,10 @@ import {
   schemaRelationships,
 } from "@adserve/database";
 import { getEntityTypeBySlug } from "@adserve/module-framework";
-import { CONTACT_BELONGS_TO_ACCOUNT } from "@adserve/crm";
+import {
+  CONTACT_BELONGS_TO_ACCOUNT,
+  CONTACT_RELATED_TO_ACCOUNT,
+} from "@adserve/crm";
 import { accountSelectionFromRelationships } from "@/lib/crm/account-hydration";
 import {
   setupCrmTenant,
@@ -33,6 +36,7 @@ import {
   GET as getRecord,
   PATCH as patchRecord,
 } from "@/app/api/crm/[entityType]/[id]/route";
+import { POST as linkRel } from "@/app/api/crm/[entityType]/[id]/relationships/route";
 
 let crm: CrmTestSetup;
 let tokenCounter = 0;
@@ -241,5 +245,134 @@ describe("contact account field — detail + edit parity", () => {
     );
     expect(res.status).toBe(200);
     expect(await accountLinks(contactId)).toEqual([accountA]);
+  });
+});
+
+/** Related (M2M) account ids for a contact. */
+async function relatedTargets(contactId: string): Promise<string[]> {
+  const [rel] = await testDb
+    .select({ id: schemaRelationships.id })
+    .from(schemaRelationships)
+    .where(
+      and(
+        eq(schemaRelationships.tenantId, crm.tenantId),
+        eq(schemaRelationships.name, CONTACT_RELATED_TO_ACCOUNT.name)
+      )
+    );
+  const rows = await testDb
+    .select({ target: recordRelationships.targetRecordId })
+    .from(recordRelationships)
+    .where(
+      and(
+        eq(recordRelationships.relationshipId, rel.id),
+        eq(recordRelationships.sourceRecordId, contactId)
+      )
+    );
+  return rows.map((r) => r.target);
+}
+
+describe("related accounts — reconcile, self-overlap, loader split", () => {
+  test("PATCH relatedAccounts reconciles to the desired set (add + remove)", async () => {
+    actAs(crm.owner.authProviderId);
+    const a = await seedAccount(`R-A ${uniqueToken()}`);
+    const b = await seedAccount(`R-B ${uniqueToken()}`);
+    const c = await seedAccount(`R-C ${uniqueToken()}`);
+    const contactId = await createContactLinkedTo(await seedAccount());
+
+    // Set related = {A, B}.
+    let res = await patchRecord(
+      jsonReq("PATCH", {
+        data: {},
+        relatedAccounts: [{ accountId: a }, { accountId: b }],
+      }),
+      contactParams(contactId)
+    );
+    expect(res.status).toBe(200);
+    expect((await relatedTargets(contactId)).sort()).toEqual([a, b].sort());
+
+    // Reconcile to {B, C} — A removed, C added, B kept.
+    res = await patchRecord(
+      jsonReq("PATCH", {
+        data: {},
+        relatedAccounts: [{ accountId: b }, { accountId: c }],
+      }),
+      contactParams(contactId)
+    );
+    expect(res.status).toBe(200);
+    expect((await relatedTargets(contactId)).sort()).toEqual([b, c].sort());
+
+    // Empty set removes all related links.
+    res = await patchRecord(
+      jsonReq("PATCH", { data: {}, relatedAccounts: [] }),
+      contactParams(contactId)
+    );
+    expect(res.status).toBe(200);
+    expect(await relatedTargets(contactId)).toHaveLength(0);
+  });
+
+  test("combined PATCH: primary + related applied together (related filtered vs primary)", async () => {
+    actAs(crm.owner.authProviderId);
+    const oldPrimary = await seedAccount(`old ${uniqueToken()}`);
+    const newPrimary = await seedAccount(`new ${uniqueToken()}`);
+    const rel = await seedAccount(`rel ${uniqueToken()}`);
+    const contactId = await createContactLinkedTo(oldPrimary);
+
+    const res = await patchRecord(
+      jsonReq("PATCH", {
+        data: {},
+        account: { accountId: newPrimary },
+        // newPrimary also listed as related → must be filtered (self-overlap).
+        relatedAccounts: [{ accountId: rel }, { accountId: newPrimary }],
+      }),
+      contactParams(contactId)
+    );
+    expect(res.status).toBe(200);
+    expect(await accountLinks(contactId)).toEqual([newPrimary]); // primary replaced
+    expect(await relatedTargets(contactId)).toEqual([rel]); // newPrimary filtered out
+  });
+
+  test("WS2: relating a contact to its own primary account is rejected (422)", async () => {
+    actAs(crm.owner.authProviderId);
+    const primary = await seedAccount(`P ${uniqueToken()}`);
+    const contactId = await createContactLinkedTo(primary);
+
+    const res = await linkRel(
+      jsonReq("POST", {
+        relationshipName: CONTACT_RELATED_TO_ACCOUNT.name,
+        targetRecordId: primary,
+      }),
+      contactParams(contactId)
+    );
+    expect(res.status).toBe(422);
+    expect(await relatedTargets(contactId)).toHaveLength(0);
+  });
+
+  test("edge-driven loader: a contact's primary + related accounts surface as distinct edges", async () => {
+    actAs(crm.owner.authProviderId);
+    const primary = await seedAccount(`P ${uniqueToken()}`);
+    const related = await seedAccount(`R ${uniqueToken()}`);
+    const contactId = await createContactLinkedTo(primary);
+    await patchRecord(
+      jsonReq("PATCH", { data: {}, relatedAccounts: [{ accountId: related }] }),
+      contactParams(contactId)
+    );
+
+    const res = await getRecord(
+      new NextRequest("http://localhost"),
+      contactParams(contactId)
+    );
+    const body = await res.json();
+    const accountEdges = (body.relationships.account ?? []) as Array<{
+      id: string;
+      relationshipName: string;
+    }>;
+    const primaryEdge = accountEdges.find(
+      (e) => e.relationshipName === CONTACT_BELONGS_TO_ACCOUNT.name
+    );
+    const relatedEdge = accountEdges.find(
+      (e) => e.relationshipName === CONTACT_RELATED_TO_ACCOUNT.name
+    );
+    expect(primaryEdge?.id).toBe(primary);
+    expect(relatedEdge?.id).toBe(related);
   });
 });

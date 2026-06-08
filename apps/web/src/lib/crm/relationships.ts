@@ -92,26 +92,21 @@ export async function loadRecordWithRelationships(
       )
     );
 
-  // Map each related record id → the edge metadata that connects it here.
-  // A record could in principle be linked by more than one relationship; the
-  // first edge wins for grouping/labelling (the detail UI groups by the
-  // related record's entity type, not the edge type).
-  const edgeByOtherId = new Map<
-    string,
-    { relationshipName: string; metadata: Record<string, unknown> }
-  >();
-  for (const r of rels) {
-    const otherId =
-      r.sourceRecordId === recordId ? r.targetRecordId : r.sourceRecordId;
-    if (!edgeByOtherId.has(otherId)) {
-      edgeByOtherId.set(otherId, {
-        relationshipName: r.relationshipName,
-        metadata: (r.metadata as Record<string, unknown>) ?? {},
-      });
-    }
-  }
+  // EDGE-DRIVEN assembly: one RelatedRecord per relationship EDGE, NOT per
+  // related record. A record linked to the anchor by more than one relationship
+  // (e.g. an account that is both a contact's primary and related account) must
+  // surface as TWO entries — one per `relationshipName` — so the detail UI can
+  // split lists by relationship type. (Self-overlap is also rejected at write;
+  // this keeps the read correct independently — defense in depth.) The record
+  // fetch still de-dupes the id via `inArray`.
+  const edges = rels.map((r) => ({
+    otherId:
+      r.sourceRecordId === recordId ? r.targetRecordId : r.sourceRecordId,
+    relationshipName: r.relationshipName,
+    metadata: (r.metadata as Record<string, unknown>) ?? {},
+  }));
 
-  const otherIds = Array.from(edgeByOtherId.keys());
+  const otherIds = Array.from(new Set(edges.map((e) => e.otherId)));
   if (otherIds.length === 0) {
     return { record: serializeRecord(record), relationships: {} };
   }
@@ -120,6 +115,7 @@ export async function loadRecordWithRelationships(
     .select()
     .from(records)
     .where(and(eq(records.tenantId, tenantId), inArray(records.id, otherIds)));
+  const recordById = new Map(related.map((r) => [r.id, r]));
 
   const typeIds = Array.from(new Set(related.map((r) => r.entityTypeId)));
   const types = typeIds.length
@@ -136,15 +132,15 @@ export async function loadRecordWithRelationships(
   const slugById = new Map(types.map((t) => [t.id, t.slug]));
 
   const relationships: Record<string, RelatedRecord[]> = {};
-  for (const r of related) {
+  for (const edge of edges) {
+    const r = recordById.get(edge.otherId);
+    if (!r) continue; // related record not visible (shouldn't happen under RLS)
     const slug = slugById.get(r.entityTypeId) ?? "unknown";
-    const edge = edgeByOtherId.get(r.id);
-    const metadata = edge?.metadata ?? {};
     (relationships[slug] ??= []).push({
       ...serializeRecord(r),
-      relationshipName: edge?.relationshipName ?? "",
-      metadata,
-      isPrimary: metadata.isPrimary === true,
+      relationshipName: edge.relationshipName,
+      metadata: edge.metadata,
+      isPrimary: edge.metadata.isPrimary === true,
     });
   }
 

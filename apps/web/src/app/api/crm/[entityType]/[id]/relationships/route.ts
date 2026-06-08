@@ -7,7 +7,7 @@ import {
   schemaRelationships,
   withTenant,
 } from "@adserve/database";
-import { resolveCrmEntitySlug } from "@adserve/crm";
+import { resolveCrmEntitySlug, CONTACT_RELATED_TO_ACCOUNT } from "@adserve/crm";
 import { getEntityTypeBySlug } from "@adserve/module-framework";
 import {
   getTenantContextOrNull,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/permissions";
 import { writeAuditLog } from "@/lib/crm/audit";
 import { createRecordLink } from "@/lib/crm/link-records";
+import { isPrimaryAccountOf } from "@/lib/crm/contact-account";
 
 type Params = { params: Promise<{ entityType: string; id: string }> };
 
@@ -178,6 +179,18 @@ export async function POST(req: NextRequest, { params }: Params) {
       return { kind: "type_mismatch" as const };
     }
 
+    // No self-overlap: a contact may not be RELATED to its own PRIMARY account.
+    // (The route scopes contact_related_to_account to the contact as source, so
+    // owningRecord is the contact and targetRecord is the account, both sides.)
+    if (rel.name === CONTACT_RELATED_TO_ACCOUNT.name) {
+      const isPrimary = await isPrimaryAccountOf(tx, {
+        tenantId: tenant.id,
+        contactId: owningRecord.id,
+        accountId: targetRecord.id,
+      });
+      if (isPrimary) return { kind: "self_overlap" as const };
+    }
+
     // Cardinality guard, single-primary invariant, idempotent insert, and the
     // audit row all live in the shared link writer so the contact-create
     // combined endpoint (WS3) applies identical semantics.
@@ -206,6 +219,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     case "type_mismatch":
       return NextResponse.json(
         { error: "Relationship does not connect these record types" },
+        { status: 422 }
+      );
+    case "self_overlap":
+      return NextResponse.json(
+        {
+          error:
+            "A contact cannot be a related contact of its own primary account",
+        },
         { status: 422 }
       );
     case "ok":

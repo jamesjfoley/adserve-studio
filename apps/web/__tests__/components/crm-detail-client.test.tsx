@@ -315,12 +315,15 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     // Accessible tablist with the four tabs.
     const tablist = screen.getByRole("tablist", { name: /record sections/i });
     expect(within(tablist).getByRole("tab", { name: "Details" })).toBeInTheDocument();
-    expect(within(tablist).getByRole("tab", { name: "Contacts" })).toBeInTheDocument();
+    expect(within(tablist).getByRole("tab", { name: "Employees" })).toBeInTheDocument();
+    expect(
+      within(tablist).getByRole("tab", { name: "Related Contacts" })
+    ).toBeInTheDocument();
     expect(
       within(tablist).getByRole("tab", { name: "Opportunities" })
     ).toBeInTheDocument();
 
-    await user.click(within(tablist).getByRole("tab", { name: "Contacts" }));
+    await user.click(within(tablist).getByRole("tab", { name: "Employees" }));
 
     // Both contacts listed; the primary one carries a Primary badge.
     expect(screen.getByRole("link", { name: "Alpha" })).toBeInTheDocument();
@@ -346,7 +349,7 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
       },
     });
 
-    await user.click(screen.getByRole("tab", { name: "Contacts" }));
+    await user.click(screen.getByRole("tab", { name: "Employees" }));
     const links = screen.getAllByRole("link", { name: /Alpha|Bravo/ });
     // Bravo (primary) is rendered before Alpha.
     expect(links[0]).toHaveTextContent("Bravo");
@@ -362,8 +365,8 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     const user = userEvent.setup();
 
     renderDetail({ entitySlug: "account", relationships: {} });
-    await user.click(screen.getByRole("tab", { name: "Contacts" }));
-    expect(screen.getByText(/no contacts linked yet/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Employees" }));
+    expect(screen.getByText(/no employees linked yet/i)).toBeInTheDocument();
   });
 
   test("opportunity variant shows Account and Contacts tabs", async () => {

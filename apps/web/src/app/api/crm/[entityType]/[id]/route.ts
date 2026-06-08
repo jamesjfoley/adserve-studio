@@ -16,7 +16,13 @@ import {
 import { loadRecordWithRelationships } from "@/lib/crm/relationships";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
-import { applyContactAccount } from "@/lib/crm/contact-account";
+import {
+  applyContactAccount,
+  applyRelatedAccounts,
+  getPrimaryAccountId,
+  ContactAccountAbort,
+  type RelatedAccountEntry,
+} from "@/lib/crm/contact-account";
 
 type Params = { params: Promise<{ entityType: string; id: string }> };
 
@@ -103,6 +109,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   let body: {
     data?: Record<string, unknown>;
     account?: { accountId?: string; newAccountName?: string } | null;
+    relatedAccounts?: RelatedAccountEntry[];
   };
   try {
     body = await req.json();
@@ -110,12 +117,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   const input = body.data ?? {};
-  // The `account` relationship is routed separately from records.data (same
-  // contract as create). Presence of the key (even `null`) is the signal to
-  // apply it; absence leaves existing links untouched (partial update).
+  // The `account` (primary) and `relatedAccounts` relationships route separately
+  // from records.data (same contract as create). Presence of the key is the
+  // signal to apply (account: null clears; relatedAccounts: [] removes all);
+  // absence leaves existing links untouched (partial update). Contacts only.
   const accountProvided = slug === "contact" && "account" in body;
+  const relatedProvided = slug === "contact" && "relatedAccounts" in body;
+  const desiredRelated: RelatedAccountEntry[] = Array.isArray(
+    body.relatedAccounts
+  )
+    ? body.relatedAccounts
+    : [];
 
-  const outcome = await withTenant(tenant.id, async (tx) => {
+  let outcome;
+  try {
+    outcome = await withTenant(tenant.id, async (tx) => {
     const entity = await getEntityTypeBySlug(tx, { tenantId: tenant.id, slug });
     if (!entity) return { kind: "not_found" as const };
 
@@ -172,12 +188,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return { kind: "invalid" as const, fieldErrors };
     }
 
-    // Apply the account relationship (replace/clear/create-new) BEFORE the data
-    // write, so a duplicate/invalid account returns with nothing persisted
-    // (same tx → atomic with the data update on success).
+    // Apply the account relationships (primary first so related can be filtered
+    // against it) BEFORE the data write. On failure the helpers' result is
+    // thrown as ContactAccountAbort → the whole tx rolls back (nothing
+    // persisted); on success everything commits atomically with the data write.
+    let primaryAccountId: string | null = null;
     if (accountProvided) {
       const acc = body.account ?? {};
-      const accountResult = await applyContactAccount(tx, {
+      const pr = await applyContactAccount(tx, {
         tenantId: tenant.id,
         userId: user.id,
         contactId: id,
@@ -186,18 +204,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           newAccountName: acc?.newAccountName ?? null,
         },
       });
-      if (accountResult.kind === "not_activated") {
-        return { kind: "not_activated" as const };
-      }
-      if (accountResult.kind === "invalid_account") {
-        return { kind: "invalid_account" as const };
-      }
-      if (accountResult.kind === "duplicate_account") {
-        return {
-          kind: "duplicate_account" as const,
-          existing: accountResult.existing,
-        };
-      }
+      if (pr.kind !== "ok") throw new ContactAccountAbort(pr);
+      primaryAccountId = pr.accountId;
+    }
+
+    if (relatedProvided) {
+      // Filter related against the primary — the one being set this PATCH, or
+      // the contact's current primary when primary isn't part of this request.
+      const primaryForFilter = accountProvided
+        ? primaryAccountId
+        : await getPrimaryAccountId(tx, { tenantId: tenant.id, contactId: id });
+      const rr = await applyRelatedAccounts(tx, {
+        tenantId: tenant.id,
+        userId: user.id,
+        contactId: id,
+        desired: desiredRelated,
+        primaryAccountId: primaryForFilter,
+      });
+      if (rr.kind !== "ok") throw new ContactAccountAbort(rr);
     }
 
     const [row] = await tx
@@ -216,7 +240,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
 
     return { kind: "ok" as const, row };
-  });
+    });
+  } catch (e) {
+    if (e instanceof ContactAccountAbort) return mapAbort(e);
+    throw e;
+  }
 
   if (outcome.kind === "not_found") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -236,28 +264,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       { status: 422 }
     );
   }
-  if (outcome.kind === "not_activated") {
+  return NextResponse.json({ record: serializeRecord(outcome.row) });
+}
+
+/** Map a rolled-back contact-account apply failure to its HTTP response. */
+function mapAbort(e: ContactAccountAbort): NextResponse {
+  const o = e.outcome;
+  if (o.kind === "not_activated") {
     return NextResponse.json(
       { error: "CRM is not fully activated for this tenant" },
       { status: 409 }
     );
   }
-  if (outcome.kind === "invalid_account") {
+  if (o.kind === "invalid_account") {
     return NextResponse.json(
-      { error: "Selected account was not found" },
+      { error: "An account was not found", accountId: o.accountId },
       { status: 422 }
     );
   }
-  if (outcome.kind === "duplicate_account") {
+  if (o.kind === "duplicate_account") {
     return NextResponse.json(
       {
-        error: `An account named "${outcome.existing.name}" already exists`,
-        existing: outcome.existing,
+        error: `An account named "${o.existing.name}" already exists`,
+        existing: o.existing,
       },
       { status: 409 }
     );
   }
-  return NextResponse.json({ record: serializeRecord(outcome.row) });
+  return NextResponse.json({ error: "Unexpected" }, { status: 500 });
 }
 
 /** DELETE /api/crm/[entityType]/[id] — soft delete (isArchived = true). */
