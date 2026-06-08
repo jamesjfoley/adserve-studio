@@ -97,6 +97,57 @@ async function contactCount(crm: CrmTestSetup, lastName: string): Promise<number
   return matching.length;
 }
 
+/** Count non-archived accounts in the tenant whose normalised name matches. */
+async function accountCountByName(
+  crm: CrmTestSetup,
+  name: string
+): Promise<number> {
+  const entity = await getEntityTypeBySlug(testDb, {
+    tenantId: crm.tenantId,
+    slug: "account",
+  });
+  const rows = await testDb
+    .select({ data: records.data })
+    .from(records)
+    .where(
+      and(
+        eq(records.tenantId, crm.tenantId),
+        eq(records.entityTypeId, entity!.id)
+      )
+    );
+  const norm = name.trim().toLowerCase();
+  return rows.filter(
+    (r) =>
+      ((r.data as { name?: string }).name ?? "").trim().toLowerCase() === norm
+  ).length;
+}
+
+/** The id of the single account a contact is linked to (or null). */
+async function linkedAccountId(
+  crm: CrmTestSetup,
+  contactId: string
+): Promise<string | null> {
+  const [rel] = await testDb
+    .select({ id: schemaRelationships.id })
+    .from(schemaRelationships)
+    .where(
+      and(
+        eq(schemaRelationships.tenantId, crm.tenantId),
+        eq(schemaRelationships.name, CONTACT_BELONGS_TO_ACCOUNT.name)
+      )
+    );
+  const rows = await testDb
+    .select({ target: recordRelationships.targetRecordId })
+    .from(recordRelationships)
+    .where(
+      and(
+        eq(recordRelationships.relationshipId, rel.id),
+        eq(recordRelationships.sourceRecordId, contactId)
+      )
+    );
+  return rows[0]?.target ?? null;
+}
+
 async function linksFor(crm: CrmTestSetup, contactId: string): Promise<number> {
   const [rel] = await testDb
     .select({ id: schemaRelationships.id })
@@ -206,5 +257,120 @@ describe("WS3 — contact create with N accounts (AC 11)", () => {
       .from(recordRelationships)
       .where(eq(recordRelationships.targetRecordId, foreignAccount));
     expect(foreignLinks).toHaveLength(0);
+  });
+});
+
+describe("prototype — single account + inline create-new", () => {
+  test("single existing accountId → contact + exactly 1 link to it", async () => {
+    actAs(tenantA, tenantA.owner.authProviderId);
+    const accountId = await seedAccount(tenantA);
+    const lastName = uniqueToken();
+
+    const res = await createContact(
+      jsonReq({
+        data: { firstName: "Single", lastName, status: "active" },
+        accountId,
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.linkedAccountCount).toBe(1);
+    expect(await linksFor(tenantA, body.record.id)).toBe(1);
+    expect(await linkedAccountId(tenantA, body.record.id)).toBe(accountId);
+  });
+
+  test("create-new: typed name → account created + contact linked, atomically", async () => {
+    actAs(tenantA, tenantA.owner.authProviderId);
+    const newName = `New Co ${uniqueToken()}`;
+    const lastName = uniqueToken();
+
+    const res = await createContact(
+      jsonReq({
+        data: { firstName: "Maker", lastName, status: "active" },
+        newAccountName: newName,
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.createdAccount).toBeTruthy();
+    expect(body.createdAccount.data.name).toBe(newName);
+    expect(body.linkedAccountCount).toBe(1);
+    expect(await accountCountByName(tenantA, newName)).toBe(1);
+    expect(await linkedAccountId(tenantA, body.record.id)).toBe(
+      body.createdAccount.id
+    );
+  });
+
+  test("create-new duplicate (case/space-insensitive) → 409, nothing written", async () => {
+    actAs(tenantA, tenantA.owner.authProviderId);
+    const baseName = `Dup Co ${uniqueToken()}`;
+    // Seed an existing account with the canonical name.
+    const accountEntity = await getEntityTypeBySlug(testDb, {
+      tenantId: tenantA.tenantId,
+      slug: "account",
+    });
+    await testDb.insert(records).values({
+      tenantId: tenantA.tenantId,
+      entityTypeId: accountEntity!.id,
+      data: { name: baseName, status: "active" },
+    });
+    const lastName = uniqueToken();
+
+    const res = await createContact(
+      jsonReq({
+        data: { firstName: "Dupe", lastName, status: "active" },
+        // Different case + surrounding whitespace → still a duplicate.
+        newAccountName: `   ${baseName.toUpperCase()}   `,
+      })
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.existing?.name).toBe(baseName);
+    // No second account, no contact.
+    expect(await accountCountByName(tenantA, baseName)).toBe(1);
+    expect(await contactCount(tenantA, lastName)).toBe(0);
+  });
+
+  test("create-new is tenant-scoped: a same-named account in tenant B does not block tenant A", async () => {
+    const sharedName = `Shared Co ${uniqueToken()}`;
+    // Seed the name in tenant B only.
+    const bAccountEntity = await getEntityTypeBySlug(testDb, {
+      tenantId: tenantB.tenantId,
+      slug: "account",
+    });
+    await testDb.insert(records).values({
+      tenantId: tenantB.tenantId,
+      entityTypeId: bAccountEntity!.id,
+      data: { name: sharedName, status: "active" },
+    });
+
+    actAs(tenantA, tenantA.owner.authProviderId);
+    const lastName = uniqueToken();
+    const res = await createContact(
+      jsonReq({
+        data: { firstName: "Iso", lastName, status: "active" },
+        newAccountName: sharedName,
+      })
+    );
+    // Uniqueness is per-tenant under RLS — tenant A may create its own.
+    expect(res.status).toBe(201);
+    expect(await accountCountByName(tenantA, sharedName)).toBe(1);
+    expect(await accountCountByName(tenantB, sharedName)).toBe(1);
+  });
+
+  test("authz: a member without contact.create is rejected (create-new writes nothing)", async () => {
+    actAs(tenantA, tenantA.member.authProviderId);
+    const newName = `Denied Co ${uniqueToken()}`;
+    const lastName = uniqueToken();
+
+    const res = await createContact(
+      jsonReq({
+        data: { firstName: "NoPerm", lastName, status: "active" },
+        newAccountName: newName,
+      })
+    );
+    expect(res.status).toBe(403);
+    expect(await accountCountByName(tenantA, newName)).toBe(0);
+    expect(await contactCount(tenantA, lastName)).toBe(0);
   });
 });

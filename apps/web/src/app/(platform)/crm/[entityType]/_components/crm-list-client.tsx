@@ -18,7 +18,7 @@ import { stateToQuery, type ListState } from "@/lib/crm/list-params";
 import type { TenantMember } from "@/lib/crm/members";
 import { PermissionGate } from "@/lib/permissions-client";
 import { Panel } from "@/components/ui/panel";
-import { AccountMultiSelect } from "./account-multi-select";
+import { AccountPicker, type AccountSelection } from "./account-picker";
 
 interface Choice {
   value: string;
@@ -38,9 +38,10 @@ interface CrmListClientProps {
   members: TenantMember[];
   owner?: string | null;
   /**
-   * WS3 — when true (the contact list), the create modal shows an account
-   * multi-select and routes create+link through the combined endpoint so the
-   * contact + its account links are written atomically.
+   * When true (the contact list), the create modal shows the single-select
+   * searchable account picker (with inline create-new) and routes create+link
+   * through the combined endpoint so the contact + its account link are written
+   * atomically.
    */
   enableAccountPicker?: boolean;
   locale: string;
@@ -87,7 +88,8 @@ export function CrmListClient({
   const [, startTransition] = useTransition();
   const [newOpen, setNewOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+  const [accountSelection, setAccountSelection] =
+    useState<AccountSelection | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -138,14 +140,17 @@ export function CrmListClient({
     setCreateError(null);
     // WS3 — the contact create flow posts to the combined endpoint so the
     // contact and its account links are written atomically (all-or-nothing).
+    const accountBody =
+      accountSelection?.kind === "existing"
+        ? { accountId: accountSelection.id }
+        : accountSelection?.kind === "new"
+          ? { newAccountName: accountSelection.name }
+          : {};
     const res = enableAccountPicker
       ? await fetch(`/api/crm/contacts/with-accounts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            data: validated,
-            accountIds: selectedAccountIds,
-          }),
+          body: JSON.stringify({ data: validated, ...accountBody }),
         })
       : await fetch(`/api/crm/${collectionSegment}`, {
           method: "POST",
@@ -158,7 +163,7 @@ export function CrmListClient({
       return;
     }
     setNewOpen(false);
-    setSelectedAccountIds([]);
+    setAccountSelection(null);
     startTransition(() => router.refresh());
   }
 
@@ -217,7 +222,7 @@ export function CrmListClient({
             type="button"
             onClick={() => {
               setCreateError(null);
-              setSelectedAccountIds([]);
+              setAccountSelection(null);
               setNewOpen(true);
             }}
             className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
@@ -360,9 +365,9 @@ export function CrmListClient({
             <div className="mt-4 space-y-4">
               {enableAccountPicker ? (
                 <PermissionGate permission="contact.create">
-                  <AccountMultiSelect
-                    selectedIds={selectedAccountIds}
-                    onChange={setSelectedAccountIds}
+                  <AccountPicker
+                    value={accountSelection}
+                    onChange={setAccountSelection}
                   />
                 </PermissionGate>
               ) : null}

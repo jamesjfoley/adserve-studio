@@ -15,6 +15,7 @@ import { getEntityTypeBySlug } from "@adserve/module-framework";
 import { apiRequirePermission } from "@/lib/permissions";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
+import { findAccountByName } from "@/lib/crm/account-name";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -115,19 +116,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     // --- Duplicate checks (tenant-scoped via withTenant + RLS, non-archived).
     //     These are READ-ONLY and sit BEFORE any insert, so an early warn
     //     return commits nothing. ---
-    const [accountMatch] = await tx
-      .select()
-      .from(records)
-      .where(
-        and(
-          eq(records.tenantId, tenant.id),
-          eq(records.entityTypeId, accountEntity.id),
-          eq(records.isArchived, false),
-          // Case/whitespace-insensitive match (lower(trim(...)) both sides).
-          sql`lower(btrim(${records.data}->>'name')) = lower(btrim(${accountName}))`
-        )
-      )
-      .limit(1);
+    // Account duplicate check (AC 21) — shared normalised-name lookup, the same
+    // helper the contact-create create-new branch uses (lib/crm/account-name).
+    const accountMatch =
+      (await findAccountByName(tx, {
+        tenantId: tenant.id,
+        accountEntityTypeId: accountEntity.id,
+        name: accountName,
+      })) ?? undefined;
 
     let contactMatch: typeof records.$inferSelect | undefined;
     if (accountMatch && personName && contactAccountRelId) {

@@ -10,35 +10,53 @@ import {
 import { apiRequirePermission } from "@/lib/permissions";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
+import { findAccountByName } from "@/lib/crm/account-name";
 import {
   createRecordLink,
   resolveRelationshipByName,
 } from "@/lib/crm/link-records";
 
 /**
- * POST /api/crm/contacts/with-accounts — WS3 combined contact-create endpoint.
+ * POST /api/crm/contacts/with-accounts — combined contact-create endpoint.
  *
- * Creates a contact AND links it to the user-selected account(s) via the
+ * Creates a contact AND links it to its account via the
  * `contact_belongs_to_account` relationship inside ONE `withTenant`
- * transaction, so there is never a half-created contact with no account when a
- * link fails (all-or-nothing). Runs under `contact.create`; the create-time
- * owner is the acting user, so the ownership escape-hatch is moot at create.
+ * transaction (all-or-nothing — never a half-created contact when a link
+ * fails). Runs under `contact.create`; the create-time owner is the acting
+ * user.
  *
- * Body: { data: Record<string, unknown>, accountIds?: string[] }
+ * Account selection (the prototype enforces ONE account per contact in the UX +
+ * here; the data model stays many_to_many — see docs/prototypes/crm/SPEC.md):
+ *   - `accountId`      — link to a single existing account, OR
+ *   - `newAccountName` — create a NEW account (name validated unique via the
+ *                        shared `lower(btrim())` helper) then link, in the same
+ *                        tx, OR
+ *   - `accountIds`     — legacy multi-link (kept for back-compat), OR
+ *   - none             — an unlinked contact.
+ * `newAccountName` is mutually exclusive with `accountId`/`accountIds`.
  *
- * Every selected accountId is resolved under the caller's `withTenant`
- * context: a cross-tenant id returns zero rows under RLS and is rejected (the
- * whole transaction aborts → no contact, no links). Zero accountIds is allowed
- * (creates an unlinked contact). The combined endpoint does the relationship
- * inserts directly in the tx (via the shared `createRecordLink` writer) — it
- * never HTTP-calls the WS2 endpoint.
+ * Body: {
+ *   data: Record<string, unknown>,
+ *   accountId?: string,
+ *   newAccountName?: string,
+ *   accountIds?: string[],
+ * }
+ *
+ * Every existing accountId is resolved under the caller's `withTenant` context:
+ * a cross-tenant id returns zero rows under RLS and is rejected (whole tx
+ * aborts → no contact, no links).
  */
 export async function POST(req: NextRequest) {
   const guard = await apiRequirePermission("contact.create");
   if (guard.error) return guard.error;
   const { tenant, user } = guard.ctx;
 
-  let body: { data?: Record<string, unknown>; accountIds?: unknown };
+  let body: {
+    data?: Record<string, unknown>;
+    accountId?: unknown;
+    newAccountName?: unknown;
+    accountIds?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -46,15 +64,31 @@ export async function POST(req: NextRequest) {
   }
   const input = body.data ?? {};
 
-  // Normalise accountIds → a de-duplicated array of non-empty strings.
-  const rawAccountIds = Array.isArray(body.accountIds) ? body.accountIds : [];
+  // create-new branch: a non-empty trimmed name.
+  const newAccountName =
+    typeof body.newAccountName === "string" && body.newAccountName.trim() !== ""
+      ? body.newAccountName.trim()
+      : null;
+
+  // Existing-account ids: single `accountId` plus the legacy `accountIds` array,
+  // de-duplicated, non-empty strings only.
+  const rawIds = [
+    ...(typeof body.accountId === "string" ? [body.accountId] : []),
+    ...(Array.isArray(body.accountIds) ? body.accountIds : []),
+  ];
   const accountIds = Array.from(
     new Set(
-      rawAccountIds.filter(
-        (v): v is string => typeof v === "string" && v.trim() !== ""
-      )
+      rawIds.filter((v): v is string => typeof v === "string" && v.trim() !== "")
     )
   );
+
+  // create-new and link-existing are mutually exclusive.
+  if (newAccountName && accountIds.length > 0) {
+    return NextResponse.json(
+      { error: "Provide either newAccountName or an existing account, not both" },
+      { status: 400 }
+    );
+  }
 
   const outcome = await withTenant(tenant.id, async (tx) => {
     const contactEntity = await getEntityTypeBySlug(tx, {
@@ -82,21 +116,67 @@ export async function POST(req: NextRequest) {
       return { kind: "invalid" as const, fieldErrors };
     }
 
-    // Resolve the contact↔account relationship + the account entity type once.
+    // Resolve the contact↔account relationship once if any linking is requested.
     let rel: Awaited<ReturnType<typeof resolveRelationshipByName>> = null;
-    if (accountIds.length > 0) {
+    const needsRelationship = newAccountName != null || accountIds.length > 0;
+    if (needsRelationship) {
       rel = await resolveRelationshipByName(
         tx,
         tenant.id,
         CONTACT_BELONGS_TO_ACCOUNT.name
       );
       if (!rel) return { kind: "not_activated" as const };
+    }
 
-      // Resolve all selected accounts under the caller's tenant context. A
+    // The account ids to link the contact to (resolved below).
+    let linkTargetIds: string[] = [];
+    let createdAccount: typeof records.$inferSelect | null = null;
+
+    if (newAccountName != null && rel) {
+      // Uniqueness (shared helper, same normalisation as lead-convert AC 21).
+      const dup = await findAccountByName(tx, {
+        tenantId: tenant.id,
+        accountEntityTypeId: rel.targetEntityTypeId,
+        name: newAccountName,
+      });
+      if (dup) {
+        return {
+          kind: "duplicate_account" as const,
+          existing: {
+            id: dup.id,
+            name: (dup.data as { name?: string }).name ?? newAccountName,
+          },
+        };
+      }
+      // Create the account in the same tx (mirrors the lead-convert insert).
+      const [account] = await tx
+        .insert(records)
+        .values({
+          tenantId: tenant.id,
+          entityTypeId: rel.targetEntityTypeId,
+          data: { name: newAccountName, status: "prospect" },
+          createdBy: user.id,
+          updatedBy: user.id,
+          ownedBy: user.id,
+        })
+        .returning();
+      createdAccount = account;
+      linkTargetIds = [account.id];
+
+      await writeAuditLog(tx, {
+        tenantId: tenant.id,
+        userId: user.id,
+        action: "create",
+        resourceType: "account",
+        resourceId: account.id,
+        changes: { after: account.data },
+      });
+    } else if (accountIds.length > 0 && rel) {
+      // Resolve existing accounts under the caller's tenant context. A
       // cross-tenant id yields zero rows under RLS, so the resolved set is
       // smaller than the requested set → reject (no partial linking).
       const accountRows = await tx
-        .select({ id: records.id, entityTypeId: records.entityTypeId })
+        .select({ id: records.id })
         .from(records)
         .where(
           and(
@@ -110,6 +190,7 @@ export async function POST(req: NextRequest) {
       if (missing.length > 0) {
         return { kind: "invalid_account" as const, missing };
       }
+      linkTargetIds = accountIds;
     }
 
     const [contact] = await tx
@@ -133,10 +214,13 @@ export async function POST(req: NextRequest) {
       changes: { after: contact.data },
     });
 
-    // Link the contact to each selected account (contact is the SOURCE side of
-    // contact_belongs_to_account). Same tx → atomic with the create.
-    if (rel && accountIds.length > 0) {
-      for (const accountId of accountIds) {
+    // Link the contact (SOURCE side of contact_belongs_to_account) to its
+    // account(s). Same tx → atomic with the create. createRecordLink applies
+    // many_to_one "replace" semantics when the relationship is many_to_one; at
+    // create there is at most one link per call so single-account is trivially
+    // held (the prototype keeps the relationship many_to_many in the registry).
+    if (rel) {
+      for (const accountId of linkTargetIds) {
         await createRecordLink(tx, {
           tenantId: tenant.id,
           userId: user.id,
@@ -150,7 +234,8 @@ export async function POST(req: NextRequest) {
     return {
       kind: "ok" as const,
       contact,
-      linkedAccountCount: accountIds.length,
+      createdAccount,
+      linkedAccountCount: linkTargetIds.length,
     };
   });
 
@@ -173,10 +258,21 @@ export async function POST(req: NextRequest) {
         },
         { status: 422 }
       );
+    case "duplicate_account":
+      return NextResponse.json(
+        {
+          error: `An account named "${outcome.existing.name}" already exists`,
+          existing: outcome.existing,
+        },
+        { status: 409 }
+      );
     case "ok":
       return NextResponse.json(
         {
           record: serializeRecord(outcome.contact),
+          createdAccount: outcome.createdAccount
+            ? serializeRecord(outcome.createdAccount)
+            : null,
           linkedAccountCount: outcome.linkedAccountCount,
         },
         { status: 201 }
