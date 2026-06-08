@@ -67,3 +67,12 @@ they occur in the workflow:
 
 The ALB scheme is **immutable** post-creation; public access is via CloudFront VPC origin →
 internal ALB. Do not propose changing the ALB scheme.
+
+## 7. Prototype Mode (see `docs/prototype-mode.md`)
+
+`prototype/<module>` branches are **quarantined**: they may be pushed and deployed to an isolated
+preview environment, but **never merge to `main` and never reach prod**. The multi-tenancy / data
+isolation invariants in §1 and the server-side permission rule in §2 still hold under Prototype
+Mode — enforced by the tenant-isolation + authz smoke tests kept under the `adserve_app`
+(`NOBYPASSRLS`) harness (§5 gate 4), since local `pnpm dev` runs as a superuser and silently
+bypasses RLS.

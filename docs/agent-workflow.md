@@ -49,6 +49,10 @@ criteria and test obligations**. That document is the contract:
 
 The agents are interchangeable around the spec; the spec is what carries quality.
 
+When a feature began life as a prototype (see `docs/prototype-mode.md`), this pipeline is resumed
+for the **production rebuild**: the prototype's `docs/prototypes/<module>/SPEC.md` is the planner's
+input, from which `planner` writes the `docs/plans/<feature>.md` contract.
+
 ## Lifecycle
 
 ```

@@ -88,6 +88,7 @@ The plan has a **23-step execution checklist** (lines 577–605 of the plan). We
 - `docs/00-platform-foundation.md` — platform foundation
 - `docs/01-setup-guide.md` — local setup guide
 - `docs/aws-infrastructure-plan-ecs-express.md` — the AWS plan (source of truth for infra work)
+- `docs/prototype-mode.md` — Prototype Mode operating contract (an alternate track to the autonomous / agent-workflow protocol below: single-pass quarantined prototype build, then resume the multi-agent pipeline for the production rebuild)
 
 ## Working protocol — review before build
 
