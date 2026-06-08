@@ -5,6 +5,147 @@ working session. Reading this + `docs/phase-3-plan.md` + `CLAUDE.md` is
 enough context to pick up Phase 3 work in a fresh session — no
 conversation-history replay needed.
 
+## End-of-session snapshot — 2026-06-08
+
+**`main` is `aa567a7` (#19), local synced to origin, deployed to ECS.** All of the
+Phase 3 master plan (WS0–WS6) is now **merged**, the convert enhancements have landed,
+and one hardening PR remains open (below).
+
+**Merged since 2026-06-02:**
+- **WS5 — collapsible / pinnable CRM primary nav (PR #16, `500e75a`).** Builds on
+  `adserve-design`; localStorage persistence, no-flash hydration, keyboard shortcut,
+  Playwright e2e via `@clerk/testing`.
+- **WS6 — admin-selectable per-org palette (PR #17, `6da8dae`)** + **accent re-skin /
+  admin theming (PR #18, `4d63f2f`)**. Palette resolved server-side via `data-palette`;
+  static CSS catalogue in `globals.css` (not inline); catalogue of 4 (grey-blue default,
+  slate, emerald, violet); tenant-admin sidebar stays fixed navy, only accent surfaces
+  follow palette; WCAG-AA verified.
+- **Convert enhancements — AC 20–24 (PR #19, `aa567a7`).** Two-phase duplicate warning
+  (409 `account_exists`/`contact_exists` → confirm → link-to-existing); duplicate match
+  on `lower(btrim())` (case + outer whitespace only, deliberately not fuzzy); AC 24 PATCH
+  guard fires **before** `canMutate` so converted leads are read-only for everyone; atomic
+  convert in one `withTenant` transaction.
+
+The WS-delivery tracker below is updated: **WS0–WS6 all ✓ Merged.**
+
+**`UNIQUE(tenant_id, name)` hardening — PR #20 (OPEN, not merged).** The optional
+hardening from the 2026-06-02 open-items list is now done at the DB level. Migration
+`packages/database/sql/008-unique-relationship-name.sql` (self-contained txn, `SET LOCAL
+app.bypass_rls` for the cross-tenant pre-check, RAISE-and-rollback on duplicates,
+idempotent `CREATE UNIQUE INDEX IF NOT EXISTS`) was **applied and verified on prod RDS on
+2026-06-08** — `idx_relationships_tenant_name` unique on `(tenant_id, name)`; pre-check
+passed (prod duplicate-free). **PR #20 merge is still pending** (human gate); the index it
+depends on is already live, so merge → deploy is safe ordering.
+
+**Prod `008` apply — operational record (2026-06-08):**
+- Bastion brought up per `docs/aws-deployment-status.md` §(b): SSM Session Manager host
+  (`t3.micro`, AL2023) in **private** subnet `subnet-08907b065b8d35b83`, no public IP,
+  SSM egress via NAT; IAM role/profile `adserve-bastion-ssm` (`AmazonSSMManagedInstanceCore`);
+  bastion SG `adserve-bastion-sg` (no inbound) with one temporary tcp/5432 ingress to RDS SG
+  `sg-012023b2c91d23bde`.
+- Applied over an `ssm start-session` port-forward (local `5433` → RDS `5432`) as
+  `adserve_migrator` (secret `adserve/database-url-migrator`, RDS-managed JSON,
+  `sslmode=require` over the tunnel). Verified the index, then **full teardown**: instance
+  terminated, ingress rule revoked, bastion SG deleted, RDS SG re-baselined to its original
+  two-source-SG rule. **IAM role/profile retained** for the next bring-up (grants nothing
+  without an instance).
+
+**Still outstanding:**
+- **Merge PR #20** (human gate) → ECS deploy.
+- **Phase 1b gated actions:** Secrets Manager `adserve/anthropic-api-key` + ECS secrets block
+  + IAM `GetSecretValue`; prod `006` then re-run `001` RLS (confirm idempotent + covers
+  ai-usage tables); deferred 1.7-UI affordances; `cost.ts` price + cap-currency review;
+  flatten/rebase the Phase 1b branch stack onto `origin/main`.
+- **Node 20 deploy-action deprecation** — bump pending; **confirm the actual deadline** (the
+  2026-06-02 note says 16 Sep 2026).
+- **CI wiring (4 items):** all `sql/` migrations incl. `008` into the CI test DB; serial
+  workspace tests or per-workspace DBs (shared-DB parallel race seen on `@adserve/crm`); swap
+  e2e Clerk user off the owner account to a dedicated `crm.admin` user; Clerk testing keys +
+  creds as GitHub secrets.
+
+## End-of-session snapshot — 2026-06-02
+
+**`main` is `d880d84`, deployed to ECS and healthy.** Two things shipped this session,
+both merged and deployed via the standard agent flow (plan → architect-reviewer →
+builder → qa → architect-reviewer → PR → human merge gate):
+
+**1. WS4 — design-system tokens + server-safe `Panel` primitive (PR #14, merged → `e770a8a`).**
+Expanded `apps/web/src/app/globals.css` with elevation/border/radius/padding/spacing/
+surface tokens (value-for-value with the old inline styles + dark-mode overrides); added
+the `Panel` primitive (`apps/web/src/components/ui/panel.tsx`, `react`-types-only import,
+server-safe); refactored the CRM dashboard, list, and detail sections onto `<Panel>`.
+Locked acceptance criteria #16 (Panel used by detail/list/dashboard) and #17 (no
+server-only import — boundary gate green) both PASS. `detail-tabs.tsx` deliberately not
+wrapped (tablist, not a card). See the WS-delivery tracker further down for the WS1–WS4
+landing table.
+
+**2. `adserve-design` skill + token value-lock guard (PR #15, merged → `d880d84`).**
+- **Skill:** `.claude/skills/adserve-design/SKILL.md` — the in-product design system. It
+  **governs in-app product surfaces** (apps/web authenticated / app-shell UI: CRM,
+  `/admin`, `/super-admin`); `frontend-design` is for marketing / throwaway prototypes
+  only, and **`adserve-design` wins on conflict**. Encodes: the token catalogue copied
+  **verbatim** from `globals.css` (kept honest by the guard below), the `Panel` contract
+  (use for cards/sections, not tablists; `className` is layout-only; default elevation 1;
+  `adserve-panel` class hook), the **#16/#17 server/client boundary rules**, a **light AND
+  dark** mandate (drive everything from tokens; never hardcode a colour that bypasses the
+  dark-mode overrides), and `--accent`/`--accent-foreground` documented as
+  **reserved-for-WS6** (factual seam, no WS5/WS6 guidance authored).
+- **Precedence pinned** by one line in `CLAUDE.md` (the Styling bullet).
+- **Value-lock guard:** `apps/web/__tests__/components/adserve-design-tokens-lock.test.ts`
+  — asserts every `--token: value;` in the skill catalogue appears (names **+** values) in
+  `globals.css`, **one-directional (skill ⊆ globals.css)**, scoped to `globals.css` CSS
+  custom properties only (does NOT resolve Tailwind tokens like `brand-500`).
+  Whitespace-normalised so it locks values, not the formatter's line-wraps. Proven
+  **non-tautological** by injecting a value drift during review (it failed on exactly that
+  declaration, then restored).
+- `.gitignore` gained `!.claude/skills/` so the skill is tracked (mirrors the existing
+  `!.claude/agents/` negation; `frontend-design` had been force-added).
+
+### Decisions captured this session
+
+- **DECISION (done-bar):** `pnpm dev` runs as the local **superuser**, which **BYPASSES
+  RLS** — so the browser can never prove tenant isolation. `pnpm test` runs as
+  **`adserve_app` (NOBYPASSRLS)** where RLS actually enforces. **A feature is NOT done
+  until `pnpm test` is green** — "looks right in the browser" is necessary but not
+  sufficient.
+- **DECISION (workflow):** develop in a **local inner loop** (`pnpm dev` / `pnpm test` /
+  `pnpm build`), batch changes, and only **merge → deploy when shipping to others**.
+  Runbook: `docs/local-dev-loop.md` (currently untracked).
+- **Guard scope:** locking **names + values** now (option ii); **defer bidirectional**
+  (option iii — fail if `globals.css` gains an undocumented token) **to WS6**, when the
+  palette work will churn the token set.
+
+### Next
+
+- **WS5** — collapsible / hover-expand / pinnable nav with active-state. Builds on
+  `adserve-design` (consume the tokens + `Panel` conventions). Frontend-only, low risk.
+- **WS6** — admin-selectable per-org palette. Depends on WS4 tokens (it overrides them);
+  this is where the `--accent` seam gets wired and where bidirectional guard hardening
+  lands.
+
+### Open side items
+
+- **Delete stale remote branch `chore/enable-frontend-design-skill`** — James's one-liner;
+  still present on origin (its payload already landed via PR #13). NOT to be deleted by an
+  agent.
+- **Convert enhancements (acceptance criteria 20–24)** — dated opportunity name, two-phase
+  duplicate-warning convert (409 → confirm → link-to-existing), server-side converted-lead
+  read-only + JSONB back-links. Still outstanding from the master plan.
+- **Optional `UNIQUE(tenant_id, name)` hardening migration** — safe; prod is currently
+  duplicate-free. Protected path → human-gated when done.
+- **Node 20 deploy-action deprecation** — `aws-actions/amazon-ecs-deploy-express-service@v1`
+  runs on Node 20; bump before **16 Sep 2026**.
+
+### Local env verified (2026-06-02)
+
+- `pnpm dev` (Ready ~2s, `/api/health` 200), `pnpm build` (success, 36.9s), `pnpm test`
+  (**483 tests green** across 5 packages under the `adserve_app` harness) — all confirmed
+  on this machine.
+- Homebrew `postgresql@16` + `redis` both **started**; `adserve_app` role present
+  (NOBYPASSRLS). **Redis is currently unused** (declared in env, no code references it).
+- `docs/01-setup-guide.md` is **stale** (documents Docker Compose Postgres/Redis);
+  **superseded by `docs/local-dev-loop.md`** for the local Homebrew setup.
+
 ## End-of-session snapshot — 2026-05-31
 
 Clean shutdown after Phase 1b completed. Working tree **clean**, stash
@@ -804,9 +945,9 @@ RDS unattended; queue it for James.
 | WS1 | Cardinality flip + reconcile migration | ✓ Merged | [#9](https://github.com/jamesjfoley/adserve-studio/pull/9) (prod-RDS apply queued — `007` recorded #10) |
 | WS2 | Relationship link/unlink write API | ✓ Merged | [#11](https://github.com/jamesjfoley/adserve-studio/pull/11) |
 | WS3 | Contact-create account picker + account/opportunity detail tabs | ✓ Merged | [#12](https://github.com/jamesjfoley/adserve-studio/pull/12) |
-| WS4 | Design-system tokens + server-safe `Panel` primitive | **PR open — awaiting human merge gate** | branch `ws4-design-tokens-panel` |
-| WS5 | Collapsible / pinnable nav | ☐ Not started | — |
-| WS6 | Admin-selectable per-org palette | ☐ Not started | — |
+| WS4 | Design-system tokens + server-safe `Panel` primitive | ✓ Merged | [#14](https://github.com/jamesjfoley/adserve-studio/pull/14) (+ adserve-design skill & token-lock guard [#15](https://github.com/jamesjfoley/adserve-studio/pull/15)) |
+| WS5 | Collapsible / pinnable nav | ✓ Merged | [#16](https://github.com/jamesjfoley/adserve-studio/pull/16) |
+| WS6 | Admin-selectable per-org palette | ✓ Merged | [#17](https://github.com/jamesjfoley/adserve-studio/pull/17) (+ accent re-skin / admin theming [#18](https://github.com/jamesjfoley/adserve-studio/pull/18)) |
 
 ### WS4 — Design-system tokens + Panel primitive (2026-06-02)
 
