@@ -45,12 +45,35 @@ export async function loadEntityForm(
     entityTypeId: entity.id,
     layoutType: "detail",
   });
-  const layoutConfig =
+  const baseLayout =
     (layoutRow?.config as LayoutConfig | undefined) ??
     (await generateDefaultLayoutConfig(tx, {
       tenantId,
       entityTypeId: entity.id,
     }));
 
+  // A persisted layout predates any field added later (e.g. the `account`
+  // relationship field). Surface fields not in any section in a trailing
+  // "More" section so a real field is never silently absent from the form;
+  // the admin can then move it via the layout editor. (No-op when the layout
+  // already places every field — the common case.)
+  const layoutConfig = appendUnplacedFields(baseLayout, fields);
+
   return { entity, fields, layoutConfig };
+}
+
+/** Append fields not present in any section as a trailing "More" section. */
+function appendUnplacedFields(
+  layout: LayoutConfig,
+  fields: FieldDefinitionWithLabels[]
+): LayoutConfig {
+  const placed = new Set(layout.sections.flatMap((s) => s.fieldIds));
+  const unplaced = fields.filter((f) => !placed.has(f.id)).map((f) => f.id);
+  if (unplaced.length === 0) return layout;
+  return {
+    sections: [
+      ...layout.sections,
+      { title: "More", columns: 2, fieldIds: unplaced },
+    ],
+  };
 }

@@ -107,6 +107,14 @@ export function DynamicForm({
     const coerced: Record<string, unknown> = {};
 
     for (const f of fields) {
+      // Relationship fields are not stored in records.data and don't carry a
+      // UUID here (e.g. the account picker's value is a selection object). The
+      // caller routes relationship slugs into record_relationships — pass the
+      // raw value through without the records.data coercion/validation.
+      if (f.fieldType === "relationship") {
+        coerced[f.slug] = state[f.slug];
+        continue;
+      }
       const result = coerceFieldValue(f, state[f.slug]);
       if (!result.ok) {
         newErrors[f.slug] = result.error.message;

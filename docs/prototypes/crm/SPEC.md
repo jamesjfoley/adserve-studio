@@ -36,11 +36,38 @@ Production Considerations: DATA-MODEL DEFERRED).
    helper → insert account → link contact, all in the existing single `withTenant` tx
    (all-or-nothing). On duplicate name → 409, nothing written.
 
+## Iteration 2 — account is a first-class, admin-placeable field (no Panel)
+
+Per product feedback, the account control must look like every other field and be positioned by
+the admin, not sit in its own Panel above the form. Reworked so:
+
+- **`account` is now a real `relationship` field definition** on the contact entity
+  (`DEFAULT_CONTACT_FIELDS`, `displayOrder: 45`). It therefore flows through the normal field
+  pipeline: rendered by `DynamicForm` → `FieldRenderer` → `RelationshipField`, wrapped in the
+  shared `FieldShell` (label/description/error chrome) — identical chrome to every other field.
+- **Admin placement** comes for free: the field appears in `generateDefaultLayoutConfig` and the
+  admin layout editor already lists not-yet-placed fields as "unplaced" and lets the admin add
+  them to any section/position. The admin moves/places `account` like any field.
+- The searchable + inline-create picker (`components/crm/account-picker.tsx`) is now a **bare
+  control** (no Panel); `RelationshipField` renders it for `field.slug === "account"` and falls
+  back to the Phase-1 UUID input for any other relationship field.
+- `DynamicForm` passes relationship-field values through without `records.data` coercion (the
+  documented design: the caller routes relationship slugs into `record_relationships`). The
+  contact-create client pulls `validated.account` (an `AccountSelection`) out of the submit and
+  sends it as `accountId` / `newAccountName`; the endpoint skips relationship fields when building
+  `records.data`.
+- `loadEntityForm` appends any **unplaced** field to a trailing "More" section so a field added
+  after a layout was persisted is never silently absent from the form (no-op once every field is
+  placed). Existing tenants were reprovisioned (`pnpm --filter @adserve/crm reprovision-crm`) so
+  the field exists; new tenants get it via activation.
+
 ## Data model touched
 
-No schema change. No migration. The `relationships` registry is **not** touched. Only `records`
-(insert one account) and `record_relationships` (insert one link) rows are written, via the
-existing `createRecordLink` writer, inside the caller's `withTenant` tx.
+No schema change. No migration. The `relationships` registry is **not** touched. Adding the
+`account` field definition is done through the existing idempotent activation path (a
+`field_definitions` row per tenant). Only `records` (insert one account) and `record_relationships`
+(insert one link) rows are written at create time, via the existing `createRecordLink` writer,
+inside the caller's `withTenant` tx.
 
 ## Auth & permissions
 
@@ -75,6 +102,24 @@ aborts). Smoke test runs under the `adserve_app` NOBYPASSRLS harness.
 - **SEARCH RANKING:** the typeahead orders results by `name asc` and caps at 20. No relevance
   ranking / prefix-priority / pagination of search results. Acceptable for the prototype; the
   rebuild may want ranked search and "load more".
+- **RENDERER HARDCODES THE SLUG:** `RelationshipField` selects the rich account picker on
+  `field.slug === "account"`. Production should drive this from the field definition's `settings`
+  (e.g. `{ relationshipName, targetEntitySlug, allowCreate }`) so ANY relationship field gets an
+  appropriate picker. That needs `ProvisionFieldSpec` / `createFieldDefinition` to carry `settings`
+  (they currently do not) — a small `@adserve/module-framework` change deliberately skipped here.
+- **EDIT / DETAIL PARITY NOT WIRED:** because `account` is now a layout field, it also appears on
+  the contact **detail/edit** form. There, its value is NOT hydrated from `record_relationships`,
+  so it shows "—" / an empty picker even when the contact has an account, and editing it does not
+  persist a link (the create endpoint is the only writer). Production must hydrate the relationship
+  value into the form and persist add/replace/remove on edit. Prototype scope is create-only.
+- **RELATIONSHIP COERCION BYPASS:** `DynamicForm` skips `coerceFieldValue` for relationship fields
+  (pass-through). Production needs real validation for relationship fields (required handling, valid
+  selection shape) rather than trusting the caller.
+- **UNPLACED-FIELDS SAFETY NET:** `loadEntityForm` now appends unplaced fields to a trailing "More"
+  section so new fields never vanish from the form. This changes shared form behaviour for all
+  entities (currently a no-op since every field is placed except `account`). The rebuild should
+  decide whether unplaced = "show in More" or "intentionally hidden" and likely regenerate/patch
+  persisted layouts on field add instead.
 
 ## Open questions (for the rebuild)
 

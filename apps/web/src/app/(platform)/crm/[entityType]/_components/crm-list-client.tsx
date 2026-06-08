@@ -16,9 +16,8 @@ import type {
 import { DynamicForm } from "@/components/dynamic-form";
 import { stateToQuery, type ListState } from "@/lib/crm/list-params";
 import type { TenantMember } from "@/lib/crm/members";
-import { PermissionGate } from "@/lib/permissions-client";
 import { Panel } from "@/components/ui/panel";
-import { AccountPicker, type AccountSelection } from "./account-picker";
+import type { AccountSelection } from "@/components/crm/account-picker";
 
 interface Choice {
   value: string;
@@ -38,10 +37,10 @@ interface CrmListClientProps {
   members: TenantMember[];
   owner?: string | null;
   /**
-   * When true (the contact list), the create modal shows the single-select
-   * searchable account picker (with inline create-new) and routes create+link
-   * through the combined endpoint so the contact + its account link are written
-   * atomically.
+   * When true (the contact list), create routes through the combined
+   * contacts/with-accounts endpoint so the contact + its account link are
+   * written atomically. The account itself renders inline as a normal
+   * relationship field (the `account` field def), placed via the layout editor.
    */
   enableAccountPicker?: boolean;
   locale: string;
@@ -88,8 +87,6 @@ export function CrmListClient({
   const [, startTransition] = useTransition();
   const [newOpen, setNewOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [accountSelection, setAccountSelection] =
-    useState<AccountSelection | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -138,13 +135,17 @@ export function CrmListClient({
 
   async function handleCreate(validated: Record<string, unknown>) {
     setCreateError(null);
-    // WS3 — the contact create flow posts to the combined endpoint so the
-    // contact and its account links are written atomically (all-or-nothing).
+    // The `account` relationship is rendered inline by the form (an
+    // AccountSelection), but it isn't a records.data field — pull it out and
+    // route it as accountId/newAccountName so the contact + its account link
+    // are written atomically by the combined endpoint (all-or-nothing).
+    const sel = (validated.account as AccountSelection | null | undefined) ?? null;
+    delete validated.account;
     const accountBody =
-      accountSelection?.kind === "existing"
-        ? { accountId: accountSelection.id }
-        : accountSelection?.kind === "new"
-          ? { newAccountName: accountSelection.name }
+      sel?.kind === "existing"
+        ? { accountId: sel.id }
+        : sel?.kind === "new"
+          ? { newAccountName: sel.name }
           : {};
     const res = enableAccountPicker
       ? await fetch(`/api/crm/contacts/with-accounts`, {
@@ -163,7 +164,6 @@ export function CrmListClient({
       return;
     }
     setNewOpen(false);
-    setAccountSelection(null);
     startTransition(() => router.refresh());
   }
 
@@ -222,7 +222,6 @@ export function CrmListClient({
             type="button"
             onClick={() => {
               setCreateError(null);
-              setAccountSelection(null);
               setNewOpen(true);
             }}
             className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
@@ -363,14 +362,6 @@ export function CrmListClient({
               </button>
             </div>
             <div className="mt-4 space-y-4">
-              {enableAccountPicker ? (
-                <PermissionGate permission="contact.create">
-                  <AccountPicker
-                    value={accountSelection}
-                    onChange={setAccountSelection}
-                  />
-                </PermissionGate>
-              ) : null}
               <DynamicForm
                 layoutConfig={createLayoutConfig}
                 fields={fields}

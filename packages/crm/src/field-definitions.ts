@@ -178,6 +178,20 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     displayOrder: 40,
   },
   {
+    // The contact's account, backed by the `contact_belongs_to_account`
+    // relationship (record_relationships, NOT records.data). A first-class
+    // relationship field so it renders inline like any other field and the
+    // admin can place it via the layout editor. The create form's picker
+    // (searchable + inline create-new) is wired in the RelationshipField
+    // renderer, keyed on this slug.
+    slug: "account",
+    name: "Account",
+    labels: { en: "Account" },
+    fieldType: "relationship",
+    isSystem: true,
+    displayOrder: 45,
+  },
+  {
     slug: "title",
     name: "Title",
     labels: { en: "Title" },

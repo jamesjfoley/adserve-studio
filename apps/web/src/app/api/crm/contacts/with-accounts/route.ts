@@ -105,6 +105,10 @@ export async function POST(req: NextRequest) {
     const data: Record<string, unknown> = {};
     const fieldErrors: Record<string, string> = {};
     for (const field of fields) {
+      // Relationship fields (e.g. `account`) live in record_relationships, not
+      // records.data — they arrive via accountId/newAccountName and are linked
+      // below. Never coerce/store them as data.
+      if (field.fieldType === "relationship") continue;
       const result = coerceFieldValue(field, input[field.slug]);
       if (!result.ok) {
         fieldErrors[field.slug] = result.error.message;
