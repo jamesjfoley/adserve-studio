@@ -235,6 +235,13 @@ metadata changes to existing tenants (or make `provisionEntityType` reconcile me
 - Deferred sub-item: a "Direct reports" (subordinates) display panel on the contact (the reverse
   edge) — the field captures the upward link; the downward roll-up is a later slice.
 
+## Iteration 9 — Contact detail tabs
+
+The contact detail now uses the tabbed layout (like account/opportunity): **Details** (the panelled
+form + the Related Accounts panel + any other related records + Activity), **Notes & Attachments**,
+and **Campaigns**. The latter two are placeholders ("coming soon — separate activity") per the
+design note. Lead remains the non-tabbed form+sidebar layout.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's

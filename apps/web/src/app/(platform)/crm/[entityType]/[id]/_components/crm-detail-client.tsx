@@ -22,6 +22,7 @@ import type { AccountSelection } from "@/components/crm/account-picker";
 import type { SerializedActivity } from "../page";
 import { AiActivitySummary } from "./ai-activity-summary";
 import { DetailTabs, type DetailTab } from "./detail-tabs";
+import { Panel } from "@/components/ui/panel";
 import { RelatedRecordsPanel } from "./related-records-panel";
 import { ContactsTable } from "./contacts-table";
 
@@ -402,10 +403,20 @@ export function CrmDetailClient({
     </section>
   );
 
-  // Account/opportunity variants get a tabbed layout managing linked records.
+  // Account/opportunity/contact variants get a tabbed layout.
   const isAccount = entitySlug === "account";
   const isOpportunity = entitySlug === "opportunity";
-  const useTabs = isAccount || isOpportunity;
+  const isContact = entitySlug === "contact";
+  const useTabs = isAccount || isOpportunity || isContact;
+
+  // Placeholder for tabs whose pages are designed as separate activities.
+  const comingSoon = (what: string): ReactNode => (
+    <Panel as="section" aria-label={what} title={what}>
+      <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+        {what} is coming soon — designed as a separate activity.
+      </p>
+    </Panel>
+  );
 
   let tabs: DetailTab[] = [];
   if (isAccount) {
@@ -534,6 +545,29 @@ export function CrmDetailClient({
           />
         ),
       },
+    ];
+  } else if (isContact) {
+    // Contact tabs per the design: Details (the panelled form + related accounts
+    // + activity), then Notes & Attachments and Campaigns (separate activities).
+    tabs = [
+      {
+        id: "details",
+        label: "Details",
+        content: (
+          <div className="space-y-6">
+            {formNode}
+            {relatedAccountsNode}
+            {legacyRelatedNode}
+            {activityNode}
+          </div>
+        ),
+      },
+      {
+        id: "notes",
+        label: "Notes & Attachments",
+        content: comingSoon("Notes & Attachments"),
+      },
+      { id: "campaigns", label: "Campaigns", content: comingSoon("Campaigns") },
     ];
   }
 
