@@ -340,6 +340,59 @@ export async function applyRelatedAccounts(
   };
 }
 
+/**
+ * For a set of contacts, resolve each one's PRIMARY account ({id, name}) —
+ * used to fill the "Account" column of the account-detail contact tables. One
+ * bounded pair of queries (links + account names). Runs inside `withTenant`.
+ */
+export async function loadPrimaryAccountsForContacts(
+  tx: typeof db,
+  args: { tenantId: string; contactIds: string[] }
+): Promise<Record<string, { id: string; name: string }>> {
+  const { tenantId, contactIds } = args;
+  if (contactIds.length === 0) return {};
+  const rel = await resolveRelationshipByName(
+    tx,
+    tenantId,
+    CONTACT_BELONGS_TO_ACCOUNT.name
+  );
+  if (!rel) return {};
+
+  const links = await tx
+    .select({
+      source: recordRelationships.sourceRecordId,
+      target: recordRelationships.targetRecordId,
+    })
+    .from(recordRelationships)
+    .where(
+      and(
+        eq(recordRelationships.tenantId, tenantId),
+        eq(recordRelationships.relationshipId, rel.id),
+        inArray(recordRelationships.sourceRecordId, contactIds)
+      )
+    );
+  const accountIds = [...new Set(links.map((l) => l.target))];
+  if (accountIds.length === 0) return {};
+
+  const accounts = await tx
+    .select({ id: records.id, data: records.data })
+    .from(records)
+    .where(
+      and(eq(records.tenantId, tenantId), inArray(records.id, accountIds))
+    );
+  const nameById = new Map(
+    accounts.map((a) => [a.id, (a.data as { name?: string }).name ?? a.id])
+  );
+
+  const out: Record<string, { id: string; name: string }> = {};
+  for (const l of links) {
+    if (!out[l.source]) {
+      out[l.source] = { id: l.target, name: nameById.get(l.target) ?? l.target };
+    }
+  }
+  return out;
+}
+
 /** The contact's current PRIMARY account id, or null if none. */
 export async function getPrimaryAccountId(
   tx: typeof db,

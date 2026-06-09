@@ -23,6 +23,7 @@ import type { SerializedActivity } from "../page";
 import { AiActivitySummary } from "./ai-activity-summary";
 import { DetailTabs, type DetailTab } from "./detail-tabs";
 import { RelatedRecordsPanel } from "./related-records-panel";
+import { ContactsTable } from "./contacts-table";
 
 interface CrmDetailClientProps {
   entitySlug: string;
@@ -34,6 +35,8 @@ interface CrmDetailClientProps {
   fields: FieldDefinitionWithLabels[];
   layoutConfig: LayoutConfig;
   relationships: Record<string, RelatedRecord[]>;
+  /** Each linked contact's PRIMARY account (account detail's Account column). */
+  contactPrimaryAccounts?: Record<string, { id: string; name: string }>;
   activities: SerializedActivity[];
   canEdit: boolean;
   canArchive: boolean;
@@ -77,6 +80,7 @@ export function CrmDetailClient({
   fields,
   layoutConfig,
   relationships,
+  contactPrimaryAccounts = {},
   activities,
   canEdit,
   canArchive,
@@ -379,49 +383,42 @@ export function CrmDetailClient({
         ? [{ id: "activity", label: "Activity", content: activityNode }]
         : []),
       {
-        // Employees: contacts whose PRIMARY account is this account.
-        id: "employees",
-        label: "Employees",
+        // One "Contacts" tab with two tables: the account's own contacts
+        // (primary) and contacts merely linked to it (related). Both are the
+        // same entity to the user; the DB-level split (primary M2O vs related
+        // M2M) stays under the hood. Add/remove is scoped to the contact as
+        // source → cosmetic gate is `contact.update`.
+        id: "contacts",
+        label: "Contacts",
         content: (
-          // Account is the TARGET of contact_belongs_to_account (contact is the
-          // source). The WS2 route is source-scoped, so add/remove is issued
-          // scoped to the contact with the account as the target id. Cosmetic
-          // gate mirrors the server's source-side rule → `contact.update`.
-          <RelatedRecordsPanel
-            relatedSlug="contact"
-            relatedPluralLabel="employees"
-            owningSegment={collectionSegment}
-            owningId={recordId}
-            relationshipName={CONTACT_BELONGS_TO_ACCOUNT.name}
-            direction="owner-is-target"
-            items={(relationships.contact ?? []).filter(
-              (c) => c.relationshipName === CONTACT_BELONGS_TO_ACCOUNT.name
-            )}
-            editPermission="contact.update"
-            supportsPrimary={false}
-            canEdit={canEdit}
-          />
-        ),
-      },
-      {
-        // Related contacts: contacts RELATED to (not employed by) this account.
-        id: "related-contacts",
-        label: "Related Contacts",
-        content: (
-          <RelatedRecordsPanel
-            relatedSlug="contact"
-            relatedPluralLabel="related contacts"
-            owningSegment={collectionSegment}
-            owningId={recordId}
-            relationshipName={CONTACT_RELATED_TO_ACCOUNT.name}
-            direction="owner-is-target"
-            items={(relationships.contact ?? []).filter(
-              (c) => c.relationshipName === CONTACT_RELATED_TO_ACCOUNT.name
-            )}
-            editPermission="contact.update"
-            supportsPrimary={false}
-            canEdit={canEdit}
-          />
+          <div className="space-y-6">
+            <ContactsTable
+              title="Contacts"
+              items={(relationships.contact ?? []).filter(
+                (c) => c.relationshipName === CONTACT_BELONGS_TO_ACCOUNT.name
+              )}
+              primaryAccountById={contactPrimaryAccounts}
+              owningSegment={collectionSegment}
+              owningId={recordId}
+              relationshipName={CONTACT_BELONGS_TO_ACCOUNT.name}
+              direction="owner-is-target"
+              editPermission="contact.update"
+              canEdit={canEdit}
+            />
+            <ContactsTable
+              title="Linked Contacts"
+              items={(relationships.contact ?? []).filter(
+                (c) => c.relationshipName === CONTACT_RELATED_TO_ACCOUNT.name
+              )}
+              primaryAccountById={contactPrimaryAccounts}
+              owningSegment={collectionSegment}
+              owningId={recordId}
+              relationshipName={CONTACT_RELATED_TO_ACCOUNT.name}
+              direction="owner-is-target"
+              editPermission="contact.update"
+              canEdit={canEdit}
+            />
+          </div>
         ),
       },
       {

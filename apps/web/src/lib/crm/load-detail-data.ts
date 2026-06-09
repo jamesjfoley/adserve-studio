@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { activities, withTenant } from "@adserve/database";
 import { loadEntityForm } from "./load-entity-form";
 import { loadRecordWithRelationships } from "./relationships";
+import { loadPrimaryAccountsForContacts } from "./contact-account";
 
 /**
  * Server-side data path for the CRM detail page (/crm/[entityType]/[id]).
@@ -40,6 +41,17 @@ export async function loadCrmDetailData(args: {
           .orderBy(desc(activities.createdAt))
       : [];
 
-    return { bundle, loaded, activityRows };
+    // For the account detail's contact tables, resolve each listed contact's
+    // PRIMARY account (the "Account" column). Only the contacts linked to this
+    // account are involved → bounded.
+    const contactPrimaryAccounts =
+      slug === "account"
+        ? await loadPrimaryAccountsForContacts(tx, {
+            tenantId,
+            contactIds: (loaded.relationships.contact ?? []).map((c) => c.id),
+          })
+        : {};
+
+    return { bundle, loaded, activityRows, contactPrimaryAccounts };
   });
 }

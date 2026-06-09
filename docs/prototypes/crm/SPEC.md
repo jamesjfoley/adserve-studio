@@ -107,9 +107,13 @@ Per the Rev-5 plan, contact↔account is split into TWO relationships sharing th
   first, then related** filtered against it. All in one `withTenant` tx; a duplicate/invalid/
   cross-tenant id throws `ContactAccountAbort` → the whole tx rolls back (atomic). The **legacy
   `accountIds[]` multi-primary path is REMOVED**.
-- **UI:** account detail now shows **Employees** (primary) + **Related Contacts** (related) tabs;
-  contact detail shows an editable **Related Accounts** panel. All reuse `RelatedRecordsPanel` +
-  the WS2 link route (add/remove existing). Primary stays the inline single-select field.
+- **UI:** account detail has a single **Contacts** tab containing two tables (`ContactsTable`):
+  **Contacts** (primary/employees) and **Linked Contacts** (related) — one entity to the user; the
+  primary-vs-related DB split stays under the hood. Each table shows Name · Title · Account · Email ·
+  Telephone · LinkedIn with add/remove (WS2 route). The **Account** column is each contact's PRIMARY
+  account, enriched by `loadPrimaryAccountsForContacts` (bounded, account-scoped, in
+  `loadCrmDetailData`). Contact detail shows an editable **Related Accounts** panel
+  (`RelatedRecordsPanel`). Primary stays the inline single-select field on the contact form.
 
 ### Deferred from this iteration (logged — rebuild scope)
 

@@ -293,7 +293,7 @@ function relatedContact(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
-  test("account variant renders tabs and lists linked contacts under Contacts", async () => {
+  test("account variant: one Contacts tab with Contacts + Linked Contacts tables", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -306,32 +306,46 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
       entitySlug: "account",
       relationships: {
         contact: [
-          relatedContact({ id: "ca", data: { name: "Alpha" } }),
-          relatedContact({ id: "cb", data: { name: "Bravo" }, isPrimary: true }),
+          relatedContact({
+            id: "ca",
+            data: { name: "Alpha", email: "a@x.com" },
+            relationshipName: "contact_belongs_to_account",
+          }),
+          relatedContact({
+            id: "cb",
+            data: { name: "Bravo" },
+            relationshipName: "contact_related_to_account",
+          }),
         ],
       },
     });
 
-    // Accessible tablist with the four tabs.
     const tablist = screen.getByRole("tablist", { name: /record sections/i });
     expect(within(tablist).getByRole("tab", { name: "Details" })).toBeInTheDocument();
-    expect(within(tablist).getByRole("tab", { name: "Employees" })).toBeInTheDocument();
+    // A single "Contacts" tab (no separate Employees / Related Contacts tabs).
+    expect(within(tablist).getByRole("tab", { name: "Contacts" })).toBeInTheDocument();
     expect(
-      within(tablist).getByRole("tab", { name: "Related Contacts" })
-    ).toBeInTheDocument();
+      within(tablist).queryByRole("tab", { name: "Employees" })
+    ).not.toBeInTheDocument();
     expect(
       within(tablist).getByRole("tab", { name: "Opportunities" })
     ).toBeInTheDocument();
 
-    await user.click(within(tablist).getByRole("tab", { name: "Employees" }));
+    await user.click(within(tablist).getByRole("tab", { name: "Contacts" }));
 
-    // Both contacts listed; the primary one carries a Primary badge.
+    // Two table panels, and the table columns are present.
+    expect(screen.getByRole("heading", { name: "Contacts" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Linked Contacts" })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Telephone").length).toBeGreaterThan(0);
+
+    // The primary contact shows in the Contacts table, the related in Linked.
     expect(screen.getByRole("link", { name: "Alpha" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Bravo" })).toBeInTheDocument();
-    expect(screen.getByText("Primary")).toBeInTheDocument();
   });
 
-  test("primary-linked contact sorts first", async () => {
+  test("contacts table sorts by name", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -343,20 +357,27 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
       entitySlug: "account",
       relationships: {
         contact: [
-          relatedContact({ id: "ca", data: { name: "Alpha" } }),
-          relatedContact({ id: "cb", data: { name: "Bravo" }, isPrimary: true }),
+          relatedContact({
+            id: "cb",
+            data: { name: "Bravo" },
+            relationshipName: "contact_belongs_to_account",
+          }),
+          relatedContact({
+            id: "ca",
+            data: { name: "Alpha" },
+            relationshipName: "contact_belongs_to_account",
+          }),
         ],
       },
     });
 
-    await user.click(screen.getByRole("tab", { name: "Employees" }));
+    await user.click(screen.getByRole("tab", { name: "Contacts" }));
     const links = screen.getAllByRole("link", { name: /Alpha|Bravo/ });
-    // Bravo (primary) is rendered before Alpha.
-    expect(links[0]).toHaveTextContent("Bravo");
-    expect(links[1]).toHaveTextContent("Alpha");
+    expect(links[0]).toHaveTextContent("Alpha");
+    expect(links[1]).toHaveTextContent("Bravo");
   });
 
-  test("empty Contacts tab shows the explicit empty state (AC 14)", async () => {
+  test("empty Contacts tab shows the explicit empty state for both tables", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -365,8 +386,9 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     const user = userEvent.setup();
 
     renderDetail({ entitySlug: "account", relationships: {} });
-    await user.click(screen.getByRole("tab", { name: "Employees" }));
-    expect(screen.getByText(/no employees linked yet/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Contacts" }));
+    // Both the Contacts and Linked Contacts tables show the empty state.
+    expect(screen.getAllByText(/no contacts here yet/i)).toHaveLength(2);
   });
 
   test("opportunity variant shows Account and Contacts tabs", async () => {
