@@ -6,6 +6,8 @@ import { getTenantContextOrNull } from "@/lib/permissions";
 import { formatCurrency } from "@/lib/crm/dashboard";
 import { loadCrmDashboardData } from "@/lib/crm/load-dashboard-data";
 import { Panel } from "@/components/ui/panel";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
 
 const CRM_ENTITY_SLUGS = ["account", "contact", "lead", "opportunity"] as const;
 const LOCALE = "en-GB";
@@ -42,14 +44,56 @@ export default async function CrmDashboardPage() {
   const pipelineMax = Math.max(1, ...data.pipeline.map((s) => s.total));
   const funnelMax = Math.max(1, ...data.funnel.map((s) => s.count));
 
+  // KPI tiles derived from the loaded data (only those the user can see).
+  const pipelineValue = data.pipeline.reduce((sum, s) => sum + s.total, 0);
+  const openOpps = data.pipeline.reduce((sum, s) => sum + s.count, 0);
+  const totalLeads = data.funnel.reduce((sum, s) => sum + s.count, 0);
+  const kpis: { label: string; value: string; sub?: string }[] = [];
+  if (canPipeline) {
+    kpis.push({
+      label: "Pipeline value",
+      value: formatCurrency(pipelineValue, LOCALE),
+      sub: `${openOpps} open ${openOpps === 1 ? "opportunity" : "opportunities"}`,
+    });
+  }
+  if (canPipeline && data.forecast) {
+    kpis.push({
+      label: "Forecast · 90 days",
+      value: formatCurrency(data.forecast.next90, LOCALE),
+      sub: "Weighted by probability",
+    });
+  }
+  if (canLead) {
+    kpis.push({
+      label: "Leads",
+      value: String(totalLeads),
+      sub: "Across the funnel",
+    });
+  }
+  if (canActivities) {
+    kpis.push({
+      label: "Due next 7 days",
+      value: String(data.upcoming.length),
+      sub: "Upcoming tasks",
+    });
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">CRM</h1>
-      <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-        Overview of your pipeline, upcoming tasks, and recent activity.
-      </p>
+      <PageHeader
+        title="CRM"
+        subtitle="Overview of your pipeline, upcoming tasks, and recent activity."
+      />
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {kpis.length > 0 ? (
+        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {kpis.map((k) => (
+            <StatCard key={k.label} label={k.label} value={k.value} sub={k.sub} />
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Widget 1 — Pipeline value by stage */}
         {canPipeline ? (
           <Panel title="Pipeline value by stage" className="lg:col-span-2">
