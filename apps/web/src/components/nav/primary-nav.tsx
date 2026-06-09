@@ -134,7 +134,7 @@ export function PrimaryNav({
         ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)] hover:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)]"
         : active
           ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]"
-          : "text-[var(--foreground)] hover:bg-[var(--background)]";
+          : "text-[var(--foreground)] hover:bg-[var(--panel-bg)]";
       return (
         <Link
           key={item.name}
@@ -161,13 +161,13 @@ export function PrimaryNav({
   return (
     <>
       {/* Mobile: top bar with the drawer trigger (pin concept is desktop-only). */}
-      <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[var(--muted)] px-4 py-3 md:hidden">
+      <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 md:hidden">
         <button
           type="button"
           aria-label="Open navigation"
           aria-expanded={drawerOpen}
           onClick={() => setDrawerOpen(true)}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--foreground)] transition-colors hover:bg-[var(--background)]"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--foreground)] transition-colors hover:bg-[var(--panel-bg)]"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -183,7 +183,7 @@ export function PrimaryNav({
           />
           <nav
             aria-label="Primary"
-            className="absolute inset-y-0 left-0 flex w-[var(--nav-width)] max-w-[80%] flex-col bg-[var(--muted)] shadow-[var(--elevation-3)]"
+            className="absolute inset-y-0 left-0 flex w-[var(--nav-width)] max-w-[80%] flex-col bg-[var(--panel-bg)] shadow-[var(--elevation-3)]"
             onKeyDown={(e) => {
               if (e.key === "Escape") setDrawerOpen(false);
             }}
@@ -194,7 +194,7 @@ export function PrimaryNav({
                 type="button"
                 aria-label="Close navigation"
                 onClick={() => setDrawerOpen(false)}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--foreground)] transition-colors hover:bg-[var(--background)]"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--foreground)] transition-colors hover:bg-[var(--panel-bg)]"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -273,7 +273,7 @@ export function PrimaryNav({
               aria-label="Pin/Unpin sidebar"
               aria-keyshortcuts="Meta+B Control+B"
               title="Pin/Unpin sidebar (⌘/Ctrl+B)"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--background)]"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--panel-bg)]"
             >
               {pinned ? (
                 <PanelLeftClose className="h-4 w-4" />

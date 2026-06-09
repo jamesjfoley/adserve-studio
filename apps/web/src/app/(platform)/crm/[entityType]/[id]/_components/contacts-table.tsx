@@ -337,7 +337,7 @@ export function ContactsTable({
           onClick={() => setCreating(false)}
         >
           <div
-            className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-[var(--background)] p-6 shadow-xl"
+            className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-[var(--panel-bg)] p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

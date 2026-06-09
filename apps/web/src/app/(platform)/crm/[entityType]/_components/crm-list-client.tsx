@@ -265,7 +265,7 @@ export function CrmListClient({
                 });
                 e.target.value = "";
               }}
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+              className="rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-3 py-2 text-sm"
             >
               <option value="">Assign owner…</option>
               <option value="__unassign__">Unassign</option>
@@ -294,7 +294,7 @@ export function CrmListClient({
                   });
                   e.target.value = "";
                 }}
-                className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                className="rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-3 py-2 text-sm"
               >
                 <option value="">Change {statusField.name.toLowerCase()}…</option>
                 {statusChoices.map((c) => (
@@ -357,7 +357,7 @@ export function CrmListClient({
           onClick={() => setNewOpen(false)}
         >
           <div
-            className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-[var(--background)] p-6 shadow-xl"
+            className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-[var(--panel-bg)] p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

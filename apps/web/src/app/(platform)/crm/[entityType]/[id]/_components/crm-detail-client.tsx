@@ -724,7 +724,7 @@ export function CrmDetailClient({
           onClick={() => setLogOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl bg-[var(--background)] p-6 shadow-xl"
+            className="w-full max-w-md rounded-xl bg-[var(--panel-bg)] p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -746,7 +746,7 @@ export function CrmDetailClient({
                 <select
                   name="activityType"
                   defaultValue="note"
-                  className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-3 py-2 text-sm"
                 >
                   {ACTIVITY_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -760,7 +760,7 @@ export function CrmDetailClient({
                 <input
                   name="subject"
                   type="text"
-                  className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-3 py-2 text-sm"
                 />
               </label>
               <label className="block text-sm">
@@ -768,7 +768,7 @@ export function CrmDetailClient({
                 <textarea
                   name="text"
                   rows={3}
-                  className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-3 py-2 text-sm"
                 />
               </label>
               <label className="block text-sm">
@@ -779,7 +779,7 @@ export function CrmDetailClient({
                 <input
                   name="dueDate"
                   type="date"
-                  className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-3 py-2 text-sm"
                 />
               </label>
               {logError ? (

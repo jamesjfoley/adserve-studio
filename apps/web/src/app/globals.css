@@ -159,7 +159,7 @@ html[data-nav-pinned="false"] .primary-nav-dock {
   display: flex;
   flex-direction: column;
   width: var(--nav-width);
-  background: var(--muted);
+  background: var(--panel-bg);
   border-right: var(--border-width) solid var(--border);
   overflow: hidden;
   transition: width 150ms ease, box-shadow 150ms ease;
