@@ -75,7 +75,6 @@ export function ContactsTable({
   createContext,
 }: ContactsTableProps) {
   const router = useRouter();
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -118,25 +117,20 @@ export function ContactsTable({
       direction === "owner-is-source" ? contactId : owningId;
 
     setError(null);
-    setBusyId(contactId);
-    try {
-      const res = await fetch(
-        `/api/crm/${scopedSegment}/${scopedId}/relationships`,
-        {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ relationshipName, targetRecordId }),
-        }
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.error ?? `Action failed (${res.status})`);
-        return;
+    const res = await fetch(
+      `/api/crm/${scopedSegment}/${scopedId}/relationships`,
+      {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relationshipName, targetRecordId }),
       }
-      router.refresh();
-    } finally {
-      setBusyId(null);
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? `Action failed (${res.status})`);
+      return;
     }
+    router.refresh();
   }
 
   async function handleCreate(validated: Record<string, unknown>) {
@@ -254,7 +248,6 @@ export function ContactsTable({
                 <th className={headClass}>Email</th>
                 <th className={headClass}>Telephone</th>
                 <th className={headClass}>LinkedIn</th>
-                {canEdit ? <th className={headClass} /> : null}
               </tr>
             </thead>
             <tbody>
@@ -320,20 +313,6 @@ export function ContactsTable({
                         EMPTY
                       )}
                     </td>
-                    {canEdit ? (
-                      <td className={`${cellClass} text-right`}>
-                        <PermissionGate permission={editPermission}>
-                          <button
-                            type="button"
-                            disabled={busyId === rec.id}
-                            onClick={() => callLink("DELETE", rec.id)}
-                            className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            Remove
-                          </button>
-                        </PermissionGate>
-                      </td>
-                    ) : null}
                   </tr>
                 );
               })}
