@@ -3,6 +3,7 @@ import { records, recordRelationships, type db } from "@adserve/database";
 import {
   CONTACT_BELONGS_TO_ACCOUNT,
   CONTACT_RELATED_TO_ACCOUNT,
+  CONTACT_REPORTS_TO_CONTACT,
 } from "@adserve/crm";
 import { findAccountByName } from "./account-name";
 import { createRecordLink, resolveRelationshipByName } from "./link-records";
@@ -167,11 +168,124 @@ export async function applyContactAccount(
  */
 export class ContactAccountAbort extends Error {
   constructor(
-    public outcome: ApplyContactAccountResult | ApplyRelatedAccountsResult
+    public outcome:
+      | ApplyContactAccountResult
+      | ApplyRelatedAccountsResult
+      | ApplyReportsToResult
   ) {
     super("contact-account apply aborted");
     this.name = "ContactAccountAbort";
   }
+}
+
+export type ApplyReportsToResult =
+  | { kind: "ok"; managerId: string | null }
+  | { kind: "not_activated" }
+  | { kind: "invalid_contact"; contactId: string }
+  | { kind: "self_reference" };
+
+/**
+ * Apply a contact's "reports to" manager (`contact_reports_to_contact`, M2O)
+ * inside the caller's `withTenant` tx — existing manager only (no create).
+ *  - `contactId` (manager) → validate it exists in this tenant + isn't self,
+ *    then REPLACE-link (one manager).
+ *  - null → CLEAR.
+ * Returns an error kind WITHOUT writing on invalid/self/not-activated.
+ */
+export async function applyContactReportsTo(
+  tx: typeof db,
+  args: {
+    tenantId: string;
+    userId: string | null;
+    contactId: string;
+    managerContactId: string | null;
+  }
+): Promise<ApplyReportsToResult> {
+  const { tenantId, userId, contactId } = args;
+  const managerId =
+    typeof args.managerContactId === "string" &&
+    args.managerContactId.trim() !== ""
+      ? args.managerContactId
+      : null;
+
+  const rel = await resolveRelationshipByName(
+    tx,
+    tenantId,
+    CONTACT_REPORTS_TO_CONTACT.name
+  );
+  if (!rel) return { kind: "not_activated" };
+
+  if (!managerId) {
+    await tx
+      .delete(recordRelationships)
+      .where(
+        and(
+          eq(recordRelationships.tenantId, tenantId),
+          eq(recordRelationships.relationshipId, rel.id),
+          eq(recordRelationships.sourceRecordId, contactId)
+        )
+      );
+    return { kind: "ok", managerId: null };
+  }
+
+  if (managerId === contactId) return { kind: "self_reference" };
+
+  const [manager] = await tx
+    .select({ id: records.id })
+    .from(records)
+    .where(
+      and(
+        eq(records.tenantId, tenantId),
+        eq(records.entityTypeId, rel.targetEntityTypeId),
+        eq(records.id, managerId)
+      )
+    );
+  if (!manager) return { kind: "invalid_contact", contactId: managerId };
+
+  await createRecordLink(tx, {
+    tenantId,
+    userId,
+    relationship: rel,
+    sourceRecordId: contactId,
+    targetRecordId: manager.id,
+  });
+  return { kind: "ok", managerId: manager.id };
+}
+
+/** The contact's manager ({id, label}) for hydrating the "Reports to" field. */
+export async function loadReportsTo(
+  tx: typeof db,
+  args: { tenantId: string; contactId: string }
+): Promise<{ id: string; label: string } | null> {
+  const rel = await resolveRelationshipByName(
+    tx,
+    args.tenantId,
+    CONTACT_REPORTS_TO_CONTACT.name
+  );
+  if (!rel) return null;
+  const [link] = await tx
+    .select({ target: recordRelationships.targetRecordId })
+    .from(recordRelationships)
+    .where(
+      and(
+        eq(recordRelationships.tenantId, args.tenantId),
+        eq(recordRelationships.relationshipId, rel.id),
+        eq(recordRelationships.sourceRecordId, args.contactId)
+      )
+    )
+    .limit(1);
+  if (!link) return null;
+  const [manager] = await tx
+    .select({ data: records.data })
+    .from(records)
+    .where(
+      and(eq(records.tenantId, args.tenantId), eq(records.id, link.target))
+    );
+  const d = (manager?.data as Record<string, unknown>) ?? {};
+  const fn = typeof d.firstName === "string" ? d.firstName : "";
+  const ln = typeof d.lastName === "string" ? d.lastName : "";
+  const label = `${fn} ${ln}`.trim() || link.target;
+  return { id: link.target, label };
 }
 
 export interface RelatedAccountEntry {

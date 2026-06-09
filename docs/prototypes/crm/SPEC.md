@@ -215,6 +215,26 @@ metadata changes to existing tenants (or make `provisionEntityType` reconcile me
   ID styling), social icons, and the inline "Linked Accounts + Go" control (we have the Related
   Accounts panel) are presentational follow-ups.
 
+## Iteration 8 — Reports-to hierarchy + generalised record picker
+
+- **Generalised picker:** `AccountPicker` is now a thin wrapper over a reusable
+  `components/crm/record-picker.tsx` (`RecordPicker` + `RecordSelection`) — searches any entity's
+  list endpoint (`contains` on a configurable field), optional inline create-new. This unblocks
+  reports-to and pays down the account-picker-only debt.
+- **Reports-to (contact → contact hierarchy):** new `contact_reports_to_contact` relationship
+  (many_to_one) + a `reportsTo` relationship field on the contact (General panel). `RelationshipField`
+  renders a **contact lookup** (search by last name, existing-only) for it. Backend: a `reportsTo`
+  directive on create + PATCH (`{ contactId } | null`, presence-keyed), applied via
+  `applyContactReportsTo` (M2O replace, **self-reference rejected**, invalid manager rejected, clear
+  on null) inside the one `withTenant` tx (atomic via `ContactAccountAbort`). Detail/edit hydrate the
+  current manager via `loadReportsTo`.
+- Tests: create-with-manager, PATCH replace (one link), self-reference 422, invalid manager 422,
+  clear. 388 web + 19 crm pass.
+- Still slug-keyed in `RelationshipField` (account → account picker; reportsTo → contact picker) —
+  the data-driven-from-field-settings version remains deferred (needs `ProvisionFieldSpec` settings).
+- Deferred sub-item: a "Direct reports" (subordinates) display panel on the contact (the reverse
+  edge) — the field captures the upward link; the downward roll-up is a later slice.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's

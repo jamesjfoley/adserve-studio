@@ -210,6 +210,18 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     displayOrder: 50,
   },
   {
+    // Org hierarchy: who this contact reports to, backed by
+    // `contact_reports_to_contact` (record_relationships). Rendered inline as a
+    // contact lookup (RelationshipField).
+    slug: "reportsTo",
+    name: "Reports to",
+    labels: { en: "Reports to" },
+    fieldType: "relationship",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 55,
+  },
+  {
     slug: "title",
     name: "Job title",
     labels: { en: "Job title" },

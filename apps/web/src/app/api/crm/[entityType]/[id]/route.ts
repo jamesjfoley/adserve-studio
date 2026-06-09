@@ -18,6 +18,7 @@ import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
 import {
   applyContactAccount,
+  applyContactReportsTo,
   applyRelatedAccounts,
   getPrimaryAccountId,
   ContactAccountAbort,
@@ -110,6 +111,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     data?: Record<string, unknown>;
     account?: { accountId?: string; newAccountName?: string } | null;
     relatedAccounts?: RelatedAccountEntry[];
+    reportsTo?: { contactId?: string } | null;
   };
   try {
     body = await req.json();
@@ -123,6 +125,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // absence leaves existing links untouched (partial update). Contacts only.
   const accountProvided = slug === "contact" && "account" in body;
   const relatedProvided = slug === "contact" && "relatedAccounts" in body;
+  const reportsToProvided = slug === "contact" && "reportsTo" in body;
   const desiredRelated: RelatedAccountEntry[] = Array.isArray(
     body.relatedAccounts
   )
@@ -224,6 +227,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (rr.kind !== "ok") throw new ContactAccountAbort(rr);
     }
 
+    if (reportsToProvided) {
+      const mr = await applyContactReportsTo(tx, {
+        tenantId: tenant.id,
+        userId: user.id,
+        contactId: id,
+        managerContactId: body.reportsTo?.contactId ?? null,
+      });
+      if (mr.kind !== "ok") throw new ContactAccountAbort(mr);
+    }
+
     const [row] = await tx
       .update(records)
       .set({ data: merged, updatedBy: user.id, updatedAt: new Date() })
@@ -289,6 +302,18 @@ function mapAbort(e: ContactAccountAbort): NextResponse {
         existing: o.existing,
       },
       { status: 409 }
+    );
+  }
+  if (o.kind === "invalid_contact") {
+    return NextResponse.json(
+      { error: "Selected contact was not found", contactId: o.contactId },
+      { status: 422 }
+    );
+  }
+  if (o.kind === "self_reference") {
+    return NextResponse.json(
+      { error: "A contact cannot report to itself" },
+      { status: 422 }
     );
   }
   return NextResponse.json({ error: "Unexpected" }, { status: 500 });

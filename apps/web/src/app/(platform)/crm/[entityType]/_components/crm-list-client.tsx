@@ -147,11 +147,20 @@ export function CrmListClient({
         : sel?.kind === "new"
           ? { newAccountName: sel.name }
           : {};
+    // `reportsTo` (manager) is a relationship field too — route it to the
+    // reportsTo directive (existing contact only).
+    const mgr = (validated.reportsTo as AccountSelection | null | undefined) ?? null;
+    const hasReportsTo = "reportsTo" in validated;
+    delete validated.reportsTo;
+    const reportsToBody =
+      hasReportsTo && mgr?.kind === "existing"
+        ? { reportsTo: { contactId: mgr.id } }
+        : {};
     const res = enableAccountPicker
       ? await fetch(`/api/crm/contacts/with-accounts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: validated, ...accountBody }),
+          body: JSON.stringify({ data: validated, ...accountBody, ...reportsToBody }),
         })
       : await fetch(`/api/crm/${collectionSegment}`, {
           method: "POST",

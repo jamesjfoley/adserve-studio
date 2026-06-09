@@ -50,6 +50,18 @@ export const CONTACT_RELATED_TO_ACCOUNT: CrmRelationshipSpec = {
   description: "Accounts a contact works with but does not belong to",
 };
 
+export const CONTACT_REPORTS_TO_CONTACT: CrmRelationshipSpec = {
+  // Org hierarchy within an account: a contact reports to ONE other contact
+  // (their manager). Many-to-one — replace-on-change. Self-reference is rejected
+  // at write. Builds a contact tree.
+  name: "contact_reports_to_contact",
+  sourceEntitySlug: "contact",
+  targetEntitySlug: "contact",
+  cardinality: "many_to_one",
+  cascadeDelete: false,
+  description: "The contact this contact reports to (their manager)",
+};
+
 export const OPPORTUNITY_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
   name: "opportunity_belongs_to_account",
   sourceEntitySlug: "opportunity",
@@ -77,6 +89,7 @@ export const OPPORTUNITY_HAS_PRIMARY_CONTACT: CrmRelationshipSpec = {
 export const CRM_RELATIONSHIPS: CrmRelationshipSpec[] = [
   CONTACT_BELONGS_TO_ACCOUNT,
   CONTACT_RELATED_TO_ACCOUNT,
+  CONTACT_REPORTS_TO_CONTACT,
   OPPORTUNITY_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
 ];

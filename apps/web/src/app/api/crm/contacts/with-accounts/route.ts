@@ -10,6 +10,7 @@ import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
 import {
   applyContactAccount,
+  applyContactReportsTo,
   applyRelatedAccounts,
   ContactAccountAbort,
   type RelatedAccountEntry,
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
     accountId?: unknown;
     newAccountName?: unknown;
     relatedAccounts?: unknown;
+    reportsTo?: { contactId?: string } | null;
   };
   try {
     body = await req.json();
@@ -69,6 +71,8 @@ export async function POST(req: NextRequest) {
   )
     ? (body.relatedAccounts as RelatedAccountEntry[])
     : [];
+  const reportsToProvided = "reportsTo" in body;
+  const managerContactId = body.reportsTo?.contactId ?? null;
 
   let outcome:
     | {
@@ -156,6 +160,16 @@ export async function POST(req: NextRequest) {
         relatedCount = rr.linkedAccountIds.length;
       }
 
+      if (reportsToProvided) {
+        const mr = await applyContactReportsTo(tx, {
+          tenantId: tenant.id,
+          userId: user.id,
+          contactId: contact.id,
+          managerContactId,
+        });
+        if (mr.kind !== "ok") throw new ContactAccountAbort(mr);
+      }
+
       return { kind: "ok" as const, contact, primaryAccountId, relatedCount };
     });
   } catch (e) {
@@ -208,6 +222,18 @@ function mapAbort(e: ContactAccountAbort): NextResponse {
         existing: o.existing,
       },
       { status: 409 }
+    );
+  }
+  if (o.kind === "invalid_contact") {
+    return NextResponse.json(
+      { error: "Selected contact was not found", contactId: o.contactId },
+      { status: 422 }
+    );
+  }
+  if (o.kind === "self_reference") {
+    return NextResponse.json(
+      { error: "A contact cannot report to itself" },
+      { status: 422 }
     );
   }
   // ok never reaches here.

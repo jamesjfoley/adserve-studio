@@ -11,6 +11,7 @@ import { getEntityTypeBySlug } from "@adserve/module-framework";
 import {
   CONTACT_BELONGS_TO_ACCOUNT,
   CONTACT_RELATED_TO_ACCOUNT,
+  CONTACT_REPORTS_TO_CONTACT,
 } from "@adserve/crm";
 import { accountSelectionFromRelationships } from "@/lib/crm/account-hydration";
 import {
@@ -374,5 +375,118 @@ describe("related accounts — reconcile, self-overlap, loader split", () => {
     );
     expect(primaryEdge?.id).toBe(primary);
     expect(relatedEdge?.id).toBe(related);
+  });
+});
+
+/** Manager contact ids linked via contact_reports_to_contact (source=contact). */
+async function reportsToTargets(contactId: string): Promise<string[]> {
+  const [rel] = await testDb
+    .select({ id: schemaRelationships.id })
+    .from(schemaRelationships)
+    .where(
+      and(
+        eq(schemaRelationships.tenantId, crm.tenantId),
+        eq(schemaRelationships.name, CONTACT_REPORTS_TO_CONTACT.name)
+      )
+    );
+  const rows = await testDb
+    .select({ target: recordRelationships.targetRecordId })
+    .from(recordRelationships)
+    .where(
+      and(
+        eq(recordRelationships.relationshipId, rel.id),
+        eq(recordRelationships.sourceRecordId, contactId)
+      )
+    );
+  return rows.map((r) => r.target);
+}
+
+/** Create a plain contact (no account) and return its id. */
+async function createPlainContact(): Promise<string> {
+  const res = await createContact(
+    jsonReq("POST", {
+      data: { firstName: "P", lastName: uniqueToken(), status: "active" },
+    })
+  );
+  expect(res.status).toBe(201);
+  return (await res.json()).record.id as string;
+}
+
+describe("reports-to hierarchy (contact → contact)", () => {
+  test("create with reportsTo links to the manager", async () => {
+    actAs(crm.owner.authProviderId);
+    const manager = await createPlainContact();
+    const res = await createContact(
+      jsonReq("POST", {
+        data: { firstName: "Sub", lastName: uniqueToken(), status: "active" },
+        reportsTo: { contactId: manager },
+      })
+    );
+    expect(res.status).toBe(201);
+    const id = (await res.json()).record.id as string;
+    expect(await reportsToTargets(id)).toEqual([manager]);
+  });
+
+  test("PATCH reportsTo replaces the manager (exactly one link)", async () => {
+    actAs(crm.owner.authProviderId);
+    const a = await createPlainContact();
+    const b = await createPlainContact();
+    const c = await createPlainContact();
+
+    let res = await patchRecord(
+      jsonReq("PATCH", { data: {}, reportsTo: { contactId: a } }),
+      contactParams(c)
+    );
+    expect(res.status).toBe(200);
+    expect(await reportsToTargets(c)).toEqual([a]);
+
+    res = await patchRecord(
+      jsonReq("PATCH", { data: {}, reportsTo: { contactId: b } }),
+      contactParams(c)
+    );
+    expect(res.status).toBe(200);
+    expect(await reportsToTargets(c)).toEqual([b]); // replaced, not added
+  });
+
+  test("self-reference is rejected (422)", async () => {
+    actAs(crm.owner.authProviderId);
+    const c = await createPlainContact();
+    const res = await patchRecord(
+      jsonReq("PATCH", { data: {}, reportsTo: { contactId: c } }),
+      contactParams(c)
+    );
+    expect(res.status).toBe(422);
+    expect(await reportsToTargets(c)).toEqual([]);
+  });
+
+  test("a non-existent manager id is rejected (422)", async () => {
+    actAs(crm.owner.authProviderId);
+    const c = await createPlainContact();
+    const res = await patchRecord(
+      jsonReq("PATCH", {
+        data: {},
+        reportsTo: { contactId: "00000000-0000-4000-8000-000000000000" },
+      }),
+      contactParams(c)
+    );
+    expect(res.status).toBe(422);
+    expect(await reportsToTargets(c)).toEqual([]);
+  });
+
+  test("clearing reportsTo removes the manager link", async () => {
+    actAs(crm.owner.authProviderId);
+    const a = await createPlainContact();
+    const c = await createPlainContact();
+    await patchRecord(
+      jsonReq("PATCH", { data: {}, reportsTo: { contactId: a } }),
+      contactParams(c)
+    );
+    expect(await reportsToTargets(c)).toEqual([a]);
+    const res = await patchRecord(
+      jsonReq("PATCH", { data: {}, reportsTo: null }),
+      contactParams(c)
+    );
+    expect(res.status).toBe(200);
+    expect(await reportsToTargets(c)).toEqual([]);
   });
 });

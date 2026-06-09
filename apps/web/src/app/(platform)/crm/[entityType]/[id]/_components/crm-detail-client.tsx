@@ -37,6 +37,8 @@ interface CrmDetailClientProps {
   relationships: Record<string, RelatedRecord[]>;
   /** Each linked contact's PRIMARY account (account detail's Account column). */
   contactPrimaryAccounts?: Record<string, { id: string; name: string }>;
+  /** The contact's manager, for hydrating the "Reports to" field. */
+  contactReportsTo?: { id: string; label: string } | null;
   /** Contact form (fields + layout) for creating a contact from this account. */
   contactForm?: {
     fields: FieldDefinitionWithLabels[];
@@ -86,6 +88,7 @@ export function CrmDetailClient({
   layoutConfig,
   relationships,
   contactPrimaryAccounts = {},
+  contactReportsTo = null,
   contactForm = null,
   activities,
   canEdit,
@@ -134,12 +137,25 @@ export function CrmDetailClient({
           : null
       : undefined;
 
+    // `reportsTo` is likewise a relationship field, routed to the reportsTo
+    // directive (existing contact only; null clears).
+    const hasReportsTo = "reportsTo" in validated;
+    const mgr = validated.reportsTo as AccountSelection | null | undefined;
+    delete validated.reportsTo;
+    const reportsTo = hasReportsTo
+      ? mgr?.kind === "existing"
+        ? { contactId: mgr.id }
+        : null
+      : undefined;
+
     const res = await fetch(`/api/crm/${collectionSegment}/${recordId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        hasAccount ? { data: validated, account } : { data: validated }
-      ),
+      body: JSON.stringify({
+        data: validated,
+        ...(hasAccount ? { account } : {}),
+        ...(hasReportsTo ? { reportsTo } : {}),
+      }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -263,7 +279,17 @@ export function CrmDetailClient({
   // the detail/edit form shows the linked account instead of "—".
   const formInitialData =
     entitySlug === "contact"
-      ? { ...record.data, account: accountSelectionFromRelationships(relationships) }
+      ? {
+          ...record.data,
+          account: accountSelectionFromRelationships(relationships),
+          reportsTo: contactReportsTo
+            ? {
+                kind: "existing" as const,
+                id: contactReportsTo.id,
+                label: contactReportsTo.label,
+              }
+            : null,
+        }
       : record.data;
 
   // The "Details" form, reused as the first tab (account/opportunity variants)

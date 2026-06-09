@@ -2,7 +2,10 @@ import { and, desc, eq } from "drizzle-orm";
 import { activities, withTenant } from "@adserve/database";
 import { loadEntityForm } from "./load-entity-form";
 import { loadRecordWithRelationships } from "./relationships";
-import { loadPrimaryAccountsForContacts } from "./contact-account";
+import {
+  loadPrimaryAccountsForContacts,
+  loadReportsTo,
+} from "./contact-account";
 
 /**
  * Server-side data path for the CRM detail page (/crm/[entityType]/[id]).
@@ -60,11 +63,18 @@ export async function loadCrmDetailData(args: {
         ? await loadEntityForm(tx, { tenantId, slug: "contact" })
         : null;
 
+    // The contact's manager (for hydrating the "Reports to" field).
+    const contactReportsTo =
+      slug === "contact"
+        ? await loadReportsTo(tx, { tenantId, contactId: recordId })
+        : null;
+
     return {
       bundle,
       loaded,
       activityRows,
       contactPrimaryAccounts,
+      contactReportsTo,
       contactForm: contactForm
         ? { fields: contactForm.fields, layoutConfig: contactForm.layoutConfig }
         : null,
