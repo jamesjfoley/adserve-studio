@@ -23,6 +23,8 @@ import type { SerializedActivity } from "../page";
 import { AiActivitySummary } from "./ai-activity-summary";
 import { DetailTabs, type DetailTab } from "./detail-tabs";
 import { Panel } from "@/components/ui/panel";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatusPill } from "@/components/ui/status-pill";
 import { RelatedRecordsPanel } from "./related-records-panel";
 import { ContactsTable } from "./contacts-table";
 
@@ -614,84 +616,82 @@ export function CrmDetailClient({
     ];
   }
 
+  const statusValue =
+    typeof record.data.status === "string" ? record.data.status : null;
+  const usesInactiveVocab = entitySlug === "contact" || entitySlug === "account";
+  const headerStatus = record.isArchived ? (
+    <StatusPill tone="neutral">
+      {usesInactiveVocab ? "Inactive" : "Archived"}
+    </StatusPill>
+  ) : statusValue ? (
+    <StatusPill status={statusValue} />
+  ) : null;
+
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-            {entityName}
-          </p>
-          <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            {title}
-            {record.isArchived ? (
-              <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs font-medium text-[var(--muted-foreground)]">
-                {entitySlug === "contact" || entitySlug === "account"
-                  ? "Inactive"
-                  : "Archived"}
-              </span>
+      <PageHeader
+        eyebrow={entityName}
+        title={title}
+        status={headerStatus}
+        actions={
+          <>
+            {canLogActivity ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setLogError(null);
+                  setLogOpen(true);
+                }}
+                className="rounded-md border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)]"
+              >
+                Log activity
+              </button>
             ) : null}
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {canLogActivity ? (
-            <button
-              type="button"
-              onClick={() => {
-                setLogError(null);
-                setLogOpen(true);
-              }}
-              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)]"
-            >
-              Log activity
-            </button>
-          ) : null}
-          {showConvert ? (
-            <button
-              type="button"
-              onClick={handleConvert}
-              disabled={busy}
-              className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95 disabled:opacity-50"
-            >
-              Convert lead
-            </button>
-          ) : null}
-          {canEdit && mode === "view" ? (
-            <button
-              type="button"
-              onClick={() => {
-                setEditError(null);
-                setMode("edit");
-              }}
-              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)]"
-            >
-              Edit
-            </button>
-          ) : null}
-          {canArchive && !record.isArchived ? (
-            <button
-              type="button"
-              onClick={handleArchive}
-              disabled={busy}
-              className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-            >
-              {entitySlug === "contact" || entitySlug === "account"
-                ? "Mark inactive"
-                : "Archive"}
-            </button>
-          ) : null}
-          {canArchive && record.isArchived ? (
-            <button
-              type="button"
-              onClick={handleReactivate}
-              disabled={busy}
-              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:opacity-50"
-            >
-              Reactivate
-            </button>
-          ) : null}
-        </div>
-      </div>
+            {showConvert ? (
+              <button
+                type="button"
+                onClick={handleConvert}
+                disabled={busy}
+                className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95 disabled:opacity-50"
+              >
+                Convert lead
+              </button>
+            ) : null}
+            {canEdit && mode === "view" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditError(null);
+                  setMode("edit");
+                }}
+                className="rounded-md border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)]"
+              >
+                Edit
+              </button>
+            ) : null}
+            {canArchive && !record.isArchived ? (
+              <button
+                type="button"
+                onClick={handleArchive}
+                disabled={busy}
+                className="rounded-md border border-red-300 bg-[var(--panel-bg)] px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                {usesInactiveVocab ? "Mark inactive" : "Archive"}
+              </button>
+            ) : null}
+            {canArchive && record.isArchived ? (
+              <button
+                type="button"
+                onClick={handleReactivate}
+                disabled={busy}
+                className="rounded-md border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:opacity-50"
+              >
+                Reactivate
+              </button>
+            ) : null}
+          </>
+        }
+      />
 
       {actionError ? (
         <p className="mt-3 text-sm text-red-600" role="alert">
