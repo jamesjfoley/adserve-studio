@@ -30,15 +30,36 @@ describe("recordTitle", () => {
     ).toBe("id-1");
   });
 
-  test("falls back when nameFieldId is null", () => {
+  test("derives from `name` when nameFieldId is null", () => {
     expect(
       recordTitle({ nameFieldId: null }, [NAME], { name: "Acme" }, "id-1")
-    ).toBe("id-1");
+    ).toBe("Acme");
   });
 
-  test("falls back when nameFieldId points to a field that no longer exists", () => {
+  test("composes firstName + lastName when there is no name field (contact/lead)", () => {
+    expect(
+      recordTitle(
+        { nameFieldId: null },
+        [],
+        { firstName: "Stephen", lastName: "Merchant" },
+        "id-1"
+      )
+    ).toBe("Stephen Merchant");
+  });
+
+  test("composes from a single present name part", () => {
+    expect(
+      recordTitle({ nameFieldId: null }, [], { firstName: "Stephen" }, "id-1")
+    ).toBe("Stephen");
+  });
+
+  test("falls back to the id when nothing yields a name", () => {
+    expect(recordTitle({ nameFieldId: null }, [], {}, "id-1")).toBe("id-1");
+  });
+
+  test("derives from name when the configured field no longer exists", () => {
     expect(
       recordTitle({ nameFieldId: "gone" }, [NAME], { name: "Acme" }, "id-1")
-    ).toBe("id-1");
+    ).toBe("Acme");
   });
 });
