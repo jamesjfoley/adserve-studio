@@ -558,3 +558,33 @@ describe("Same as Site account address — inherit from the primary account", ()
     expect(data.postcode).toBe("EC3A 8BF");
   });
 });
+
+describe("reactivation — never deleted, only inactive ↔ active", () => {
+  test("PATCH isArchived:false reactivates an inactive contact", async () => {
+    actAs(crm.owner.authProviderId);
+    const entity = await getEntityTypeBySlug(testDb, {
+      tenantId: crm.tenantId,
+      slug: "contact",
+    });
+    const [c] = await testDb
+      .insert(records)
+      .values({
+        tenantId: crm.tenantId,
+        entityTypeId: entity!.id,
+        data: { firstName: "Arch", lastName: uniqueToken(), status: "active" },
+        isArchived: true,
+      })
+      .returning();
+
+    const res = await patchRecord(
+      jsonReq("PATCH", { data: {}, isArchived: false }),
+      contactParams(c.id)
+    );
+    expect(res.status).toBe(200);
+    const [row] = await testDb
+      .select({ isArchived: records.isArchived })
+      .from(records)
+      .where(eq(records.id, c.id));
+    expect(row.isArchived).toBe(false);
+  });
+});

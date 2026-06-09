@@ -188,6 +188,26 @@ export function CrmDetailClient({
     }
   }
 
+  async function handleReactivate() {
+    setActionError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/${collectionSegment}/${recordId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: {}, isArchived: false }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setActionError(body.error ?? `Reactivate failed (${res.status})`);
+        return;
+      }
+      startTransition(() => router.refresh());
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleConvert() {
     setActionError(null);
     setBusy(true);
@@ -658,6 +678,16 @@ export function CrmDetailClient({
               {entitySlug === "contact" || entitySlug === "account"
                 ? "Mark inactive"
                 : "Archive"}
+            </button>
+          ) : null}
+          {canArchive && record.isArchived ? (
+            <button
+              type="button"
+              onClick={handleReactivate}
+              disabled={busy}
+              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:opacity-50"
+            >
+              Reactivate
             </button>
           ) : null}
         </div>

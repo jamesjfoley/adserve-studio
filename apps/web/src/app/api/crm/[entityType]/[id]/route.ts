@@ -113,6 +113,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     account?: { accountId?: string; newAccountName?: string } | null;
     relatedAccounts?: RelatedAccountEntry[];
     reportsTo?: { contactId?: string } | null;
+    /** Toggle the active/inactive (isArchived) state — e.g. reactivate. */
+    isArchived?: boolean;
   };
   try {
     body = await req.json();
@@ -255,9 +257,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
     }
 
+    // Optional active/inactive toggle (reactivate = isArchived:false). Records
+    // are never deleted — only marked inactive — so this just flips the flag.
+    const setValues: Partial<typeof records.$inferInsert> = {
+      data: merged,
+      updatedBy: user.id,
+      updatedAt: new Date(),
+    };
+    if (typeof body.isArchived === "boolean") {
+      setValues.isArchived = body.isArchived;
+    }
+
     const [row] = await tx
       .update(records)
-      .set({ data: merged, updatedBy: user.id, updatedAt: new Date() })
+      .set(setValues)
       .where(and(eq(records.id, id), eq(records.tenantId, tenant.id)))
       .returning();
 

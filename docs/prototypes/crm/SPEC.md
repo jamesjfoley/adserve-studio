@@ -266,6 +266,17 @@ rendering — no change to the 13 field components). Tested (disabledWhen on/off
 Deferred: an admin field-manager toggle to set `readOnly` per field (the mechanism is in place;
 the UI control is a follow-up).
 
+## Iteration 12 — Reactivation (inactive ↔ active)
+
+Records are never deleted — "Mark inactive" sets `isArchived=true`; a **Reactivate** action on the
+detail header (shown when the record is inactive) PATCHes `isArchived:false`. The PATCH route now
+accepts an optional `isArchived` boolean (gated by the same permission/ownership rule). Tested.
+
+**Vocabulary — deliberate scope:** "inactive" is used on the contact/account **detail** surfaces;
+the shared list `FilterBar`/`DynamicTable` keep the generic "archived" wording, because a global
+rename would mislabel leads/opportunities (their lifecycle is archived/converted, not "inactive").
+An entity-aware list label is a future polish, not done.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
