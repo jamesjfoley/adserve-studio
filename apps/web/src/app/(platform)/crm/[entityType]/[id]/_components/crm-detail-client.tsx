@@ -40,6 +40,8 @@ interface CrmDetailClientProps {
   contactPrimaryAccounts?: Record<string, { id: string; name: string }>;
   /** The contact's manager, for hydrating the "Reports to" field. */
   contactReportsTo?: { id: string; label: string } | null;
+  /** Contacts who report to this contact (direct reports roll-up). */
+  contactDirectReports?: { id: string; label: string }[];
   /** Contact form (fields + layout) for creating a contact from this account. */
   contactForm?: {
     fields: FieldDefinitionWithLabels[];
@@ -90,6 +92,7 @@ export function CrmDetailClient({
   relationships,
   contactPrimaryAccounts = {},
   contactReportsTo = null,
+  contactDirectReports = [],
   contactForm = null,
   activities,
   canEdit,
@@ -274,6 +277,25 @@ export function CrmDetailClient({
         supportsPrimary={false}
         canEdit={canEdit}
       />
+    ) : null;
+
+  // Direct reports (the reverse of "reports to") — read-only roll-up.
+  const directReportsNode: ReactNode =
+    entitySlug === "contact" && contactDirectReports.length > 0 ? (
+      <Panel as="section" title="Direct reports" aria-label="Direct reports">
+        <ul className="mt-2 space-y-1">
+          {contactDirectReports.map((r) => (
+            <li key={r.id}>
+              <a
+                href={`/crm/${collectionSegment}/${r.id}`}
+                className="text-sm text-[var(--accent)] hover:underline"
+              >
+                {r.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </Panel>
     ) : null;
 
   // Hydrate the account relationship field (contacts) from the existing link so
@@ -557,6 +579,7 @@ export function CrmDetailClient({
           <div className="space-y-6">
             {formNode}
             {relatedAccountsNode}
+            {directReportsNode}
             {legacyRelatedNode}
             {activityNode}
           </div>

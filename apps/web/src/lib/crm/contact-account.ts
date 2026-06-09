@@ -252,6 +252,41 @@ export async function applyContactReportsTo(
   return { kind: "ok", managerId: manager.id };
 }
 
+/** Contacts who report TO this contact (the reverse edge — direct reports). */
+export async function loadDirectReports(
+  tx: typeof db,
+  args: { tenantId: string; contactId: string }
+): Promise<{ id: string; label: string }[]> {
+  const rel = await resolveRelationshipByName(
+    tx,
+    args.tenantId,
+    CONTACT_REPORTS_TO_CONTACT.name
+  );
+  if (!rel) return [];
+  const links = await tx
+    .select({ source: recordRelationships.sourceRecordId })
+    .from(recordRelationships)
+    .where(
+      and(
+        eq(recordRelationships.tenantId, args.tenantId),
+        eq(recordRelationships.relationshipId, rel.id),
+        eq(recordRelationships.targetRecordId, args.contactId)
+      )
+    );
+  const ids = [...new Set(links.map((l) => l.source))];
+  if (ids.length === 0) return [];
+  const rows = await tx
+    .select({ id: records.id, data: records.data })
+    .from(records)
+    .where(and(eq(records.tenantId, args.tenantId), inArray(records.id, ids)));
+  return rows.map((r) => {
+    const d = (r.data as Record<string, unknown>) ?? {};
+    const fn = typeof d.firstName === "string" ? d.firstName : "";
+    const ln = typeof d.lastName === "string" ? d.lastName : "";
+    return { id: r.id, label: `${fn} ${ln}`.trim() || r.id };
+  });
+}
+
 /** The contact's manager ({id, label}) for hydrating the "Reports to" field. */
 export async function loadReportsTo(
   tx: typeof db,

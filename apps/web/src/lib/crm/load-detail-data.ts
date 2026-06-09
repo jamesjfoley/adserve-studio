@@ -3,6 +3,7 @@ import { activities, withTenant } from "@adserve/database";
 import { loadEntityForm } from "./load-entity-form";
 import { loadRecordWithRelationships } from "./relationships";
 import {
+  loadDirectReports,
   loadPrimaryAccountsForContacts,
   loadReportsTo,
 } from "./contact-account";
@@ -68,6 +69,10 @@ export async function loadCrmDetailData(args: {
       slug === "contact"
         ? await loadReportsTo(tx, { tenantId, contactId: recordId })
         : null;
+    const contactDirectReports =
+      slug === "contact"
+        ? await loadDirectReports(tx, { tenantId, contactId: recordId })
+        : [];
 
     return {
       bundle,
@@ -75,6 +80,7 @@ export async function loadCrmDetailData(args: {
       activityRows,
       contactPrimaryAccounts,
       contactReportsTo,
+      contactDirectReports,
       contactForm: contactForm
         ? { fields: contactForm.fields, layoutConfig: contactForm.layoutConfig }
         : null,

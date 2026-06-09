@@ -51,6 +51,7 @@ export default async function CrmDetailPage({ params }: PageProps) {
     activityRows,
     contactPrimaryAccounts,
     contactReportsTo,
+    contactDirectReports,
     contactForm,
   } = data;
   const { entity, fields, layoutConfig } = bundle;
@@ -89,6 +90,7 @@ export default async function CrmDetailPage({ params }: PageProps) {
       relationships={relationships}
       contactPrimaryAccounts={contactPrimaryAccounts}
       contactReportsTo={contactReportsTo}
+      contactDirectReports={contactDirectReports}
       contactForm={contactForm}
       activities={serializedActivities}
       canEdit={canEdit}
