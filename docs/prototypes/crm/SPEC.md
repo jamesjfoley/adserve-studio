@@ -286,6 +286,23 @@ via `recordSearchConfig`. Adding a new relationship field is now config-only —
 (Relationship fields without that config fall back to the Phase-1 UUID input.) The slug-hardcoding
 debt logged since iteration 2 is retired.
 
+## Iteration 14 — Design-language re-skin (style_guides)
+
+Re-grounded the in-product UI in `style_guides/` + codified it in `docs/design-language.md`:
+- **Tokens** (globals.css + `adserve-design` skill, lock-synced, dark-mode): soft-grey `--page-bg`
+  vs white `--panel-bg` vs filled `--field-bg` (three-level contrast), panel-header band, table
+  header/zebra/hover, status-pill tokens.
+- **Primitives:** `Panel` (header bands + `bodyClassName`), `PageHeader`, `StatusPill`, `StatCard`;
+  filled-well form inputs.
+- **Screens re-skinned:** list pages → `Home_Page` (PageHeader, header band, zebra, filled
+  controls); detail/record header → `PageHeader` + `StatusPill`; dashboard → KPI stat-card row;
+  app shell → white nav rail (contrasts the grey page); create/edit/log-activity modals → panel +
+  field tokens.
+- **Deferred (logged):** page-level sticky Cancel/Save bar on detail (DynamicForm submit retained);
+  per-field status pill in form view (list status stays plain text per `Home_Page`); centred table
+  search; a dark top-bar/brand chrome. Admin/super-admin screens inherit the token/Panel foundation
+  automatically; a dedicated pass can follow if wanted.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
