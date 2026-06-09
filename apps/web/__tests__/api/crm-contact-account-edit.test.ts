@@ -490,3 +490,71 @@ describe("reports-to hierarchy (contact → contact)", () => {
     expect(await reportsToTargets(c)).toEqual([]);
   });
 });
+
+/** Seed an account carrying an address. */
+async function seedAccountWithAddress(addr: {
+  addressLine1: string;
+  city: string;
+  postcode: string;
+}): Promise<string> {
+  const entity = await getEntityTypeBySlug(testDb, {
+    tenantId: crm.tenantId,
+    slug: "account",
+  });
+  const [row] = await testDb
+    .insert(records)
+    .values({
+      tenantId: crm.tenantId,
+      entityTypeId: entity!.id,
+      data: { name: uniqueToken(), status: "active", ...addr },
+    })
+    .returning();
+  return row.id;
+}
+
+describe("Same as Site account address — inherit from the primary account", () => {
+  test("create with the toggle copies the account's address onto the contact", async () => {
+    actAs(crm.owner.authProviderId);
+    const account = await seedAccountWithAddress({
+      addressLine1: "1 Embankment",
+      city: "London",
+      postcode: "EC4Y 0HA",
+    });
+
+    const res = await createContact(
+      jsonReq("POST", {
+        data: {
+          firstName: "Addr",
+          lastName: uniqueToken(),
+          status: "active",
+          sameAsAccountAddress: true,
+        },
+        accountId: account,
+      })
+    );
+    expect(res.status).toBe(201);
+    const data = (await res.json()).record.data as Record<string, unknown>;
+    expect(data.siteAddressLine1).toBe("1 Embankment");
+    expect(data.city).toBe("London");
+    expect(data.postcode).toBe("EC4Y 0HA");
+  });
+
+  test("PATCH with the toggle copies the current primary account's address", async () => {
+    actAs(crm.owner.authProviderId);
+    const account = await seedAccountWithAddress({
+      addressLine1: "30 St Mary Axe",
+      city: "London",
+      postcode: "EC3A 8BF",
+    });
+    const contactId = await createContactLinkedTo(account);
+
+    const res = await patchRecord(
+      jsonReq("PATCH", { data: { sameAsAccountAddress: true } }),
+      contactParams(contactId)
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()).record.data as Record<string, unknown>;
+    expect(data.siteAddressLine1).toBe("30 St Mary Axe");
+    expect(data.postcode).toBe("EC3A 8BF");
+  });
+});

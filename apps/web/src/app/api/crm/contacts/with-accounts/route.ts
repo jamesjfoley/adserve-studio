@@ -8,10 +8,12 @@ import {
 import { apiRequirePermission } from "@/lib/permissions";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
+import { and, eq } from "drizzle-orm";
 import {
   applyContactAccount,
   applyContactReportsTo,
   applyRelatedAccounts,
+  inheritAccountAddress,
   ContactAccountAbort,
   type RelatedAccountEntry,
 } from "@/lib/crm/contact-account";
@@ -170,7 +172,27 @@ export async function POST(req: NextRequest) {
         if (mr.kind !== "ok") throw new ContactAccountAbort(mr);
       }
 
-      return { kind: "ok" as const, contact, primaryAccountId, relatedCount };
+      // "Same as Site account address" → copy the primary account's address.
+      let finalContact = contact;
+      if (data.sameAsAccountAddress === true && primaryAccountId) {
+        const addr = await inheritAccountAddress(tx, {
+          tenantId: tenant.id,
+          accountId: primaryAccountId,
+        });
+        const [updated] = await tx
+          .update(records)
+          .set({ data: { ...(contact.data as object), ...addr }, updatedAt: new Date() })
+          .where(and(eq(records.id, contact.id), eq(records.tenantId, tenant.id)))
+          .returning();
+        finalContact = updated;
+      }
+
+      return {
+        kind: "ok" as const,
+        contact: finalContact,
+        primaryAccountId,
+        relatedCount,
+      };
     });
   } catch (e) {
     if (e instanceof ContactAccountAbort) return mapAbort(e);

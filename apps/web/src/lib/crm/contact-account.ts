@@ -507,6 +507,39 @@ export async function loadPrimaryAccountsForContacts(
   return out;
 }
 
+/** Account address slug → the contact's site-address slug it maps onto. */
+const ACCOUNT_TO_SITE_ADDRESS: Record<string, string> = {
+  addressLine1: "siteAddressLine1",
+  addressLine2: "siteAddressLine2",
+  city: "city",
+  stateCounty: "stateCounty",
+  postcode: "postcode",
+  country: "country",
+};
+
+/**
+ * The site-address subset to copy onto a contact whose "Same as Site account
+ * address" is ticked — read from its primary account's address fields. Runs
+ * inside `withTenant`. Returns `{}` when there's no account / no address.
+ */
+export async function inheritAccountAddress(
+  tx: typeof db,
+  args: { tenantId: string; accountId: string }
+): Promise<Record<string, unknown>> {
+  const [account] = await tx
+    .select({ data: records.data })
+    .from(records)
+    .where(
+      and(eq(records.tenantId, args.tenantId), eq(records.id, args.accountId))
+    );
+  const ad = (account?.data as Record<string, unknown>) ?? {};
+  const out: Record<string, unknown> = {};
+  for (const [accSlug, siteSlug] of Object.entries(ACCOUNT_TO_SITE_ADDRESS)) {
+    out[siteSlug] = typeof ad[accSlug] === "string" ? ad[accSlug] : "";
+  }
+  return out;
+}
+
 /** The contact's current PRIMARY account id, or null if none. */
 export async function getPrimaryAccountId(
   tx: typeof db,

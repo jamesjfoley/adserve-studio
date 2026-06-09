@@ -242,6 +242,16 @@ form + the Related Accounts panel + any other related records + Activity), **Not
 and **Campaigns**. The latter two are placeholders ("coming soon — separate activity") per the
 design note. Lead remains the non-tabbed form+sidebar layout.
 
+## Iteration 10 — Account address + "Same as Site account address" inherit
+
+- **Account address panel:** `DEFAULT_ACCOUNT_FIELDS` gains an **Address** panel (Address line 1/2,
+  City, State / County, Postcode, Country).
+- **Inherit:** the contact's Site address panel gains a **"Same as Site account address"** boolean.
+  When ticked, the contact's site-address fields are copied from its PRIMARY account's address on
+  save (create + PATCH), via `inheritAccountAddress` inside the one `withTenant` tx. Tested both
+  paths. (Live grey-out of the site-address inputs while ticked is the field active/inactive slice,
+  next.)
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's

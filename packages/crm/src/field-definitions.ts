@@ -134,6 +134,61 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     fieldType: "long_text",
     displayOrder: 90,
   },
+  // ---- Address (the account's site address; a contact may inherit it) ----
+  {
+    slug: "addressLine1",
+    name: "Address line 1",
+    labels: { en: "Address line 1" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Address",
+    displayOrder: 110,
+  },
+  {
+    slug: "addressLine2",
+    name: "Address line 2",
+    labels: { en: "Address line 2" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Address",
+    displayOrder: 120,
+  },
+  {
+    slug: "city",
+    name: "City",
+    labels: { en: "City" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Address",
+    displayOrder: 130,
+  },
+  {
+    slug: "stateCounty",
+    name: "State / County",
+    labels: { en: "State / County" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Address",
+    displayOrder: 140,
+  },
+  {
+    slug: "postcode",
+    name: "Postcode",
+    labels: { en: "Postcode" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Address",
+    displayOrder: 150,
+  },
+  {
+    slug: "country",
+    name: "Country",
+    labels: { en: "Country" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Address",
+    displayOrder: 160,
+  },
 ];
 
 // ============================================================
@@ -336,6 +391,17 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     displayOrder: 240,
   },
   // ---- Site address ----
+  {
+    // When true, the contact's site address is inherited (copied) from its
+    // primary account's address on save.
+    slug: "sameAsAccountAddress",
+    name: "Same as Site account address",
+    labels: { en: "Same as Site account address" },
+    fieldType: "boolean",
+    isSystem: true,
+    groupName: "Site address",
+    displayOrder: 305,
+  },
   {
     slug: "siteAddressLine1",
     name: "Site address line 1",

@@ -21,6 +21,7 @@ import {
   applyContactReportsTo,
   applyRelatedAccounts,
   getPrimaryAccountId,
+  inheritAccountAddress,
   ContactAccountAbort,
   type RelatedAccountEntry,
 } from "@/lib/crm/contact-account";
@@ -235,6 +236,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         managerContactId: body.reportsTo?.contactId ?? null,
       });
       if (mr.kind !== "ok") throw new ContactAccountAbort(mr);
+    }
+
+    // "Same as Site account address" → copy the primary account's address into
+    // the contact's site-address fields (the just-set primary, else current).
+    if (slug === "contact" && merged.sameAsAccountAddress === true) {
+      const primaryId = accountProvided
+        ? primaryAccountId
+        : await getPrimaryAccountId(tx, { tenantId: tenant.id, contactId: id });
+      if (primaryId) {
+        Object.assign(
+          merged,
+          await inheritAccountAddress(tx, {
+            tenantId: tenant.id,
+            accountId: primaryId,
+          })
+        );
+      }
     }
 
     const [row] = await tx
