@@ -11,7 +11,7 @@ import type { RelatedRecord } from "@/lib/crm/relationships";
 import { DynamicForm } from "@/components/dynamic-form";
 import { PermissionGate } from "@/lib/permissions-client";
 import { Panel } from "@/components/ui/panel";
-import { LinkRecordPicker } from "./link-record-picker";
+import { RecordPicker, recordSearchConfig } from "@/components/crm/record-picker";
 
 /** Direction of the edge relative to the page (account) record. */
 type LinkDirection = "owner-is-source" | "owner-is-target";
@@ -98,6 +98,7 @@ export function ContactsTable({
     [sorted]
   );
   const excludeIds = useMemo(() => items.map((i) => i.id), [items]);
+  const pickerCfg = useMemo(() => recordSearchConfig("contact"), []);
 
   // The create form omits the `account` relationship field (it's inherited +
   // shown read-only); everything else of the contact form is reused.
@@ -215,13 +216,20 @@ export function ContactsTable({
       {adding && canEdit ? (
         <PermissionGate permission={editPermission}>
           <div className="mt-3">
-            <LinkRecordPicker
-              relatedSlug="contact"
-              excludeIds={excludeIds}
-              onPick={async (id) => {
-                await callLink("POST", id);
-                setAdding(false);
+            <RecordPicker
+              value={null}
+              onChange={(sel) => {
+                if (sel?.kind === "existing") {
+                  void callLink("POST", sel.id);
+                  setAdding(false);
+                }
               }}
+              entitySegment={pickerCfg.entitySegment}
+              searchFieldSlug={pickerCfg.searchFieldSlug}
+              placeholder={pickerCfg.placeholder}
+              labelOf={pickerCfg.labelOf}
+              allowCreate={false}
+              excludeIds={excludeIds}
             />
           </div>
         </PermissionGate>

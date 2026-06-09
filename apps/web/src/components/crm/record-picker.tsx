@@ -18,6 +18,39 @@ interface Option {
   label: string;
 }
 
+/** Per-entity search config (segment + field to `contains`-search + label). */
+export function recordSearchConfig(slug: string): {
+  entitySegment: string;
+  searchFieldSlug: string;
+  placeholder: string;
+  labelOf: (rec: SerializedRecord) => string;
+} {
+  const name = (rec: SerializedRecord) =>
+    typeof rec.data.name === "string" && rec.data.name.trim() !== ""
+      ? rec.data.name
+      : rec.id;
+  const person = (rec: SerializedRecord) => {
+    const fn = typeof rec.data.firstName === "string" ? rec.data.firstName : "";
+    const ln = typeof rec.data.lastName === "string" ? rec.data.lastName : "";
+    return `${fn} ${ln}`.trim() || name(rec);
+  };
+  if (slug === "contact" || slug === "lead") {
+    return {
+      entitySegment: slug === "contact" ? "contacts" : "leads",
+      searchFieldSlug: "lastName",
+      placeholder: `Search ${slug}s by last name…`,
+      labelOf: person,
+    };
+  }
+  const segment = slug === "account" ? "accounts" : "opportunities";
+  return {
+    entitySegment: segment,
+    searchFieldSlug: "name",
+    placeholder: `Search ${slug}s…`,
+    labelOf: name,
+  };
+}
+
 /**
  * Bare, single-select, server-side-searchable record control — the generic
  * engine behind the account picker, the reports-to picker, etc. Renders like
@@ -37,6 +70,7 @@ export function RecordPicker({
   placeholder,
   allowCreate,
   labelOf,
+  excludeIds,
 }: {
   value: RecordSelection | null;
   onChange: (selection: RecordSelection | null) => void;
@@ -51,6 +85,8 @@ export function RecordPicker({
   allowCreate: boolean;
   /** Resolve a record's display label. */
   labelOf: (rec: SerializedRecord) => string;
+  /** Ids to drop from results (e.g. already-linked records). */
+  excludeIds?: string[];
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Option[] | null>(null);
@@ -97,8 +133,11 @@ export function RecordPicker({
           return;
         }
         const body = (await res.json()) as { records?: SerializedRecord[] };
+        const exclude = new Set(excludeIds ?? []);
         setResults(
-          (body.records ?? []).map((r) => ({ id: r.id, label: labelOf(r) }))
+          (body.records ?? [])
+            .filter((r) => !exclude.has(r.id))
+            .map((r) => ({ id: r.id, label: labelOf(r) }))
         );
         setError(null);
       } catch (e) {
@@ -114,7 +153,7 @@ export function RecordPicker({
       controller.abort();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [trimmed, value, entitySegment, searchFieldSlug, labelOf]);
+  }, [trimmed, value, entitySegment, searchFieldSlug, labelOf, excludeIds]);
 
   function choose(selection: RecordSelection | null) {
     onChange(selection);

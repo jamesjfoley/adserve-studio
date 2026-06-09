@@ -6,7 +6,7 @@ import { crmCollectionSegment } from "@adserve/crm/url";
 import type { RelatedRecord } from "@/lib/crm/relationships";
 import { PermissionGate } from "@/lib/permissions-client";
 import { Panel } from "@/components/ui/panel";
-import { LinkRecordPicker } from "./link-record-picker";
+import { RecordPicker, recordSearchConfig } from "@/components/crm/record-picker";
 
 /** Best-effort human label for a related record, presentation-only. */
 export function relatedLabel(rec: { id: string; data: Record<string, unknown> }): string {
@@ -92,6 +92,7 @@ export function RelatedRecordsPanel({
 
   const segment = crmCollectionSegment(relatedSlug) ?? relatedSlug;
   const sorted = useMemo(() => sortPrimaryFirst(items), [items]);
+  const pickerCfg = useMemo(() => recordSearchConfig(relatedSlug), [relatedSlug]);
 
   /**
    * Issue a WS2 link/unlink call for one related record. The route must be
@@ -172,13 +173,20 @@ export function RelatedRecordsPanel({
       {adding && canEdit ? (
         <PermissionGate permission={editPermission}>
           <div className="mt-3">
-            <LinkRecordPicker
-              relatedSlug={relatedSlug}
-              excludeIds={excludeIds}
-              onPick={async (id) => {
-                await callLink("POST", id);
-                setAdding(false);
+            <RecordPicker
+              value={null}
+              onChange={(sel) => {
+                if (sel?.kind === "existing") {
+                  void callLink("POST", sel.id);
+                  setAdding(false);
+                }
               }}
+              entitySegment={pickerCfg.entitySegment}
+              searchFieldSlug={pickerCfg.searchFieldSlug}
+              placeholder={pickerCfg.placeholder}
+              labelOf={pickerCfg.labelOf}
+              allowCreate={false}
+              excludeIds={excludeIds}
             />
           </div>
         </PermissionGate>
