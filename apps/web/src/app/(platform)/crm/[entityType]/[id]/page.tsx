@@ -45,7 +45,8 @@ export default async function CrmDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { bundle, loaded, activityRows, contactPrimaryAccounts } = data;
+  const { bundle, loaded, activityRows, contactPrimaryAccounts, contactForm } =
+    data;
   const { entity, fields, layoutConfig } = bundle;
   const { record, relationships } = loaded;
 
@@ -81,6 +82,7 @@ export default async function CrmDetailPage({ params }: PageProps) {
       layoutConfig={layoutConfig}
       relationships={relationships}
       contactPrimaryAccounts={contactPrimaryAccounts}
+      contactForm={contactForm}
       activities={serializedActivities}
       canEdit={canEdit}
       canArchive={canArchive}

@@ -37,6 +37,11 @@ interface CrmDetailClientProps {
   relationships: Record<string, RelatedRecord[]>;
   /** Each linked contact's PRIMARY account (account detail's Account column). */
   contactPrimaryAccounts?: Record<string, { id: string; name: string }>;
+  /** Contact form (fields + layout) for creating a contact from this account. */
+  contactForm?: {
+    fields: FieldDefinitionWithLabels[];
+    layoutConfig: LayoutConfig;
+  } | null;
   activities: SerializedActivity[];
   canEdit: boolean;
   canArchive: boolean;
@@ -81,6 +86,7 @@ export function CrmDetailClient({
   layoutConfig,
   relationships,
   contactPrimaryAccounts = {},
+  contactForm = null,
   activities,
   canEdit,
   canArchive,
@@ -391,7 +397,7 @@ export function CrmDetailClient({
         id: "contacts",
         label: "Contacts",
         content: (
-          <div className="space-y-6">
+          <div className="flex h-[calc(100vh-16rem)] min-h-[32rem] flex-col gap-6">
             <ContactsTable
               title="Contacts"
               items={(relationships.contact ?? []).filter(
@@ -404,6 +410,18 @@ export function CrmDetailClient({
               direction="owner-is-target"
               editPermission="contact.update"
               canEdit={canEdit}
+              fillHeight
+              createContext={
+                contactForm
+                  ? {
+                      fields: contactForm.fields,
+                      layoutConfig: contactForm.layoutConfig,
+                      accountId: recordId,
+                      accountName: title,
+                      locale,
+                    }
+                  : undefined
+              }
             />
             <ContactsTable
               title="Linked Contacts"
@@ -417,6 +435,7 @@ export function CrmDetailClient({
               direction="owner-is-target"
               editPermission="contact.update"
               canEdit={canEdit}
+              fillHeight
             />
           </div>
         ),

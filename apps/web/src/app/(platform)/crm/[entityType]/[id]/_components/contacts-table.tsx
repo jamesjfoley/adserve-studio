@@ -3,7 +3,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { crmCollectionSegment } from "@adserve/crm/url";
+import type {
+  FieldDefinitionWithLabels,
+  LayoutConfig,
+} from "@adserve/module-framework";
 import type { RelatedRecord } from "@/lib/crm/relationships";
+import { DynamicForm } from "@/components/dynamic-form";
 import { PermissionGate } from "@/lib/permissions-client";
 import { Panel } from "@/components/ui/panel";
 import { LinkRecordPicker } from "./link-record-picker";
@@ -11,21 +16,33 @@ import { LinkRecordPicker } from "./link-record-picker";
 /** Direction of the edge relative to the page (account) record. */
 type LinkDirection = "owner-is-source" | "owner-is-target";
 
+/**
+ * When present, the table can CREATE a new contact whose PRIMARY account is
+ * inherited (read-only) from this account page — creation context #2. The
+ * contacts-list page is context #1 (account is an editable picker there).
+ */
+export interface ContactCreateContext {
+  fields: FieldDefinitionWithLabels[];
+  layoutConfig: LayoutConfig;
+  accountId: string;
+  accountName: string;
+  locale: string;
+}
+
 interface ContactsTableProps {
-  /** Panel heading, e.g. "Contacts" or "Linked Contacts". */
   title: string;
-  /** The contacts to list (already filtered to one relationship). */
   items: RelatedRecord[];
-  /** Each contact's PRIMARY account, for the Account column. */
   primaryAccountById: Record<string, { id: string; name: string }>;
-  /** The owning (account) page record's segment + id. */
   owningSegment: string;
   owningId: string;
-  /** The relationship connecting account ↔ contact for add/remove. */
   relationshipName: string;
   direction: LinkDirection;
   editPermission: string;
   canEdit: boolean;
+  /** Stretch the panel/table to fill the available column height. */
+  fillHeight?: boolean;
+  /** Enables the "New contact" create flow (the primary Contacts table only). */
+  createContext?: ContactCreateContext;
 }
 
 function str(data: Record<string, unknown>, key: string): string {
@@ -44,13 +61,6 @@ function contactName(rec: RelatedRecord): string {
 
 const EMPTY = "—";
 
-/**
- * A contact list rendered as a table (Name · Title · Account · Email ·
- * Telephone · LinkedIn) with add/remove, used by the account detail's single
- * "Contacts" tab for both the primary ("Contacts") and related ("Linked
- * Contacts") panels. Add/remove call the WS2 link route (source-scoped); the
- * server is the real authority (incl. the no-self-overlap rule).
- */
 export function ContactsTable({
   title,
   items,
@@ -61,11 +71,15 @@ export function ContactsTable({
   direction,
   editPermission,
   canEdit,
+  fillHeight = false,
+  createContext,
 }: ContactsTableProps) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const contactSegment = crmCollectionSegment("contact") ?? "contacts";
   const accountSegment = crmCollectionSegment("account") ?? "accounts";
@@ -75,10 +89,17 @@ export function ContactsTable({
   );
   const excludeIds = useMemo(() => items.map((i) => i.id), [items]);
 
+  // The create form omits the `account` relationship field (it's inherited +
+  // shown read-only); everything else of the contact form is reused.
+  const createFormFields = useMemo(
+    () =>
+      (createContext?.fields ?? []).filter(
+        (f) => f.fieldType !== "relationship"
+      ),
+    [createContext]
+  );
+
   async function callLink(method: "POST" | "DELETE", contactId: string) {
-    // contact_related_to_account / contact_belongs_to_account are scoped to the
-    // CONTACT as source. From the account page the owning record is the target,
-    // so scope the call to the contact and pass the account as target.
     const scopedSegment =
       direction === "owner-is-source" ? owningSegment : contactSegment;
     const scopedId = direction === "owner-is-source" ? owningId : contactId;
@@ -107,6 +128,25 @@ export function ContactsTable({
     }
   }
 
+  async function handleCreate(validated: Record<string, unknown>) {
+    if (!createContext) return;
+    setCreateError(null);
+    // The primary account is inherited from this account page (read-only) →
+    // routed as accountId; the contact + primary link are written atomically.
+    const res = await fetch(`/api/crm/contacts/with-accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: validated, accountId: createContext.accountId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setCreateError(body.error ?? `Create failed (${res.status})`);
+      return;
+    }
+    setCreating(false);
+    router.refresh();
+  }
+
   const cellClass = "px-3 py-2 text-sm align-top";
   const headClass =
     "px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]";
@@ -116,20 +156,37 @@ export function ContactsTable({
       as="section"
       aria-label={title}
       title={title}
+      className={fillHeight ? "flex min-h-0 flex-1 flex-col" : undefined}
       actions={
         canEdit ? (
-          <PermissionGate permission={editPermission}>
-            <button
-              type="button"
-              onClick={() => {
-                setError(null);
-                setAdding((v) => !v);
-              }}
-              className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
-            >
-              {adding ? "Cancel" : "Add contact"}
-            </button>
-          </PermissionGate>
+          <div className="flex items-center gap-2">
+            {createContext ? (
+              <PermissionGate permission="contact.create">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateError(null);
+                    setCreating(true);
+                  }}
+                  className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
+                >
+                  New contact
+                </button>
+              </PermissionGate>
+            ) : null}
+            <PermissionGate permission={editPermission}>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setAdding((v) => !v);
+                }}
+                className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
+              >
+                {adding ? "Cancel" : "Add contact"}
+              </button>
+            </PermissionGate>
+          </div>
         ) : null
       }
     >
@@ -159,7 +216,11 @@ export function ContactsTable({
           No contacts here yet.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
+        <div
+          className={
+            fillHeight ? "mt-3 min-h-0 flex-1 overflow-auto" : "mt-3 overflow-x-auto"
+          }
+        >
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-[var(--border)]">
@@ -181,7 +242,7 @@ export function ContactsTable({
                 return (
                   <tr
                     key={rec.id}
-                    className="border-b border-[var(--border)] last:border-0"
+                    className="border-b border-[var(--border)] last:border-0 even:bg-[color-mix(in_srgb,var(--muted)_55%,transparent)]"
                   >
                     <td className={cellClass}>
                       <a
@@ -256,6 +317,54 @@ export function ContactsTable({
           </table>
         </div>
       )}
+
+      {/* Create-new-contact modal (account-inherited, read-only account). */}
+      {creating && createContext ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setCreating(false)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-[var(--background)] p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold tracking-tight">New contact</h2>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setCreating(false)}
+                className="rounded-md px-2 py-1 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Account is inherited from this page → read-only. */}
+            <div className="mt-4 flex flex-col gap-1">
+              <span className="text-xs font-medium text-[var(--muted-foreground)]">
+                Account
+              </span>
+              <div className="rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-sm">
+                {createContext.accountName}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <DynamicForm
+                layoutConfig={createContext.layoutConfig}
+                fields={createFormFields}
+                initialData={null}
+                mode="create"
+                onSubmit={handleCreate}
+                submitError={createError}
+                submitLabel="Create contact"
+                locale={createContext.locale}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Panel>
   );
 }

@@ -52,6 +52,22 @@ export async function loadCrmDetailData(args: {
           })
         : {};
 
-    return { bundle, loaded, activityRows, contactPrimaryAccounts };
+    // On the account detail, also load the CONTACT entity's form (fields +
+    // layout) so the Contacts table can create a new contact whose primary
+    // account is inherited (read-only) from this account.
+    const contactForm =
+      slug === "account"
+        ? await loadEntityForm(tx, { tenantId, slug: "contact" })
+        : null;
+
+    return {
+      bundle,
+      loaded,
+      activityRows,
+      contactPrimaryAccounts,
+      contactForm: contactForm
+        ? { fields: contactForm.fields, layoutConfig: contactForm.layoutConfig }
+        : null,
+    };
   });
 }

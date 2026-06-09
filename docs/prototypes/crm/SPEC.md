@@ -125,6 +125,23 @@ Per the Rev-5 plan, contact↔account is split into TWO relationships sharing th
   by the `relatedAccounts` endpoint directive, not the detail panel. Rebuild should give the related
   panels the same searchable + create-new control as the primary picker.
 
+## Iteration 5 — Account Contacts tab UX (layout + create-from-account)
+
+- **Layout:** the Contacts tab is a full-height flex column; each `ContactsTable` panel stretches to
+  fill (`fillHeight`), the table area scrolls within the panel, full-width, with **banded rows**
+  (even-row tint).
+- **Create a contact from the account page (creation context #2):** the top **Contacts** table has
+  a **New contact** action. It opens a modal reusing `DynamicForm` with the contact fields (the
+  `account` relationship field is omitted from the editable form) and shows the **Account read-only**
+  = this account's name. On submit it POSTs `with-accounts` `{ data, accountId: <this account> }`, so
+  the new contact's **primary account is inherited** from the page. The contact form bundle (fields +
+  layout) is loaded for the account detail via `loadEntityForm(slug:"contact")` in `loadCrmDetailData`.
+- **Two creation contexts (confirmed):** (1) from the contacts LIST page, the account is an editable
+  picker (the inline `AccountPicker` picklist + create-new); (2) from the ACCOUNT page, the account is
+  read-only and inherited. Both POST the same `with-accounts` endpoint.
+- "Add contact" (link an EXISTING contact via the WS2 route) remains on both tables alongside "New
+  contact" on the primary one.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
