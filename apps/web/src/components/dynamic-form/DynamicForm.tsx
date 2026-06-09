@@ -35,6 +35,27 @@ export interface DynamicFormProps {
   className?: string;
 }
 
+/**
+ * Whether a field is inactive (read-only) for data entry. Driven by the field
+ * definition's `options`:
+ *   - `readOnly: true` — always inactive (admin-locked field).
+ *   - `disabledWhen: { field, equals }` — inactive when another field's current
+ *     value equals `equals` (e.g. site-address fields while
+ *     `sameAsAccountAddress` is true).
+ */
+function fieldInactive(
+  field: FieldDefinitionWithLabels,
+  state: Record<string, unknown>
+): boolean {
+  const opts = (field.options as Record<string, unknown> | null) ?? {};
+  if (opts.readOnly === true) return true;
+  const dw = opts.disabledWhen as
+    | { field?: string; equals?: unknown }
+    | undefined;
+  if (dw && typeof dw.field === "string") return state[dw.field] === dw.equals;
+  return false;
+}
+
 interface InitialStateArgs {
   fields: FieldDefinitionWithLabels[];
   initialData: Record<string, unknown> | null;
@@ -165,13 +186,19 @@ export function DynamicForm({
               const field = fieldsById.get(fieldId);
               if (!field) return null; // shouldn't happen — layout was validated
               const inputId = `${formId}-${field.id}`;
+              // A field can be inactive for data-entry — statically
+              // (`options.readOnly`) or conditionally (`options.disabledWhen`,
+              // e.g. the site-address fields while "Same as account" is ticked).
+              // It's rendered read-only (view mode) within the editable form.
+              const fieldMode =
+                mode !== "view" && fieldInactive(field, state) ? "view" : mode;
               return (
                 <FieldRenderer
                   key={field.id}
                   field={field}
                   value={state[field.slug]}
                   onChange={(next) => setSlug(field.slug, next)}
-                  mode={mode}
+                  mode={fieldMode}
                   error={errors[field.slug] ?? null}
                   locale={locale}
                   inputId={inputId}

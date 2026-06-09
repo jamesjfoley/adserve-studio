@@ -440,3 +440,84 @@ describe("DynamicForm — localization", () => {
     expect(screen.getByLabelText("Name")).toBeInTheDocument();
   });
 });
+
+describe("DynamicForm — inactive (read-only) fields", () => {
+  test("a disabledWhen field is read-only when its condition holds", () => {
+    const toggle = fieldDef({
+      id: "t",
+      slug: "toggle",
+      name: "Toggle",
+      fieldType: "boolean",
+    });
+    const dep = fieldDef({
+      id: "d",
+      slug: "dep",
+      name: "Dependent",
+      fieldType: "text",
+      options: { disabledWhen: { field: "toggle", equals: true } },
+    });
+
+    render(
+      <DynamicForm
+        layoutConfig={sectionConfig({ title: "S", fieldIds: ["t", "d"] })}
+        fields={[toggle, dep]}
+        initialData={{ toggle: true, dep: "Inherited" }}
+        mode="edit"
+      />
+    );
+
+    // Condition holds → no editable control for the dependent field; its value
+    // shows read-only instead.
+    expect(screen.queryByLabelText("Dependent")).not.toBeInTheDocument();
+    expect(screen.getByText("Inherited")).toBeInTheDocument();
+  });
+
+  test("a disabledWhen field is editable when its condition does not hold", () => {
+    const toggle = fieldDef({
+      id: "t",
+      slug: "toggle",
+      name: "Toggle",
+      fieldType: "boolean",
+    });
+    const dep = fieldDef({
+      id: "d",
+      slug: "dep",
+      name: "Dependent",
+      fieldType: "text",
+      options: { disabledWhen: { field: "toggle", equals: true } },
+    });
+
+    render(
+      <DynamicForm
+        layoutConfig={sectionConfig({ title: "S", fieldIds: ["t", "d"] })}
+        fields={[toggle, dep]}
+        initialData={{ toggle: false, dep: "Editable" }}
+        mode="edit"
+      />
+    );
+
+    expect(screen.getByLabelText("Dependent")).toBeInTheDocument();
+  });
+
+  test("a readOnly field is always inactive", () => {
+    const locked = fieldDef({
+      id: "r",
+      slug: "locked",
+      name: "Locked",
+      fieldType: "text",
+      options: { readOnly: true },
+    });
+
+    render(
+      <DynamicForm
+        layoutConfig={sectionConfig({ title: "S", fieldIds: ["r"] })}
+        fields={[locked]}
+        initialData={{ locked: "Fixed" }}
+        mode="edit"
+      />
+    );
+
+    expect(screen.queryByLabelText("Locked")).not.toBeInTheDocument();
+    expect(screen.getByText("Fixed")).toBeInTheDocument();
+  });
+});

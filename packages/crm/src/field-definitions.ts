@@ -410,6 +410,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Site address",
     displayOrder: 310,
+    options: { disabledWhen: { field: "sameAsAccountAddress", equals: true } },
   },
   {
     slug: "siteAddressLine2",
@@ -419,6 +420,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Site address",
     displayOrder: 320,
+    options: { disabledWhen: { field: "sameAsAccountAddress", equals: true } },
   },
   {
     slug: "city",
@@ -428,6 +430,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Site address",
     displayOrder: 330,
+    options: { disabledWhen: { field: "sameAsAccountAddress", equals: true } },
   },
   {
     slug: "stateCounty",
@@ -437,6 +440,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Site address",
     displayOrder: 340,
+    options: { disabledWhen: { field: "sameAsAccountAddress", equals: true } },
   },
   {
     slug: "postcode",
@@ -446,6 +450,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Site address",
     displayOrder: 350,
+    options: { disabledWhen: { field: "sameAsAccountAddress", equals: true } },
   },
   {
     slug: "country",
@@ -455,6 +460,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Site address",
     displayOrder: 360,
+    options: { disabledWhen: { field: "sameAsAccountAddress", equals: true } },
   },
   // ---- More ----
   {

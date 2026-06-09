@@ -252,6 +252,20 @@ design note. Lead remains the non-tabbed form+sidebar layout.
   paths. (Live grey-out of the site-address inputs while ticked is the field active/inactive slice,
   next.)
 
+## Iteration 11 — Field active/inactive (read-only) for data entry
+
+`DynamicForm` now renders a field read-only (inactive for data entry) when its definition's
+`options` say so — generically, admin-extensible:
+- `options.readOnly: true` — always inactive (admin-locked field).
+- `options.disabledWhen: { field, equals }` — inactive when another field's current value matches
+  (the **site-address fields carry `disabledWhen: sameAsAccountAddress === true`**, so they grey out
+  to read-only the moment "Same as Site account address" is ticked).
+
+Implemented by rendering the field in view mode within the editable form (reuses existing read-only
+rendering — no change to the 13 field components). Tested (disabledWhen on/off + readOnly).
+Deferred: an admin field-manager toggle to set `readOnly` per field (the mechanism is in place;
+the UI control is a follow-up).
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
