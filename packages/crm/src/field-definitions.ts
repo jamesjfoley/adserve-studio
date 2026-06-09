@@ -263,6 +263,8 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "General",
     displayOrder: 50,
+    // Data-driven picker config (RelationshipField reads this, not the slug).
+    options: { relationship: { targetSlug: "account", allowCreate: true } },
   },
   {
     // Org hierarchy: who this contact reports to, backed by
@@ -275,6 +277,7 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "General",
     displayOrder: 55,
+    options: { relationship: { targetSlug: "contact", allowCreate: false } },
   },
   {
     slug: "title",

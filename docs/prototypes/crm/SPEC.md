@@ -277,6 +277,15 @@ the shared list `FilterBar`/`DynamicTable` keep the generic "archived" wording, 
 rename would mislabel leads/opportunities (their lifecycle is archived/converted, not "inactive").
 An entity-aware list label is a future polish, not done.
 
+## Iteration 13 — Data-driven RelationshipField
+
+`RelationshipField` is no longer keyed on the field slug. It reads the field definition's
+`options.relationship = { targetSlug, allowCreate }` and renders the searchable `RecordPicker` for
+that target (`account` → account picker + create-new; `reportsTo` → contact picker, existing only)
+via `recordSearchConfig`. Adding a new relationship field is now config-only — no renderer change.
+(Relationship fields without that config fall back to the Phase-1 UUID input.) The slug-hardcoding
+debt logged since iteration 2 is retired.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
