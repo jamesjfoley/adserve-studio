@@ -142,6 +142,36 @@ Per the Rev-5 plan, contact↔account is split into TWO relationships sharing th
 - "Add contact" (link an EXISTING contact via the WS2 route) remains on both tables alongside "New
   contact" on the primary one.
 
+## Iteration 6 — no deletion; inactive lifecycle
+
+Contacts and accounts are **never hard-deleted** — only marked **inactive**. Decision:
+**"inactive" = the existing `isArchived` soft-delete flag** (the requirement is about replacing
+deletion, which is exactly what `isArchived` is), NOT the `status` field's "Inactive" choice (a
+separate sales attribute — naming-collision flagged below).
+
+- **No hard delete:** confirmed — nothing hard-deletes a `records` row anywhere; the "delete" action
+  only sets `isArchived = true`.
+- **Excluded from picklists:** the account picker (`AccountPicker`) and the link picker
+  (`LinkRecordPicker`) both query the list endpoint, which excludes `isArchived` by default — so
+  inactive contacts/accounts never appear when adding new records. (Already true; verified.)
+- **Tables hide inactive by default + checkbox:** the account-detail `ContactsTable` panels now hide
+  inactive rows by default and expose a **"Show inactive (n)"** checkbox to reveal them (struck
+  through). The contacts/accounts LIST pages already had this via the shared `FilterBar`
+  "Include archived" toggle.
+- **Vocabulary:** the contact/account detail header relabels **Archive → "Mark inactive"** and the
+  **"Archived" badge → "Inactive"**. Other entities (lead/opportunity) keep "Archive".
+
+### Deferred / notes (rebuild)
+- **Vocabulary not yet unified:** the shared `FilterBar`/`DynamicTable` still say "archived"
+  (so contacts/accounts LIST pages show "Include archived", not "Show inactive"). A global rename
+  touches all entities — left for a deliberate pass.
+- **No UI reactivation:** marking inactive has no in-UI "Reactivate" (un-archive) yet — parity with
+  the prior Archive (which also had none). Add a reversible toggle in the rebuild.
+- **`status` "Inactive" collision:** both contacts and accounts have a `status` field whose choices
+  include "Inactive". That's a distinct business attribute from the `isArchived` lifecycle; the
+  rebuild should reconcile the naming so "Status: Active" + lifecycle "Inactive" can't co-occur
+  confusingly.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's

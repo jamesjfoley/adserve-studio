@@ -391,6 +391,51 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     expect(screen.getAllByText(/no contacts here yet/i)).toHaveLength(2);
   });
 
+  test("inactive contacts are hidden by default; the checkbox reveals them", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [] }),
+    })));
+    const user = userEvent.setup();
+
+    renderDetail({
+      entitySlug: "account",
+      relationships: {
+        contact: [
+          relatedContact({
+            id: "active1",
+            data: { name: "ActiveOne" },
+            relationshipName: "contact_belongs_to_account",
+          }),
+          relatedContact({
+            id: "inact1",
+            data: { name: "InactiveOne" },
+            isArchived: true,
+            relationshipName: "contact_belongs_to_account",
+          }),
+        ],
+      },
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Contacts" }));
+
+    // Active shown; inactive hidden by default.
+    expect(screen.getByRole("link", { name: "ActiveOne" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "InactiveOne" })
+    ).not.toBeInTheDocument();
+
+    // The Contacts panel's "Show inactive" checkbox is first; toggling reveals it.
+    const checkboxes = screen.getAllByRole("checkbox", {
+      name: /show inactive/i,
+    });
+    await user.click(checkboxes[0]);
+    expect(
+      screen.getByRole("link", { name: "InactiveOne" })
+    ).toBeInTheDocument();
+  });
+
   test("opportunity variant shows Account and Contacts tabs", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,

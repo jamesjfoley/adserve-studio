@@ -80,12 +80,23 @@ export function ContactsTable({
   const [adding, setAdding] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   const contactSegment = crmCollectionSegment("contact") ?? "contacts";
   const accountSegment = crmCollectionSegment("account") ?? "accounts";
   const sorted = useMemo(
     () => [...items].sort((a, b) => contactName(a).localeCompare(contactName(b))),
     [items]
+  );
+  // Inactive (archived) contacts are hidden by default; the checkbox reveals
+  // them. Contacts are never deleted — only marked inactive.
+  const visible = useMemo(
+    () => (showInactive ? sorted : sorted.filter((r) => !r.isArchived)),
+    [sorted, showInactive]
+  );
+  const inactiveCount = useMemo(
+    () => sorted.filter((r) => r.isArchived).length,
+    [sorted]
   );
   const excludeIds = useMemo(() => items.map((i) => i.id), [items]);
 
@@ -158,36 +169,47 @@ export function ContactsTable({
       title={title}
       className={fillHeight ? "flex min-h-0 flex-1 flex-col" : undefined}
       actions={
-        canEdit ? (
-          <div className="flex items-center gap-2">
-            {createContext ? (
-              <PermissionGate permission="contact.create">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-[var(--border)]"
+            />
+            Show inactive{inactiveCount > 0 ? ` (${inactiveCount})` : ""}
+          </label>
+          {canEdit ? (
+            <div className="flex items-center gap-2">
+              {createContext ? (
+                <PermissionGate permission="contact.create">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateError(null);
+                      setCreating(true);
+                    }}
+                    className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
+                  >
+                    New contact
+                  </button>
+                </PermissionGate>
+              ) : null}
+              <PermissionGate permission={editPermission}>
                 <button
                   type="button"
                   onClick={() => {
-                    setCreateError(null);
-                    setCreating(true);
+                    setError(null);
+                    setAdding((v) => !v);
                   }}
-                  className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
+                  className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
                 >
-                  New contact
+                  {adding ? "Cancel" : "Add contact"}
                 </button>
               </PermissionGate>
-            ) : null}
-            <PermissionGate permission={editPermission}>
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setAdding((v) => !v);
-                }}
-                className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
-              >
-                {adding ? "Cancel" : "Add contact"}
-              </button>
-            </PermissionGate>
-          </div>
-        ) : null
+            </div>
+          ) : null}
+        </div>
       }
     >
       {error ? (
@@ -211,9 +233,11 @@ export function ContactsTable({
         </PermissionGate>
       ) : null}
 
-      {sorted.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="mt-3 text-sm text-[var(--muted-foreground)]">
-          No contacts here yet.
+          {inactiveCount > 0 && !showInactive
+            ? "No active contacts — tick “Show inactive” to see inactive ones."
+            : "No contacts here yet."}
         </p>
       ) : (
         <div
@@ -234,7 +258,7 @@ export function ContactsTable({
               </tr>
             </thead>
             <tbody>
-              {sorted.map((rec) => {
+              {visible.map((rec) => {
                 const primary = primaryAccountById[rec.id];
                 const email = str(rec.data, "email");
                 const phone = str(rec.data, "phone");

@@ -523,7 +523,9 @@ export function CrmDetailClient({
             {title}
             {record.isArchived ? (
               <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs font-medium text-[var(--muted-foreground)]">
-                Archived
+                {entitySlug === "contact" || entitySlug === "account"
+                  ? "Inactive"
+                  : "Archived"}
               </span>
             ) : null}
           </h1>
@@ -570,7 +572,9 @@ export function CrmDetailClient({
               disabled={busy}
               className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
-              Archive
+              {entitySlug === "contact" || entitySlug === "account"
+                ? "Mark inactive"
+                : "Archive"}
             </button>
           ) : null}
         </div>
