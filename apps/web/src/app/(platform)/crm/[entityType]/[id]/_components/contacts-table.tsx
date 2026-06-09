@@ -163,6 +163,7 @@ export function ContactsTable({
       aria-label={title}
       title={title}
       className={fillHeight ? "flex min-h-0 flex-1 flex-col" : undefined}
+      bodyClassName={fillHeight ? "flex min-h-0 flex-1 flex-col" : undefined}
       actions={
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">

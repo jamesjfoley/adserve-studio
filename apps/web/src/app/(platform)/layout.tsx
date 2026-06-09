@@ -84,7 +84,7 @@ export default async function PlatformLayout({
       />
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-[var(--page-bg)]">
         <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
       </main>
     </div>

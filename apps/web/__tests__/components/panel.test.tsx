@@ -55,11 +55,13 @@ describe("Panel", () => {
     const root = container.firstElementChild as HTMLElement;
     expect(root.tagName).toBe("SECTION");
     expect(root).toHaveClass("adserve-panel");
-    // Radius / border / background / padding are driven by the WS4 tokens.
+    // Radius / border / background are driven by tokens on the root; the body
+    // wrapper carries the panel padding.
     expect(root.style.borderRadius).toBe("var(--radius-panel)");
     expect(root.style.borderColor).toBe("var(--panel-border)");
     expect(root.style.backgroundColor).toBe("var(--panel-bg)");
-    expect(root.style.padding).toBe("var(--panel-padding)");
+    const body = root.lastElementChild as HTMLElement;
+    expect(body.style.padding).toBe("var(--panel-padding)");
   });
 
   test("default elevation is 1; explicit elevation changes the box-shadow token", () => {
@@ -79,7 +81,8 @@ describe("Panel", () => {
   test("compact uses the compact padding token", () => {
     const { container } = render(<Panel compact>x</Panel>);
     const root = container.firstElementChild as HTMLElement;
-    expect(root.style.padding).toBe("var(--panel-padding-sm)");
+    const body = root.lastElementChild as HTMLElement;
+    expect(body.style.padding).toBe("var(--panel-padding-sm)");
   });
 
   test("as='div' renders a div; default renders a section", () => {

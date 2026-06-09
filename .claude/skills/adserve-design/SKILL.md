@@ -76,10 +76,31 @@ expresses.
   --panel-padding: var(--space-6);
   --panel-padding-sm: var(--space-4);
 
-  /* Surface tokens */
-  --panel-bg: var(--background);
-  --panel-border: var(--border);
-  --page-bg: var(--background);
+  /* Surface tokens — page < panel < field contrast (the house look). */
+  --panel-bg: #ffffff;
+  --panel-border: #e6e8ec;
+  --panel-header-bg: #fafbfc;
+  --page-bg: #f4f5f7;
+
+  /* Form fields — filled light-grey input wells. */
+  --field-bg: #f3f4f6;
+  --field-border: #dfe3e8;
+  --field-focus-ring: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  /* Data tables */
+  --table-header-bg: #f7f8fa;
+  --row-alt: #fbfcfd;
+  --row-hover: #f1f4f8;
+
+  /* Status pills */
+  --status-success-bg: #e7f6ed;
+  --status-success-fg: #1a7f43;
+  --status-info-bg: #e8f0fb;
+  --status-info-fg: #1d4ed8;
+  --status-warning-bg: #fdf2e3;
+  --status-warning-fg: #b25e09;
+  --status-neutral-bg: #eceef1;
+  --status-neutral-fg: #586273;
 
   /* Palette seam — reserved for WS6 (see note below) */
   --accent: var(--brand-500, #185fa5);
@@ -98,6 +119,25 @@ expresses.
     --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.4);
     --elevation-2: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
     --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.6), 0 4px 6px -4px rgb(0 0 0 / 0.6);
+
+    /* Dark surfaces: panels one step lighter than the page; fields lighter again. */
+    --panel-bg: #161616;
+    --panel-border: #2a2a2a;
+    --panel-header-bg: #1c1c1c;
+    --page-bg: #0a0a0a;
+    --field-bg: #1f1f1f;
+    --field-border: #313131;
+    --table-header-bg: #1c1c1c;
+    --row-alt: #141414;
+    --row-hover: #202020;
+    --status-success-bg: #11301e;
+    --status-success-fg: #5fd08a;
+    --status-info-bg: #15263f;
+    --status-info-fg: #7aa7f0;
+    --status-warning-bg: #38280f;
+    --status-warning-fg: #e0a256;
+    --status-neutral-bg: #242424;
+    --status-neutral-fg: #aeb4be;
   }
 }
 ```

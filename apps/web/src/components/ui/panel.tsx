@@ -1,31 +1,25 @@
 import type { CSSProperties, ReactNode } from "react";
 
 /**
- * Panel — the CRM design-system surface primitive (WS4).
+ * Panel — the CRM design-system surface primitive.
  *
- * A pure presentational wrapper that applies the WS4 surface / elevation /
- * border / radius / padding tokens (declared in `globals.css`) to a single
- * elevated card. It optionally renders a header row from `title` / `actions`.
+ * A white (token-driven) card that sits on the soft-grey page background. When
+ * given a `title`/`actions` it renders a distinct **header band** (tinted +
+ * bottom border) above a padded body — the house section style seen across the
+ * style guides ("Deal Details", "Discounts", …). With neither, it's a bare
+ * padded surface.
  *
- * Server-safe (locked criterion #17): this file imports ONLY `react` types —
- * no `postgres`, no `@adserve/database`, no DB client, no server action, no
- * secret. It is therefore neither `"use client"`-restricted nor
- * server-restricted; a server component (the CRM dashboard) and client
- * components (the CRM list / detail panels) can all import it. The ESLint
- * `boundary/no-server-in-client` rule never fires because no forbidden module
- * is imported here.
- *
- * No external dependency is used (no `clsx`): classes are joined with a plain
- * template string so introducing a primitive never introduces a dependency.
+ * Server-safe: imports ONLY `react` types — no DB/secret/server module — so it
+ * works in both server and client components (the boundary rule never fires).
  */
 
 type Elevation = 0 | 1 | 2 | 3;
 
 interface PanelProps {
   children: ReactNode;
-  /** Optional heading rendered in the panel header row. String or node. */
+  /** Heading rendered in the header band. */
   title?: ReactNode;
-  /** Optional right-aligned header slot (e.g. an "Add" button). */
+  /** Right-aligned header-band slot (e.g. an "Add" button). */
   actions?: ReactNode;
   /** Elevation token to apply; default 1. */
   elevation?: Elevation;
@@ -33,13 +27,14 @@ interface PanelProps {
   compact?: boolean;
   /** Polymorphic root element. Defaults to "section". */
   as?: "section" | "div" | "aside";
-  /** Escape hatch for layout classes (grid spans, margins) on the root. */
+  /** Layout-only escape hatch for the ROOT (grid spans, margins, flex). */
   className?: string;
+  /** Layout-only escape hatch for the BODY wrapper (e.g. flex for fill-height). */
+  bodyClassName?: string;
   /** Forwarded to the root for assistive tech. */
   "aria-label"?: string;
 }
 
-/** Map the elevation prop onto its CSS-var box-shadow token. */
 const ELEVATION_VAR: Record<Elevation, string> = {
   0: "var(--elevation-0)",
   1: "var(--elevation-1)",
@@ -60,33 +55,50 @@ export function Panel({
   compact = false,
   as: As = "section",
   className,
+  bodyClassName,
   "aria-label": ariaLabel,
 }: PanelProps) {
   const hasHeader = title != null || actions != null;
+  const pad = compact ? "var(--panel-padding-sm)" : "var(--panel-padding)";
 
-  const style: CSSProperties = {
+  const rootStyle: CSSProperties = {
     borderRadius: "var(--radius-panel)",
     borderWidth: "var(--border-width)",
     borderStyle: "solid",
     borderColor: "var(--panel-border)",
     backgroundColor: "var(--panel-bg)",
-    padding: compact ? "var(--panel-padding-sm)" : "var(--panel-padding)",
     boxShadow: ELEVATION_VAR[elevation],
+    overflow: "hidden", // clip the header band to the panel radius
   };
 
   return (
-    <As className={cx("adserve-panel", className)} style={style} aria-label={ariaLabel}>
+    <As className={cx("adserve-panel", className)} style={rootStyle} aria-label={ariaLabel}>
       {hasHeader ? (
-        <div className="flex items-center justify-between">
+        <div
+          className="flex items-center justify-between gap-3"
+          style={{
+            backgroundColor: "var(--panel-header-bg)",
+            borderBottom: "var(--border-width) solid var(--panel-border)",
+            paddingInline: pad,
+            paddingTop: "var(--space-3)",
+            paddingBottom: "var(--space-3)",
+          }}
+        >
           {title != null ? (
-            <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+            <h2 className="text-sm font-semibold tracking-tight text-[var(--foreground)]">
+              {title}
+            </h2>
           ) : (
             <span />
           )}
-          {actions != null ? <div>{actions}</div> : null}
+          {actions != null ? (
+            <div className="flex items-center gap-2">{actions}</div>
+          ) : null}
         </div>
       ) : null}
-      {children}
+      <div className={bodyClassName} style={{ padding: pad }}>
+        {children}
+      </div>
     </As>
   );
 }

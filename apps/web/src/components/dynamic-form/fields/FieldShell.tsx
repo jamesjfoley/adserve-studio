@@ -96,11 +96,16 @@ export interface FieldComponentProps {
   inputId: string;
 }
 
-/** Shared input className so every field renders the same chrome. */
+/**
+ * Shared input className — a filled light-grey "well" (style-guide inputs are
+ * recessed on the white panel, not white-on-white). Border + fill come from the
+ * field tokens so they flip in dark mode.
+ */
 export const inputClassName = cn(
-  "w-full rounded-md border border-[var(--border)] bg-[var(--background)]",
-  "px-3 py-2 text-sm",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+  "w-full rounded-md border border-[var(--field-border)] bg-[var(--field-bg)]",
+  "px-3 py-2 text-sm text-[var(--foreground)]",
+  "placeholder:text-[var(--muted-foreground)]",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:border-[var(--accent)]",
   "disabled:opacity-60"
 );
 
