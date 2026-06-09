@@ -139,7 +139,33 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
 // ============================================================
 // Contact fields
 // ============================================================
+// Contact fields are grouped into PANELS via `groupName` ("General", "Social",
+// "Site address", "More"). `generateDefaultLayoutConfig` turns each group into a
+// layout section, so the default form mirrors the panels below — and the admin
+// can then add/remove panels and move fields between them via the layout editor
+// (the layout, not this list, is the source of truth once persisted).
 export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
+  // ---- General ----
+  {
+    slug: "salutation",
+    name: "Salutation",
+    labels: { en: "Salutation" },
+    fieldType: "select",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 10,
+    options: {
+      choices: [
+        { value: "mr", label: "Mr" },
+        { value: "mrs", label: "Mrs" },
+        { value: "ms", label: "Ms" },
+        { value: "miss", label: "Miss" },
+        { value: "dr", label: "Dr" },
+        { value: "prof", label: "Prof" },
+        { value: "mx", label: "Mx" },
+      ],
+    },
+  },
   {
     slug: "firstName",
     name: "First name",
@@ -147,7 +173,8 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     fieldType: "text",
     isRequired: true,
     isSystem: true,
-    displayOrder: 10,
+    groupName: "General",
+    displayOrder: 20,
     isSearchable: true,
   },
   {
@@ -157,47 +184,76 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     fieldType: "text",
     isRequired: true,
     isSystem: true,
-    displayOrder: 20,
-    isSearchable: true,
-  },
-  {
-    slug: "email",
-    name: "Email",
-    labels: { en: "Email" },
-    fieldType: "email",
-    isSystem: true,
+    groupName: "General",
     displayOrder: 30,
     isSearchable: true,
   },
   {
-    slug: "phone",
-    name: "Phone",
-    labels: { en: "Phone" },
-    fieldType: "phone",
+    slug: "knownAsName",
+    name: "Known as name",
+    labels: { en: "Known as name" },
+    fieldType: "text",
     isSystem: true,
+    groupName: "General",
     displayOrder: 40,
   },
   {
-    // The contact's account, backed by the `contact_belongs_to_account`
-    // relationship (record_relationships, NOT records.data). A first-class
-    // relationship field so it renders inline like any other field and the
-    // admin can place it via the layout editor. The create form's picker
-    // (searchable + inline create-new) is wired in the RelationshipField
-    // renderer, keyed on this slug.
+    // The contact's PRIMARY account, backed by `contact_belongs_to_account`
+    // (record_relationships, NOT records.data). Rendered inline via the
+    // RelationshipField account picker; admin-placeable like any field.
     slug: "account",
-    name: "Account",
-    labels: { en: "Account" },
+    name: "Account name",
+    labels: { en: "Account name" },
     fieldType: "relationship",
     isSystem: true,
-    displayOrder: 45,
+    groupName: "General",
+    displayOrder: 50,
   },
   {
     slug: "title",
-    name: "Title",
-    labels: { en: "Title" },
+    name: "Job title",
+    labels: { en: "Job title" },
     fieldType: "text",
     isSystem: true,
-    displayOrder: 50,
+    groupName: "General",
+    displayOrder: 60,
+  },
+  {
+    slug: "email",
+    name: "Email - Work",
+    labels: { en: "Email - Work" },
+    fieldType: "email",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 70,
+    isSearchable: true,
+  },
+  {
+    slug: "emailOther",
+    name: "Email - Other",
+    labels: { en: "Email - Other" },
+    fieldType: "email",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 80,
+  },
+  {
+    slug: "mobile",
+    name: "Mobile",
+    labels: { en: "Mobile" },
+    fieldType: "phone",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 90,
+  },
+  {
+    slug: "phone",
+    name: "Landline",
+    labels: { en: "Landline" },
+    fieldType: "phone",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 100,
   },
   {
     slug: "status",
@@ -207,7 +263,8 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     isRequired: true,
     isSystem: true,
     defaultValue: "active",
-    displayOrder: 60,
+    groupName: "General",
+    displayOrder: 110,
     isFilterable: true,
     options: {
       choices: [
@@ -221,21 +278,132 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     name: "Department",
     labels: { en: "Department" },
     fieldType: "text",
-    displayOrder: 70,
+    groupName: "General",
+    displayOrder: 120,
   },
+  {
+    slug: "billingContact",
+    name: "Billing contact",
+    labels: { en: "Billing contact" },
+    fieldType: "boolean",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 130,
+  },
+  // ---- Social ----
   {
     slug: "linkedinUrl",
     name: "LinkedIn",
     labels: { en: "LinkedIn" },
     fieldType: "url",
-    displayOrder: 80,
+    groupName: "Social",
+    displayOrder: 210,
   },
+  {
+    slug: "facebook",
+    name: "Facebook",
+    labels: { en: "Facebook" },
+    fieldType: "url",
+    groupName: "Social",
+    displayOrder: 220,
+  },
+  {
+    slug: "twitter",
+    name: "Twitter",
+    labels: { en: "Twitter" },
+    fieldType: "url",
+    groupName: "Social",
+    displayOrder: 230,
+  },
+  {
+    slug: "otherSocial",
+    name: "Other",
+    labels: { en: "Other" },
+    fieldType: "url",
+    groupName: "Social",
+    displayOrder: 240,
+  },
+  // ---- Site address ----
+  {
+    slug: "siteAddressLine1",
+    name: "Site address line 1",
+    labels: { en: "Site address line 1" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Site address",
+    displayOrder: 310,
+  },
+  {
+    slug: "siteAddressLine2",
+    name: "Site address line 2",
+    labels: { en: "Site address line 2" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Site address",
+    displayOrder: 320,
+  },
+  {
+    slug: "city",
+    name: "City",
+    labels: { en: "City" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Site address",
+    displayOrder: 330,
+  },
+  {
+    slug: "stateCounty",
+    name: "State / County",
+    labels: { en: "State / County" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Site address",
+    displayOrder: 340,
+  },
+  {
+    slug: "postcode",
+    name: "Postcode",
+    labels: { en: "Postcode" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Site address",
+    displayOrder: 350,
+  },
+  {
+    slug: "country",
+    name: "Country",
+    labels: { en: "Country" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "Site address",
+    displayOrder: 360,
+  },
+  // ---- More ----
   {
     slug: "notes",
     name: "Notes",
     labels: { en: "Notes" },
     fieldType: "long_text",
-    displayOrder: 90,
+    groupName: "More",
+    displayOrder: 410,
+  },
+  {
+    slug: "externalReferenceId",
+    name: "External reference ID",
+    labels: { en: "External reference ID" },
+    fieldType: "text",
+    isSystem: true,
+    groupName: "More",
+    displayOrder: 420,
+  },
+  {
+    slug: "makeFavourite",
+    name: "Make favourite",
+    labels: { en: "Make favourite" },
+    fieldType: "boolean",
+    isSystem: true,
+    groupName: "More",
+    displayOrder: 430,
   },
 ];
 

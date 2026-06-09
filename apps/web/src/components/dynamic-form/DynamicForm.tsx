@@ -7,6 +7,7 @@ import type {
   LayoutConfig,
 } from "@adserve/module-framework";
 import { cn } from "@/lib/utils";
+import { Panel } from "@/components/ui/panel";
 import { FieldRenderer } from "./field-renderer";
 
 export type DynamicFormMode = "create" | "edit" | "view";
@@ -144,16 +145,14 @@ export function DynamicForm({
       aria-busy={submitting}
     >
       {layoutConfig.sections.map((section, sIdx) => (
-        <section
+        // Each section is a shaded Panel — distinguishing panel surface from the
+        // page background, with the inputs (--background) sitting on the panel.
+        <Panel
           key={`${section.title}-${sIdx}`}
-          aria-labelledby={`${formId}-section-${sIdx}`}
+          as="section"
+          title={section.title}
+          aria-label={section.title}
         >
-          <h2
-            id={`${formId}-section-${sIdx}`}
-            className="text-sm font-semibold tracking-tight text-[var(--foreground)]"
-          >
-            {section.title}
-          </h2>
           <div
             className={cn(
               "mt-3 grid gap-4",
@@ -180,7 +179,7 @@ export function DynamicForm({
               );
             })}
           </div>
-        </section>
+        </Panel>
       ))}
 
       {submitError ? (

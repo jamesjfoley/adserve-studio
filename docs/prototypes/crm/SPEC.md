@@ -172,6 +172,49 @@ separate sales attribute — naming-collision flagged below).
   rebuild should reconcile the naming so "Status: Active" + lifecycle "Inactive" can't co-occur
   confusingly.
 
+## Iteration 7 — Contact details: panelled field set (configurable layout)
+
+Reworks the contact form toward the supplied design, "achieved consistent with admin settings" —
+i.e. expressed as **field definitions + layout sections (panels)**, not hardcoded, so the admin
+layout editor can add/remove panels and move fields.
+
+- **Default contact field set expanded** (`DEFAULT_CONTACT_FIELDS`) and grouped into panels via
+  `groupName` → `generateDefaultLayoutConfig` renders one layout **section per panel**:
+  - **General:** Salutation (select), First name*, Last name*, Known as name, Account name
+    (relationship), Job title, Email - Work, Email - Other, Mobile, Landline, Status*, Department,
+    Billing contact (boolean).
+  - **Social:** LinkedIn, Facebook, Twitter, Other (urls).
+  - **Site address:** Site address line 1/2, City, State / County, Postcode, Country.
+  - **More:** Notes, External reference ID, Make favourite (boolean).
+  (Relabels: Title→"Job title", Email→"Email - Work", Phone→"Landline".)
+- **Panel shading:** `DynamicForm` now renders each section inside a `Panel` (shaded surface +
+  border + elevation tokens), so panel ≠ field (`--background` inputs) ≠ page background — across
+  ALL entity forms, view + edit.
+- **Admin-configurable:** the panels/fields are the generated default layout; the admin layout
+  editor remains the source of truth once a layout is persisted.
+
+### Provisioning caveat (prototype handled locally; rebuild must address)
+`provisionEntityType` only **inserts** new-slug fields on re-activation — it does NOT update an
+existing field's `label`/`groupName`/`displayOrder`. So relabels/regroupings of pre-existing fields
+(e.g. Email→"Email - Work") don't reach already-activated tenants via reprovision. Fresh tenants
+(tests) get the full spec correctly. The local dev tenant was re-synced with a one-off metadata
+`UPDATE` + a layout regen. **Production:** a migration/reconcile step is needed to apply field
+metadata changes to existing tenants (or make `provisionEntityType` reconcile metadata).
+
+### Deferred from this iteration (each its own slice — logged)
+- **Reports-to (contact→contact hierarchy):** a `contact_reports_to_account`-style relationship +
+  a contact lookup picker + create/PATCH directive + hydration. Needs the account picker
+  generalised into a record picker (pays down the slug-hardcoding debt). Not built.
+- **Notes & Attachments / Campaigns tabs** on the contact detail (you flagged these as separate
+  activities). Contact detail is still the non-tabbed form + sidebar.
+- **Address "same as account":** the Site address panel exists as fields, but the "Same as Site
+  account address" inherit-from-account behaviour (needs account address fields + copy) is not wired.
+- **Field active/inactive (read-only) for data entry:** field-level editable/locked state is a new
+  per-field flag — not implemented (the layout editor's add/remove is the current configurability).
+- **Bottom-bar specifics** (Make favourite / Contact Reference ID = record id / External reference
+  ID styling), social icons, and the inline "Linked Accounts + Go" control (we have the Related
+  Accounts panel) are presentational follow-ups.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
