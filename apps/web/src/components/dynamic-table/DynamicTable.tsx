@@ -126,7 +126,7 @@ export function DynamicTable({
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full text-sm">
           <TableHeader
             fields={visibleFields}
@@ -158,7 +158,7 @@ export function DynamicTable({
                     onClick={(e) => handleRowClick(e, record)}
                     className={cn(
                       onRowClick && "cursor-pointer",
-                      "hover:bg-[var(--muted)]/50",
+                      "even:bg-[var(--row-alt)] hover:bg-[var(--row-hover)]",
                       archived && "opacity-60"
                     )}
                   >
@@ -181,8 +181,14 @@ export function DynamicTable({
                           {formatFieldValue(f, record.data[f.slug], locale)}
                         </div>
                         {archived && colIdx === 0 ? (
-                          <span className="mt-1 inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">
-                            (archived)
+                          <span
+                            className="mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+                            style={{
+                              backgroundColor: "var(--status-neutral-bg)",
+                              color: "var(--status-neutral-fg)",
+                            }}
+                          >
+                            Inactive
                           </span>
                         ) : null}
                       </td>

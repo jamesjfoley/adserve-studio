@@ -17,6 +17,7 @@ import { DynamicForm } from "@/components/dynamic-form";
 import { stateToQuery, type ListState } from "@/lib/crm/list-params";
 import type { TenantMember } from "@/lib/crm/members";
 import { Panel } from "@/components/ui/panel";
+import { PageHeader } from "@/components/ui/page-header";
 import type { AccountSelection } from "@/components/crm/account-picker";
 
 interface Choice {
@@ -197,48 +198,50 @@ export function CrmListClient({
     }
   }
 
+  const countLabel = `${pagination.total} ${
+    pagination.total === 1
+      ? entityName.toLowerCase()
+      : `${entityName.toLowerCase()}s`
+  }`;
+
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {titleCase(collectionSegment)}
-          </h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            {pagination.total} {pagination.total === 1 ? entityName.toLowerCase() : `${entityName.toLowerCase()}s`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">
-            <span className="sr-only">Filter by owner</span>
-            <select
-              aria-label="Filter by owner"
-              value={owner ?? ""}
-              onChange={(e) => handleOwnerChange(e.target.value)}
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+      <PageHeader
+        title={titleCase(collectionSegment)}
+        subtitle={countLabel}
+        actions={
+          <>
+            <label className="text-sm">
+              <span className="sr-only">Filter by owner</span>
+              <select
+                aria-label="Filter by owner"
+                value={owner ?? ""}
+                onChange={(e) => handleOwnerChange(e.target.value)}
+                className="rounded-md border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-2 text-sm"
+              >
+                <option value="">All owners</option>
+                <option value="me">My records</option>
+                <option value="unassigned">Unassigned</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setCreateError(null);
+                setNewOpen(true);
+              }}
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
             >
-              <option value="">All owners</option>
-              <option value="me">My records</option>
-              <option value="unassigned">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setCreateError(null);
-              setNewOpen(true);
-            }}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
-          >
-            New {entityName.toLowerCase()}
-          </button>
-        </div>
-      </div>
+              New {entityName.toLowerCase()}
+            </button>
+          </>
+        }
+      />
 
       {/* Bulk action bar — visible only with a selection */}
       {selectedIds.length > 0 ? (

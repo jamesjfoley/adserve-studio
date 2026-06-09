@@ -325,7 +325,7 @@ describe("DynamicTable — row interaction", () => {
 
   test("archived rows are marked with an indicator", () => {
     render(<DynamicTable {...buildProps()} />);
-    expect(screen.getByText("(archived)")).toBeInTheDocument();
+    expect(screen.getByText("Inactive")).toBeInTheDocument();
   });
 });
 

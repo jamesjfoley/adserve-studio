@@ -67,7 +67,7 @@ export function TableHeader({
   }, [someSelected, allSelected]);
 
   return (
-    <thead className="bg-[var(--muted)] text-left text-xs uppercase tracking-wider text-[var(--muted-foreground)]">
+    <thead className="border-b border-[var(--border)] bg-[var(--table-header-bg)] text-left text-xs font-medium text-[var(--muted-foreground)]">
       <tr>
         {selectable ? (
           <th scope="col" className="w-10 px-4 py-3">

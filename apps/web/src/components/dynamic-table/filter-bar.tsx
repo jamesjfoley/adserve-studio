@@ -32,7 +32,7 @@ function defaultValueForKind(
 }
 
 const controlClass =
-  "rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm";
+  "rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-2 py-1.5 text-sm";
 
 interface FilterBarProps {
   fields: FieldDefinitionWithLabels[];
