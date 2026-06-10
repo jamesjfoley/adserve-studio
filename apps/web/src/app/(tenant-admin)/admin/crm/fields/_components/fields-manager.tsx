@@ -19,7 +19,11 @@ interface FieldRow {
   description: string;
   // Present only when the page passes it through. Used to pre-populate the
   // options editor when editing an existing select / multi_select field.
-  options?: { choices?: SelectChoice[] } | null;
+  options?: {
+    choices?: SelectChoice[];
+    /** When true the choices are kept in alphabetical order. */
+    sortAlphabetical?: boolean;
+  } | null;
 }
 
 const NEW_FIELD_TYPES = [
@@ -39,105 +43,86 @@ const NEW_FIELD_TYPES = [
 
 const SELECT_TYPES = new Set(["select", "multi_select"]);
 
-/** Editor row: tracks whether the value was hand-edited so blank values
- * auto-derive from the label until the admin takes manual control. */
-interface OptionDraft {
-  label: string;
-  value: string;
-  valueTouched: boolean;
+/**
+ * Turn the options textarea (one option per line) into stored choices. There's
+ * no separate label/value — each line IS the option (value === label). Blank
+ * lines are dropped, leading/trailing whitespace trimmed, duplicates removed
+ * (first wins). When `sortAlpha` is set the choices are returned A→Z.
+ */
+function choicesFromText(text: string, sortAlpha: boolean): SelectChoice[] {
+  const seen = new Set<string>();
+  const choices: SelectChoice[] = [];
+  for (const raw of text.split("\n")) {
+    const v = raw.trim();
+    if (v === "" || seen.has(v.toLowerCase())) continue;
+    seen.add(v.toLowerCase());
+    choices.push({ value: v, label: v });
+  }
+  if (sortAlpha) {
+    choices.sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: "base" })
+    );
+  }
+  return choices;
 }
 
-/** lowercase, non-alphanumeric → underscore, collapse repeats, trim edges. */
-function slugifyValue(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
+/** Existing choices → textarea text (one option per line, label preferred). */
+function textFromChoices(choices: SelectChoice[]): string {
+  return choices.map((c) => c.label || c.value).join("\n");
 }
 
-/** Resolve the value a draft row should submit (explicit, else derived). */
-function resolvedValue(d: OptionDraft): string {
-  const v = d.value.trim();
-  return v !== "" ? v : slugifyValue(d.label);
-}
-
-function emptyOption(): OptionDraft {
-  return { label: "", value: "", valueTouched: false };
-}
-
-/** Shared rows-based options editor for select / multi_select fields.
- * Top-level (not nested in FieldsManager) so its identity is stable across
- * parent re-renders — otherwise React remounts it on each keystroke and the
- * input loses focus after one character. */
+/** Shared text-based options editor for select / multi_select fields. One
+ * option per line — no separate label/value. Top-level (not nested in
+ * FieldsManager) so its identity is stable across parent re-renders — otherwise
+ * React remounts it on each keystroke and the textarea loses focus. */
 function OptionsEditor({
-  options,
-  setOptions,
+  text,
+  setText,
+  sortAlpha,
+  setSortAlpha,
   inputCls,
   busy,
 }: {
-  options: OptionDraft[];
-  setOptions: (next: OptionDraft[]) => void;
+  text: string;
+  setText: (next: string) => void;
+  sortAlpha: boolean;
+  setSortAlpha: (next: boolean) => void;
   inputCls: string;
   busy: boolean;
 }) {
-  function update(i: number, patch: Partial<OptionDraft>) {
-    setOptions(options.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
-  }
+  const lineCount = text === "" ? 0 : text.split("\n").length;
+  // Compact: grow with content (one line per option), bounded so a long list
+  // scrolls rather than dominating the page.
+  const rows = Math.min(20, Math.max(4, lineCount + 1));
   return (
     <div className="mt-3 rounded-md border border-[var(--border)] p-3">
-      <p className="mb-2 text-xs font-medium text-[var(--muted-foreground)]">
-        Options
-      </p>
-      <div className="flex flex-col gap-2">
-        {options.map((opt, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              aria-label={`Option ${i + 1} label`}
-              placeholder="Label"
-              className={`${inputCls} flex-1`}
-              value={opt.label}
-              onChange={(e) => update(i, { label: e.target.value })}
-            />
-            <input
-              aria-label={`Option ${i + 1} value`}
-              placeholder={
-                opt.valueTouched || opt.value
-                  ? "Value"
-                  : slugifyValue(opt.label) || "value"
-              }
-              className={`${inputCls} flex-1 font-mono`}
-              value={opt.value}
-              onChange={(e) =>
-                update(i, { value: e.target.value, valueTouched: true })
-              }
-            />
-            <button
-              type="button"
-              onClick={() =>
-                setOptions(
-                  options.length > 1
-                    ? options.filter((_, idx) => idx !== i)
-                    : [emptyOption()]
-                )
-              }
-              disabled={busy}
-              aria-label={`Remove option ${i + 1}`}
-              className="rounded border border-[var(--border)] px-2 py-1 text-xs text-red-600 disabled:opacity-30"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-xs font-medium text-[var(--muted-foreground)]">
+          Options — one per line
+        </p>
+        <label className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+          <input
+            type="checkbox"
+            checked={sortAlpha}
+            disabled={busy}
+            onChange={(e) => setSortAlpha(e.target.checked)}
+          />
+          Sort alphabetically
+        </label>
       </div>
-      <button
-        type="button"
-        onClick={() => setOptions([...options, emptyOption()])}
-        disabled={busy}
-        className="mt-2 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs disabled:opacity-50"
-      >
-        + Add option
-      </button>
+      <textarea
+        aria-label="Options (one per line)"
+        placeholder={"gold\nsilver\nbronze"}
+        className={`${inputCls} w-full resize-y font-normal`}
+        rows={rows}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+        {sortAlpha
+          ? "Displayed in alphabetical order."
+          : "Displayed in the order entered."}
+      </p>
     </div>
   );
 }
@@ -163,12 +148,14 @@ export function FieldsManager({
     description: "",
   });
   // Options editor state for the add form (used when type is select/multi_select).
-  const [addOptions, setAddOptions] = useState<OptionDraft[]>([emptyOption()]);
+  const [addOptionsText, setAddOptionsText] = useState("");
+  const [addSortAlpha, setAddSortAlpha] = useState(false);
   // Per-field options editor state when editing an existing select field.
   const [editingOptionsFor, setEditingOptionsFor] = useState<string | null>(
     null
   );
-  const [editOptions, setEditOptions] = useState<OptionDraft[]>([]);
+  const [editOptionsText, setEditOptionsText] = useState("");
+  const [editSortAlpha, setEditSortAlpha] = useState(false);
 
   function refresh() {
     startTransition(() => router.refresh());
@@ -201,23 +188,18 @@ export function FieldsManager({
     }
   }
 
-  function buildChoices(drafts: OptionDraft[]): SelectChoice[] {
-    return drafts
-      .filter((d) => d.label.trim() !== "" || d.value.trim() !== "")
-      .map((d) => ({ value: resolvedValue(d), label: d.label.trim() }))
-      .filter((c) => c.value !== "");
-  }
-
   async function addField() {
     const isSelect = SELECT_TYPES.has(form.fieldType);
-    let optionsPayload: { choices: SelectChoice[] } | undefined;
+    let optionsPayload:
+      | { choices: SelectChoice[]; sortAlphabetical: boolean }
+      | undefined;
     if (isSelect) {
-      const choices = buildChoices(addOptions);
+      const choices = choicesFromText(addOptionsText, addSortAlpha);
       if (choices.length === 0) {
         setError("Add at least one option for a select field.");
         return;
       }
-      optionsPayload = { choices };
+      optionsPayload = { choices, sortAlphabetical: addSortAlpha };
     }
 
     const ok = await call("/api/admin/crm/fields", "POST", {
@@ -234,38 +216,33 @@ export function FieldsManager({
         isFilterable: false,
         description: "",
       });
-      setAddOptions([emptyOption()]);
+      setAddOptionsText("");
+      setAddSortAlpha(false);
       setAdding(false);
       refresh();
     }
   }
 
   async function saveEditOptions(id: string) {
-    const choices = buildChoices(editOptions);
+    const choices = choicesFromText(editOptionsText, editSortAlpha);
     if (choices.length === 0) {
       setError("Add at least one option for a select field.");
       return;
     }
     if (await call(`/api/admin/crm/fields/${id}`, "PATCH", {
-      options: { choices },
+      options: { choices, sortAlphabetical: editSortAlpha },
     })) {
       setEditingOptionsFor(null);
-      setEditOptions([]);
+      setEditOptionsText("");
+      setEditSortAlpha(false);
       refresh();
     }
   }
 
   function openEditOptions(f: FieldRow) {
     const existing = f.options?.choices ?? [];
-    setEditOptions(
-      existing.length > 0
-        ? existing.map((c) => ({
-            label: c.label,
-            value: c.value,
-            valueTouched: true,
-          }))
-        : [emptyOption()]
-    );
+    setEditOptionsText(textFromChoices(existing));
+    setEditSortAlpha(Boolean(f.options?.sortAlphabetical));
     setEditingOptionsFor(f.id);
     setError(null);
   }
@@ -359,8 +336,10 @@ export function FieldsManager({
             </div>
             {SELECT_TYPES.has(form.fieldType) && (
               <OptionsEditor
-                options={addOptions}
-                setOptions={setAddOptions}
+                text={addOptionsText}
+                setText={setAddOptionsText}
+                sortAlpha={addSortAlpha}
+                setSortAlpha={setAddSortAlpha}
                 inputCls={input}
                 busy={busy}
               />
@@ -515,8 +494,10 @@ export function FieldsManager({
                 <tr>
                   <td colSpan={7} className="px-3 pb-3">
                     <OptionsEditor
-                      options={editOptions}
-                      setOptions={setEditOptions}
+                      text={editOptionsText}
+                      setText={setEditOptionsText}
+                      sortAlpha={editSortAlpha}
+                      setSortAlpha={setEditSortAlpha}
                       inputCls={input}
                       busy={busy}
                     />
@@ -524,7 +505,8 @@ export function FieldsManager({
                       <button
                         onClick={() => {
                           setEditingOptionsFor(null);
-                          setEditOptions([]);
+                          setEditOptionsText("");
+                          setEditSortAlpha(false);
                         }}
                         className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm"
                       >

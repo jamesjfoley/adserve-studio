@@ -296,6 +296,23 @@ The layout editor moved from a flow/reorder model (which shifted other fields on
   render row-major (backward compatible); the editor migrates them to coordinates on first load, and
   they become absolute once re-saved.
 
+## CRM Fields — simplified select-options editor
+
+The select / multi_select **Options** editor (CRM → Fields, add + edit) was simplified:
+
+- **Single field per option (no label/value split).** The admin types one option per line; the text
+  IS the option (stored `value === label`, verbatim). e.g. `gold / silver / bronze` is three lines.
+  `choicesFromText` trims, drops blank lines, and de-dupes (case-insensitive, first wins).
+- **Order toggle.** A "Sort alphabetically" checkbox stores `options.sortAlphabetical` and, when on,
+  sorts the choices A→Z at save time (so every render site shows them sorted with no renderer change);
+  off → kept in entered order. The checkbox round-trips from the stored flag when editing.
+- **Compact UI.** The per-row label+value inputs were replaced by a single auto-growing `<textarea>`
+  (one line per option, min 4 / max 20 rows) — 10 options is 10 lines, not a tall stack of input rows.
+- **Production consideration:** editing an existing field's options now sets `value = label = text`,
+  so re-saving a legacy field whose stored values differed from labels (e.g. `value:"active"`,
+  `label:"Active"`) rewrites the values; existing record data keyed on the old value would need a
+  migration. New fields are unaffected.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

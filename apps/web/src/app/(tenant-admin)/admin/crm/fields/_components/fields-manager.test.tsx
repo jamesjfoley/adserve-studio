@@ -50,7 +50,7 @@ describe("FieldsManager", () => {
     await user.click(screen.getByRole("button", { name: "+ Add field" }));
 
     // No options editor while type is the default (text).
-    expect(screen.queryByText("Options")).toBeNull();
+    expect(screen.queryByText("Options — one per line")).toBeNull();
 
     // Fill name + slug (target by position within the add form).
     const textboxes = screen.getAllByRole("textbox");
@@ -60,11 +60,11 @@ describe("FieldsManager", () => {
     // Switch type to select -> editor appears.
     const typeSelect = screen.getByRole("combobox");
     await user.selectOptions(typeSelect, "select");
-    expect(screen.getByText("Options")).toBeTruthy();
+    expect(screen.getByText("Options — one per line")).toBeTruthy();
 
-    // Enter a single option label only (value auto-derives via slugify).
+    // One option per line; the option text IS the value (no label/value split).
     await user.type(
-      screen.getByRole("textbox", { name: "Option 1 label" }),
+      screen.getByLabelText("Options (one per line)"),
       "Closed Won"
     );
 
@@ -76,7 +76,8 @@ describe("FieldsManager", () => {
     const payload = JSON.parse(init.body as string);
     expect(payload.fieldType).toBe("select");
     expect(payload.options).toEqual({
-      choices: [{ value: "closed_won", label: "Closed Won" }],
+      choices: [{ value: "Closed Won", label: "Closed Won" }],
+      sortAlphabetical: false,
     });
   });
 
