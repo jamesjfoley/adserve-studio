@@ -1,4 +1,5 @@
 export { DynamicTable } from "./DynamicTable";
+export { ColumnToggle } from "./column-toggle";
 export type {
   DynamicTableProps,
   DynamicTableRecord,

@@ -72,6 +72,9 @@ export function DynamicTable({
   emptyMessage = "No records found.",
   className,
   fillHeight = false,
+  hideToolbar = false,
+  hidePagination = false,
+  minRows,
   searchField,
   searchPlaceholder = "Search…",
   columnFacets,
@@ -190,13 +193,17 @@ export function DynamicTable({
   }
 
   // Measure a body-row height so the empty space below the last row can be
-  // banded to match (full-height tables only). Guarded for non-DOM test envs.
+  // banded to match (full-height OR min-rows tables). Guarded for non-DOM test
+  // envs; falls back to an estimate when nothing has been measured yet.
+  const banded = fillHeight || minRows != null;
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
   const [rowHeight, setRowHeight] = useState(0);
+  const EST_ROW_HEIGHT = 41;
+  const effRowHeight = rowHeight > 0 ? rowHeight : EST_ROW_HEIGHT;
 
   useLayoutEffect(() => {
-    if (!fillHeight) return;
+    if (!banded) return;
     const container = scrollRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
     const measure = () => {
@@ -207,7 +214,7 @@ export function DynamicTable({
     const ro = new ResizeObserver(measure);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [fillHeight, records]);
+  }, [banded, records]);
 
   return (
     <div
@@ -216,6 +223,7 @@ export function DynamicTable({
         className
       )}
     >
+      {hideToolbar ? null : (
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-4">
           {searchField ? (
@@ -253,6 +261,7 @@ export function DynamicTable({
           locale={locale}
         />
       </div>
+      )}
 
       <div
         ref={scrollRef}
@@ -282,7 +291,12 @@ export function DynamicTable({
               <tr>
                 <td
                   colSpan={colCount}
-                  className="px-4 py-8 text-center text-[var(--muted-foreground)]"
+                  className={cn(
+                    "px-4 text-center text-[var(--muted-foreground)]",
+                    // A slim empty row when min-rows banding fills the rest;
+                    // otherwise the roomier standalone empty state.
+                    minRows != null ? "py-3" : "py-8"
+                  )}
                 >
                   {emptyMessage}
                 </td>
@@ -346,13 +360,31 @@ export function DynamicTable({
             className="min-h-0 flex-1"
             style={stripeFillStyle(
               records.length === 0 ? 1 : records.length,
-              rowHeight
+              effRowHeight
             )}
+          />
+        ) : minRows != null ? (
+          // Fixed-height banded filler that tops the table up to `minRows`
+          // rows. The empty-state row counts as one rendered band, so the
+          // floor is `minRows - max(records.length, 1)` extra bands.
+          <div
+            aria-hidden="true"
+            style={{
+              height:
+                Math.max(0, minRows - Math.max(records.length, 1)) *
+                effRowHeight,
+              ...stripeFillStyle(
+                records.length === 0 ? 1 : records.length,
+                effRowHeight
+              ),
+            }}
           />
         ) : null}
       </div>
 
-      <Pagination pagination={pagination} onPageChange={onPageChange} />
+      {hidePagination ? null : (
+        <Pagination pagination={pagination} onPageChange={onPageChange} />
+      )}
     </div>
   );
 }

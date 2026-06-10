@@ -25,6 +25,9 @@ interface PanelProps {
   elevation?: Elevation;
   /** Compact padding (uses --panel-padding-sm). Default false. */
   compact?: boolean;
+  /** Slimmer header band (reduced vertical padding) — for data-dense panels
+   * whose header carries inline controls. Default false. */
+  denseHeader?: boolean;
   /** Polymorphic root element. Defaults to "section". */
   as?: "section" | "div" | "aside";
   /** Layout-only escape hatch for the ROOT (grid spans, margins, flex). */
@@ -53,6 +56,7 @@ export function Panel({
   actions,
   elevation = 1,
   compact = false,
+  denseHeader = false,
   as: As = "section",
   className,
   bodyClassName,
@@ -60,6 +64,7 @@ export function Panel({
 }: PanelProps) {
   const hasHeader = title != null || actions != null;
   const pad = compact ? "var(--panel-padding-sm)" : "var(--panel-padding)";
+  const headerPadBlock = denseHeader ? "var(--space-2)" : "var(--space-3)";
 
   const rootStyle: CSSProperties = {
     borderRadius: "var(--radius-panel)",
@@ -80,8 +85,8 @@ export function Panel({
             backgroundColor: "var(--panel-header-bg)",
             borderBottom: "var(--border-width) solid var(--panel-border)",
             paddingInline: pad,
-            paddingTop: "var(--space-3)",
-            paddingBottom: "var(--space-3)",
+            paddingTop: headerPadBlock,
+            paddingBottom: headerPadBlock,
           }}
         >
           {title != null ? (

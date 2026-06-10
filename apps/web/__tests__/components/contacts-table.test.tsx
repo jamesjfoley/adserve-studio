@@ -169,7 +169,7 @@ describe("ContactsTable (client-side DynamicTable)", () => {
     expect(push).toHaveBeenCalledWith("/crm/contacts/c1");
   });
 
-  test("archived contacts are hidden until 'Show inactive' is ticked", async () => {
+  test("archived contacts are hidden until 'Include archived' is ticked", async () => {
     const user = userEvent.setup();
     const withArchived = [
       ...ITEMS,
@@ -178,7 +178,38 @@ describe("ContactsTable (client-side DynamicTable)", () => {
     renderTable({ items: withArchived });
 
     expect(screen.queryByText("Dave")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: /show inactive/i }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /include archived/i })
+    );
     expect(screen.getByText("Dave")).toBeInTheDocument();
+  });
+
+  test("the 'New contact' action shows only when a create context is given", () => {
+    // Primary Contacts table → create new.
+    const { unmount } = renderTable({
+      createContext: {
+        fields: FIELDS,
+        layoutConfig: { sections: [] },
+        accountId: "acc-1",
+        accountName: "Acme",
+        locale: "en-GB",
+      },
+    });
+    expect(
+      screen.getByRole("button", { name: "New contact" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /link existing contact/i })
+    ).not.toBeInTheDocument();
+    unmount();
+
+    // Linked Contacts table (no create context) → link existing, renamed.
+    renderTable();
+    expect(
+      screen.getByRole("button", { name: /link existing contact/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "New contact" })
+    ).not.toBeInTheDocument();
   });
 });

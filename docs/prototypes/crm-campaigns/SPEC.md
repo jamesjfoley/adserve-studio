@@ -235,6 +235,29 @@ surface (CRM is the first module). New modules plug in with no shell changes.
   table (with RLS) and signed URLs; large/many attachments bloat the record JSONB; no virus scan /
   content-type allow-list yet.
 
+## Contacts tab — density & full-surface refinement
+
+Follow-up tightening of the Account "Contacts" tab for high-volume use (hundreds/thousands of
+contacts):
+
+- **Slimmer panel headers** — `Panel` gained an opt-in `denseHeader` (reduces header vertical
+  padding to `--space-2`); the contacts panels use it.
+- **Chrome in the header** — `DynamicTable` gained `hideToolbar`; the contacts panels render
+  **Include archived** + **Columns** inline in the panel header (via the now-exported `ColumnToggle`
+  with controlled `visibleColumns`), eliminating the standalone toolbar row and its whitespace.
+- **No pagination** — `DynamicTable` gained `hidePagination`; the contacts tables show **every**
+  related contact (page-level scroll), since the related set is already in memory. No Previous/Next.
+- **Full surface, always ≥10 rows** — `DynamicTable` gained `minRows`; the contacts tables pass
+  `minRows={10}`. The zebra banding fills down to at least 10 rows even when sparse/empty (uses a
+  measured-or-estimated row height, so banding renders even with zero records). Reusable primitive
+  for the system-wide "tables are full-size even when empty" preference.
+- **Per-panel actions** — primary **Contacts** panel: only **New contact** (create; account
+  inherited) — the old "Add contact" link-existing picker and the "Show inactive" checkbox were
+  removed. **Linked Contacts** panel: **Link existing contact** (renamed from "Add contact"); no
+  "Show inactive".
+- **Demoted lifecycle action** — "Mark inactive" / "Reactivate" moved off the prominent page header
+  into a low-key bottom-left page footer (subtle muted text button), since it's rarely used.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

@@ -524,7 +524,10 @@ export function CrmDetailClient({
         id: "contacts",
         label: "Contacts",
         content: (
-          <div className="flex h-[calc(100vh-16rem)] min-h-[32rem] flex-col gap-6">
+          // Both tables show every related contact (page-level scroll, no
+          // paging) and floor at MIN_TABLE_ROWS of banding, so the panels read
+          // as full surfaces even when sparse.
+          <div className="flex flex-col gap-6">
             <ContactsTable
               title="Contacts"
               fields={contactForm?.fields ?? []}
@@ -538,7 +541,6 @@ export function CrmDetailClient({
               direction="owner-is-target"
               editPermission="contact.update"
               canEdit={canEdit}
-              fillHeight
               createContext={
                 contactForm
                   ? {
@@ -564,7 +566,6 @@ export function CrmDetailClient({
               direction="owner-is-target"
               editPermission="contact.update"
               canEdit={canEdit}
-              fillHeight
             />
           </div>
         ),
@@ -792,26 +793,8 @@ export function CrmDetailClient({
                 Edit
               </button>
             ) : null}
-            {canArchive && !record.isArchived ? (
-              <button
-                type="button"
-                onClick={handleArchive}
-                disabled={busy}
-                className="rounded-md border border-red-300 bg-[var(--panel-bg)] px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-              >
-                {usesInactiveVocab ? "Mark inactive" : "Archive"}
-              </button>
-            ) : null}
-            {canArchive && record.isArchived ? (
-              <button
-                type="button"
-                onClick={handleReactivate}
-                disabled={busy}
-                className="rounded-md border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:opacity-50"
-              >
-                Reactivate
-              </button>
-            ) : null}
+            {/* Mark inactive / Reactivate are deliberately NOT here — they're
+                rare, destructive-ish actions, demoted to the page footer. */}
           </>
         }
       />
@@ -839,6 +822,32 @@ export function CrmDetailClient({
           </aside>
         </div>
       )}
+
+      {/* Low-prominence lifecycle action, bottom-left: rarely used, kept well
+          away from the primary header actions. */}
+      {canArchive ? (
+        <div className="mt-10 border-t border-[var(--border)] pt-4">
+          {!record.isArchived ? (
+            <button
+              type="button"
+              onClick={handleArchive}
+              disabled={busy}
+              className="text-xs font-medium text-[var(--muted-foreground)] hover:text-red-600 disabled:opacity-50"
+            >
+              {usesInactiveVocab ? "Mark inactive" : "Archive"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleReactivate}
+              disabled={busy}
+              className="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-50"
+            >
+              Reactivate
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {/* Log activity modal */}
       {logOpen ? (

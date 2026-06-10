@@ -9,7 +9,7 @@ import type {
 } from "@adserve/module-framework";
 import type { RelatedRecord } from "@/lib/crm/relationships";
 import { DynamicForm } from "@/components/dynamic-form";
-import { DynamicTable } from "@/components/dynamic-table";
+import { DynamicTable, ColumnToggle } from "@/components/dynamic-table";
 import type {
   DynamicTableRecord,
   Filter,
@@ -56,11 +56,12 @@ interface ContactsTableProps {
   direction: LinkDirection;
   editPermission: string;
   canEdit: boolean;
-  /** Stretch the panel/table to fill the available column height. */
-  fillHeight?: boolean;
   /** Enables the "New contact" create flow (the primary Contacts table only). */
   createContext?: ContactCreateContext;
 }
+
+/** Minimum rows of zebra-banding height — the table reads as a full surface. */
+const MIN_TABLE_ROWS = 10;
 
 /** The home-page contact columns we surface by default (when present in `fields`). */
 const DEFAULT_CONTACT_COLUMNS = [
@@ -221,7 +222,6 @@ export function ContactsTable({
   direction,
   editPermission,
   canEdit,
-  fillHeight = false,
   createContext,
 }: ContactsTableProps) {
   const router = useRouter();
@@ -229,7 +229,6 @@ export function ContactsTable({
   const [adding, setAdding] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [showInactive, setShowInactive] = useState(false);
 
   // Client-side table state — there is no server round-trip: the related
   // contacts are already in memory, so sort/filter run locally (mirroring the
@@ -247,10 +246,10 @@ export function ContactsTable({
     [fields]
   );
 
-  // Archived rows are hidden unless EITHER the panel's "Show inactive" control
-  // OR the table's own "Include archived" toggle is on. Contacts are never
-  // deleted — only marked inactive.
-  const includeArchived = showInactive || filterState.includeArchived;
+  // Archived (inactive) rows are hidden unless "Include archived" is on. The
+  // control lives in the panel header (see below); contacts are never deleted,
+  // only marked inactive.
+  const includeArchived = filterState.includeArchived;
 
   const inactiveCount = useMemo(
     () => items.filter((r) => r.isArchived).length,
@@ -345,6 +344,15 @@ export function ContactsTable({
     [fieldBySlug]
   );
 
+  // Column visibility is controlled here so the "Columns" picker can sit in the
+  // panel header (the DynamicTable's own toolbar is hidden — see hideToolbar).
+  const orderedFields = useMemo(
+    () => [...fields].sort((a, b) => a.displayOrder - b.displayOrder),
+    [fields]
+  );
+  const [visibleColumns, setVisibleColumns] =
+    useState<string[]>(defaultVisibleColumns);
+
   const locale = createContext?.locale ?? "en-GB";
 
   const excludeIds = useMemo(() => items.map((i) => i.id), [items]);
@@ -408,48 +416,60 @@ export function ContactsTable({
       as="section"
       aria-label={title}
       title={title}
-      className={fillHeight ? "flex min-h-0 flex-1 flex-col" : undefined}
-      bodyClassName={fillHeight ? "flex min-h-0 flex-1 flex-col" : undefined}
+      denseHeader
       actions={
         <div className="flex items-center gap-3">
+          {/* Table chrome lives in the header to reclaim the vertical space the
+              standalone toolbar used to take. */}
           <label className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
             <input
               type="checkbox"
-              checked={showInactive}
-              onChange={(e) => setShowInactive(e.target.checked)}
+              checked={filterState.includeArchived}
+              onChange={(e) =>
+                setFilterState((s) => ({
+                  ...s,
+                  includeArchived: e.target.checked,
+                }))
+              }
               className="h-3.5 w-3.5 rounded border-[var(--border)]"
             />
-            Show inactive{inactiveCount > 0 ? ` (${inactiveCount})` : ""}
+            Include archived{inactiveCount > 0 ? ` (${inactiveCount})` : ""}
           </label>
-          {canEdit ? (
-            <div className="flex items-center gap-2">
-              {createContext ? (
-                <PermissionGate permission="contact.create">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCreateError(null);
-                      setCreating(true);
-                    }}
-                    className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
-                  >
-                    New contact
-                  </button>
-                </PermissionGate>
-              ) : null}
-              <PermissionGate permission={editPermission}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setAdding((v) => !v);
-                  }}
-                  className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
-                >
-                  {adding ? "Cancel" : "Add contact"}
-                </button>
-              </PermissionGate>
-            </div>
+          <ColumnToggle
+            fields={orderedFields}
+            visible={visibleColumns}
+            onChange={setVisibleColumns}
+            locale={locale}
+          />
+          {canEdit && createContext ? (
+            // Primary Contacts table: create a NEW contact (account inherited).
+            <PermissionGate permission="contact.create">
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateError(null);
+                  setCreating(true);
+                }}
+                className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
+              >
+                New contact
+              </button>
+            </PermissionGate>
+          ) : null}
+          {canEdit && !createContext ? (
+            // Linked Contacts table: attach an EXISTING contact to this account.
+            <PermissionGate permission={editPermission}>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setAdding((v) => !v);
+                }}
+                className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
+              >
+                {adding ? "Cancel" : "Link existing contact"}
+              </button>
+            </PermissionGate>
           ) : null}
         </div>
       }
@@ -482,7 +502,7 @@ export function ContactsTable({
         </PermissionGate>
       ) : null}
 
-      <div className={fillHeight ? "mt-3 flex min-h-0 flex-1 flex-col" : "mt-3"}>
+      <div className="mt-3">
         <DynamicTable
           fields={fields}
           records={displayed}
@@ -499,15 +519,18 @@ export function ContactsTable({
           onRowClick={(record) =>
             router.push(`/crm/${contactSegment}/${record.id}`)
           }
-          defaultVisibleColumns={defaultVisibleColumns}
+          visibleColumns={visibleColumns}
+          onVisibleColumnsChange={setVisibleColumns}
           columnFacets={columnFacets}
           locale={locale}
           emptyMessage={
             inactiveCount > 0 && !includeArchived
-              ? "No active contacts — tick “Show inactive” to see inactive ones."
+              ? "No active contacts — tick “Include archived” to see inactive ones."
               : "No contacts here yet."
           }
-          fillHeight={fillHeight}
+          hideToolbar
+          hidePagination
+          minRows={MIN_TABLE_ROWS}
         />
       </div>
 

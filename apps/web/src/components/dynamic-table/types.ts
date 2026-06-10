@@ -95,6 +95,27 @@ export interface DynamicTableProps {
   fillHeight?: boolean;
 
   /**
+   * Hide the built-in toolbar row (search / include-archived / columns). Use
+   * when the host renders those controls itself — e.g. inline in a panel
+   * header. Column visibility is still controllable via `visibleColumns`.
+   */
+  hideToolbar?: boolean;
+
+  /**
+   * Hide the pagination footer. Use when the host shows every row (no paging /
+   * page-level scroll) rather than a server-paged window.
+   */
+  hidePagination?: boolean;
+
+  /**
+   * Guarantee at least this many rows of height: when fewer records are shown,
+   * the empty space below the last row is zebra-banded to reach `minRows`, so
+   * the table reads as a full, available surface even when sparse or empty.
+   * Independent of `fillHeight` (which instead stretches to the parent).
+   */
+  minRows?: number;
+
+  /**
    * Enables a free-text search box in the toolbar that filters on this field
    * slug via a `contains` operator. The box drafts locally and commits the
    * merged filter on submit (Enter / clear), reusing the same `onFiltersChange`
