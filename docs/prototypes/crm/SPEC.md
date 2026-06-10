@@ -345,6 +345,33 @@ per-column filtering:
 - Server-side filter handling (`operatorsForType`, crm-query) is unchanged. Tests: rewrote the
   filtering suite to drive the header popovers + added `isTextFilterable` coverage; 436 web green.
 
+## Iteration 17 — Intelligent column filters (value picklist on repeating text columns)
+
+Made list filtering data-driven instead of present on every text column:
+- **Eligibility (server, `loadCrmListData`):** for each text-value column, compute distinct
+  non-empty values + counts over the BASE domain (tenant + entity, respecting archived/owner,
+  ignoring the active filters). A column is filterable iff it has **≥2 distinct values AND at least
+  one repeats** — one rule that excludes always-unique columns (email, phone, free-text) and
+  single-value columns, and includes repeating categorical text. Returned as `facets`
+  (`Record<slug, string[]>`, alphabetical). Grouped query groups on the output ordinal (`GROUP BY 1`)
+  because the slug is a bound parameter — a re-stated `data->>$n` would carry a different placeholder
+  and Postgres would not match it to the SELECT target.
+- **UI (`ColumnFilter`):** now a searchable value picker. The funnel icon opens a popover listing the
+  column's distinct values (alphabetical); a type-ahead box narrows the list (case-insensitive,
+  Enter picks the first match); selecting a value commits an `equals` filter; "All …" clears it. The
+  icon renders **only** for columns present in `facets`, so always-unique columns show no filter
+  affordance at all.
+- **Wiring:** `facets` flows loadCrmListData → page → CrmListClient → DynamicTable → TableHeader →
+  ColumnFilter via a new `columnFacets` prop. Server-side filter handling (`operatorsForType`,
+  crm-query) unchanged; the picker just emits an `equals` text filter the server already supports.
+- **Tests:** rewrote the column-filter suite for the picklist model; added facet eligibility
+  (repeating → facet; all-unique → none) + tenant-isolation coverage under the `adserve_app`
+  NOBYPASSRLS harness. 441 web green.
+- **Note / possible follow-up:** facets are computed from the live data, so a conceptually
+  categorical column that *happens* to have all-distinct values in a small dataset won't get a
+  filter until a value repeats. Per-column query (one GROUP BY per text column) is fine at prototype
+  scale; a single lateral/aggregate query is the optimisation if column counts grow.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
