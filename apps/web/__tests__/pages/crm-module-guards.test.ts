@@ -84,7 +84,7 @@ describe("Module toggle-off retains record data (Task 7)", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          data: { name: "Retained Campaign", stage: "brief" },
+          data: { name: "Retained Campaign", stage: "Brief" },
           newAccountName: "Retention Co",
         }),
       })

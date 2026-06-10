@@ -56,13 +56,20 @@ export interface ContactData {
   [key: string]: unknown;
 }
 
-export type LeadSource = "web" | "referral" | "event" | "cold" | "other";
+// Single-text option model: a select option is one text — the stored value
+// IS the display label (see field-definitions.ts / pipeline.ts).
+export type LeadSource =
+  | "Web"
+  | "Referral"
+  | "Event"
+  | "Cold outreach"
+  | "Other";
 export type LeadStatus =
-  | "new"
-  | "contacted"
-  | "qualified"
-  | "converted"
-  | "lost";
+  | "New"
+  | "Contacted"
+  | "Qualified"
+  | "Converted"
+  | "Lost";
 
 export interface LeadData {
   firstName: string;
@@ -90,14 +97,14 @@ export interface OpportunityData {
   [key: string]: unknown;
 }
 
-/** Fixed campaign stage slugs — see CAMPAIGN_STAGES in ./pipeline.ts. */
+/** Fixed campaign stage values — see CAMPAIGN_STAGES in ./pipeline.ts. */
 export type CampaignStage =
-  | "brief"
-  | "planning"
-  | "booking"
-  | "live"
-  | "pca"
-  | "lost";
+  | "Brief"
+  | "Planning"
+  | "Booking"
+  | "Live"
+  | "PCA"
+  | "Lost";
 
 export interface CampaignData {
   name: string;

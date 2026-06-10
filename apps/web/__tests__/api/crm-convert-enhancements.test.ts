@@ -45,8 +45,8 @@ async function createLead(data: Record<string, unknown>): Promise<string> {
   const full = {
     firstName: "Lead",
     lastName: "Person",
-    source: "web",
-    status: "new",
+    source: "Web",
+    status: "New",
     ...data,
   };
   const res = await createRecord(jsonReq({ data: full }), {
@@ -124,7 +124,7 @@ describe("convert AC 20 — dated opportunity name", () => {
       firstName: "Ada",
       lastName: "Lovelace",
       company: "Analytical Engines",
-      status: "new",
+      status: "New",
     });
     const res = await convertLead(bare(), { params: Promise.resolve({ id: leadId }) });
     expect(res.status).toBe(201);
@@ -137,8 +137,8 @@ describe("convert AC 20 — dated opportunity name", () => {
 describe("convert AC 21/22 — duplicate warnings write nothing (atomic)", () => {
   test("AC 21: existing account of that name → 409 account_exists, no records created", async () => {
     actAs(A);
-    await createRec("accounts", { name: "Globex", status: "active" });
-    const leadId = await createLead({ company: "Globex", firstName: "Hank", status: "new" });
+    await createRec("accounts", { name: "Globex", status: "Active" });
+    const leadId = await createLead({ company: "Globex", firstName: "Hank", status: "New" });
 
     const oppsBefore = await countByEntity(A.tenantId, "opportunity");
     const acctsBefore = await countByEntity(A.tenantId, "account");
@@ -150,17 +150,17 @@ describe("convert AC 21/22 — duplicate warnings write nothing (atomic)", () =>
     // Atomic: nothing written.
     expect(await countByEntity(A.tenantId, "opportunity")).toBe(oppsBefore);
     expect(await countByEntity(A.tenantId, "account")).toBe(acctsBefore);
-    expect((await leadData(leadId)).status).not.toBe("converted");
+    expect((await leadData(leadId)).status).not.toBe("Converted");
   });
 
   test("AC 21 (normalised): a case+whitespace variant of an existing account name → 409 account_exists", async () => {
     actAs(A);
-    await createRec("accounts", { name: "Umbrella Corp", status: "active" });
+    await createRec("accounts", { name: "Umbrella Corp", status: "Active" });
     // Different case + leading/trailing whitespace — still a duplicate.
     const leadId = await createLead({
       company: "  umbrella corp  ",
       firstName: "Alice",
-      status: "new",
+      status: "New",
     });
     const oppsBefore = await countByEntity(A.tenantId, "opportunity");
 
@@ -168,16 +168,16 @@ describe("convert AC 21/22 — duplicate warnings write nothing (atomic)", () =>
     expect(res.status).toBe(409);
     expect((await res.json()).warning).toBe("account_exists");
     expect(await countByEntity(A.tenantId, "opportunity")).toBe(oppsBefore);
-    expect((await leadData(leadId)).status).not.toBe("converted");
+    expect((await leadData(leadId)).status).not.toBe("Converted");
   });
 
   test("AC 22: same-named contact already in that account → 409 contact_exists, no records created", async () => {
     actAs(A);
-    const acctId = await createRec("accounts", { name: "Initech", status: "active" });
+    const acctId = await createRec("accounts", { name: "Initech", status: "Active" });
     const contactId = await createRec("contacts", {
       firstName: "Peter",
       lastName: "Gibbons",
-      status: "active",
+      status: "Active",
     });
     await linkContactToAccount(A.tenantId, contactId, acctId);
 
@@ -185,7 +185,7 @@ describe("convert AC 21/22 — duplicate warnings write nothing (atomic)", () =>
       company: "Initech",
       firstName: "Peter",
       lastName: "Gibbons",
-      status: "new",
+      status: "New",
     });
     const oppsBefore = await countByEntity(A.tenantId, "opportunity");
 
@@ -193,25 +193,25 @@ describe("convert AC 21/22 — duplicate warnings write nothing (atomic)", () =>
     expect(res.status).toBe(409);
     expect((await res.json()).warning).toBe("contact_exists");
     expect(await countByEntity(A.tenantId, "opportunity")).toBe(oppsBefore);
-    expect((await leadData(leadId)).status).not.toBe("converted");
+    expect((await leadData(leadId)).status).not.toBe("Converted");
   });
 });
 
 describe("convert AC 23 — confirmed links to existing, no duplicates", () => {
   test("confirmed convert links existing account+contact, creates opportunity, writes convertedTo", async () => {
     actAs(A);
-    const acctId = await createRec("accounts", { name: "Hooli", status: "active" });
+    const acctId = await createRec("accounts", { name: "Hooli", status: "Active" });
     const contactId = await createRec("contacts", {
       firstName: "Richard",
       lastName: "Hendricks",
-      status: "active",
+      status: "Active",
     });
     await linkContactToAccount(A.tenantId, contactId, acctId);
     const leadId = await createLead({
       company: "Hooli",
       firstName: "Richard",
       lastName: "Hendricks",
-      status: "new",
+      status: "New",
     });
 
     const acctsBefore = await countByEntity(A.tenantId, "account");
@@ -234,7 +234,7 @@ describe("convert AC 23 — confirmed links to existing, no duplicates", () => {
 
     // Back-links written on the lead.
     const ld = await leadData(leadId);
-    expect(ld.status).toBe("converted");
+    expect(ld.status).toBe("Converted");
     expect(ld.convertedTo).toEqual({
       accountId: acctId,
       contactId: contactId,
@@ -259,7 +259,7 @@ describe("convert AC 24 — converted lead is server-side read-only", () => {
     const leadId = await createLead({
       company: "Stark Industries",
       firstName: "Tony",
-      status: "new",
+      status: "New",
     });
     expect(
       (await convertLead(bare(), { params: Promise.resolve({ id: leadId }) })).status
@@ -274,7 +274,7 @@ describe("convert AC 24 — converted lead is server-side read-only", () => {
     expect((await leadData(leadId)).firstName).not.toBe("Anthony"); // unchanged
 
     // Control 1: a non-converted lead is still editable.
-    const liveLead = await createLead({ company: "Wayne Ent", firstName: "Bruce", status: "new" });
+    const liveLead = await createLead({ company: "Wayne Ent", firstName: "Bruce", status: "New" });
     const okLead = await patchRecord(jsonReq({ data: { firstName: "Bruce W" } }), {
       params: Promise.resolve({ entityType: "leads", id: liveLead }),
     });
@@ -282,7 +282,7 @@ describe("convert AC 24 — converted lead is server-side read-only", () => {
 
     // Control 2: a different entity type is never blocked by the lead guard
     // (proves the guard is scoped to slug === "lead").
-    const acctId = await createRec("accounts", { name: "Acme RO", status: "active" });
+    const acctId = await createRec("accounts", { name: "Acme RO", status: "Active" });
     const okAcct = await patchRecord(jsonReq({ data: { name: "Acme RO renamed" } }), {
       params: Promise.resolve({ entityType: "accounts", id: acctId }),
     });
@@ -294,13 +294,13 @@ describe("convert — duplicate checks are tenant-scoped (cross-tenant)", () => 
   test("a same-named account in tenant B does NOT trigger a warning in tenant A", async () => {
     // Tenant B owns an account named "Crossiant".
     actAs(B);
-    await createRec("accounts", { name: "Crossiant", status: "active" });
+    await createRec("accounts", { name: "Crossiant", status: "Active" });
 
     // Tenant A has NO such account; converting a lead with that company succeeds.
     actAs(A);
-    const leadId = await createLead({ company: "Crossiant", firstName: "Zoe", status: "new" });
+    const leadId = await createLead({ company: "Crossiant", firstName: "Zoe", status: "New" });
     const res = await convertLead(bare(), { params: Promise.resolve({ id: leadId }) });
     expect(res.status).toBe(201); // no warn — B's account is invisible under RLS
-    expect((await leadData(leadId)).status).toBe("converted");
+    expect((await leadData(leadId)).status).toBe("Converted");
   });
 });

@@ -114,7 +114,7 @@ export async function applyContactAccount(
       .values({
         tenantId,
         entityTypeId: rel.targetEntityTypeId,
-        data: { name: newName, status: "prospect" },
+        data: { name: newName, status: "Prospect" },
         createdBy: userId,
         updatedBy: userId,
         ownedBy: userId,
@@ -396,7 +396,7 @@ export async function applyRelatedAccounts(
           .values({
             tenantId,
             entityTypeId: rel.targetEntityTypeId,
-            data: { name: newName, status: "prospect" },
+            data: { name: newName, status: "Prospect" },
             createdBy: userId,
             updatedBy: userId,
             ownedBy: userId,

@@ -80,29 +80,29 @@ describe("loadPipelineBoard", () => {
       const s = await setup(tx);
       await insertRecord(tx, s.tenantId, s.oppType, {
         name: "A",
-        stage: "qualification",
+        stage: "Qualification",
         amount: amount(1000),
       });
       await insertRecord(tx, s.tenantId, s.oppType, {
         name: "B",
-        stage: "proposal",
+        stage: "Proposal",
         amount: amount(5000),
       });
 
       const board = await loadPipelineBoard(tx, { tenantId: s.tenantId });
       expect(board).not.toBeNull();
       expect(board!.columns.map((c) => c.slug)).toEqual([
-        "qualification",
-        "needs_analysis",
-        "proposal",
-        "negotiation",
-        "closed_won",
-        "closed_lost",
+        "Qualification",
+        "Needs analysis",
+        "Proposal",
+        "Negotiation",
+        "Closed won",
+        "Closed lost",
       ]);
-      const qual = board!.columns.find((c) => c.slug === "qualification")!;
+      const qual = board!.columns.find((c) => c.slug === "Qualification")!;
       expect(qual.count).toBe(1);
       expect(qual.total).toBe(1000);
-      const proposal = board!.columns.find((c) => c.slug === "proposal")!;
+      const proposal = board!.columns.find((c) => c.slug === "Proposal")!;
       expect(proposal.count).toBe(1);
       expect(proposal.total).toBe(5000);
     });
@@ -113,7 +113,7 @@ describe("loadPipelineBoard", () => {
       const s = await setup(tx);
       const oppId = await insertRecord(tx, s.tenantId, s.oppType, {
         name: "Deal",
-        stage: "qualification",
+        stage: "Qualification",
       });
       const accId = await insertRecord(tx, s.tenantId, s.accountType, {
         name: "Acme Ltd",
@@ -139,7 +139,7 @@ describe("loadPipelineBoard", () => {
 
       const board = await loadPipelineBoard(tx, { tenantId: s.tenantId });
       const card = board!.columns
-        .find((c) => c.slug === "qualification")!
+        .find((c) => c.slug === "Qualification")!
         .cards.find((c) => c.id === oppId)!;
       expect(card.accountName).toBe("Acme Ltd");
       expect(card.accountName).not.toBe("Jane Contact");
@@ -172,11 +172,11 @@ describe("loadPipelineBoard", () => {
         tx,
         s.tenantId,
         s.oppType,
-        { name: "Gone", stage: "qualification" },
+        { name: "Gone", stage: "Qualification" },
         { archived: true }
       );
       const board = await loadPipelineBoard(tx, { tenantId: s.tenantId });
-      const qual = board!.columns.find((c) => c.slug === "qualification")!;
+      const qual = board!.columns.find((c) => c.slug === "Qualification")!;
       expect(qual.count).toBe(0);
     });
   });
@@ -186,18 +186,18 @@ describe("loadPipelineBoard", () => {
       const s = await setup(tx);
       await insertRecord(tx, s.tenantId, s.campaignType, {
         name: "Spring push",
-        stage: "planning",
+        stage: "Planning",
         value: amount(8000),
       });
       await insertRecord(tx, s.tenantId, s.campaignType, {
         name: "Summer",
-        stage: "live",
+        stage: "Live",
         value: amount(2000),
       });
       // An opportunity must NOT appear on the campaign board (separate stage set).
       await insertRecord(tx, s.tenantId, s.oppType, {
         name: "An opp",
-        stage: "qualification",
+        stage: "Qualification",
         amount: amount(9999),
       });
 
@@ -207,17 +207,17 @@ describe("loadPipelineBoard", () => {
       });
       expect(board).not.toBeNull();
       expect(board!.columns.map((c) => c.slug)).toEqual([
-        "brief",
-        "planning",
-        "booking",
-        "live",
-        "pca",
-        "lost",
+        "Brief",
+        "Planning",
+        "Booking",
+        "Live",
+        "PCA",
+        "Lost",
       ]);
-      const planning = board!.columns.find((c) => c.slug === "planning")!;
+      const planning = board!.columns.find((c) => c.slug === "Planning")!;
       expect(planning.count).toBe(1);
       expect(planning.total).toBe(8000); // read from `value`, not `amount`
-      const live = board!.columns.find((c) => c.slug === "live")!;
+      const live = board!.columns.find((c) => c.slug === "Live")!;
       expect(live.total).toBe(2000);
       // The opportunity is absent from the campaign board.
       const allNames = board!.columns.flatMap((c) =>
@@ -232,7 +232,7 @@ describe("loadPipelineBoard", () => {
       const s = await setup(tx);
       const campId = await insertRecord(tx, s.tenantId, s.campaignType, {
         name: "Promo",
-        stage: "brief",
+        stage: "Brief",
       });
       const accId = await insertRecord(tx, s.tenantId, s.accountType, {
         name: "Advertiser Ltd",
@@ -249,7 +249,7 @@ describe("loadPipelineBoard", () => {
         entity: "campaign",
       });
       const card = board!.columns
-        .find((c) => c.slug === "brief")!
+        .find((c) => c.slug === "Brief")!
         .cards.find((c) => c.id === campId)!;
       expect(card.accountName).toBe("Advertiser Ltd");
     });
@@ -266,7 +266,7 @@ describe("loadPipelineBoard", () => {
         tx,
         s.tenantId,
         s.oppType,
-        { name: "Mine", stage: "qualification", closeDate: "2026-06-15" },
+        { name: "Mine", stage: "Qualification", closeDate: "2026-06-15" },
         { ownedBy: s.userId }
       );
       await tx.insert(recordRelationships).values({
@@ -278,7 +278,7 @@ describe("loadPipelineBoard", () => {
       // Unowned, no account, closes 2026-12-31.
       await insertRecord(tx, s.tenantId, s.oppType, {
         name: "Other",
-        stage: "qualification",
+        stage: "Qualification",
         closeDate: "2026-12-31",
       });
 
@@ -287,7 +287,7 @@ describe("loadPipelineBoard", () => {
         filters: { owner: s.userId },
       });
       expect(
-        byOwner!.columns.find((c) => c.slug === "qualification")!.count
+        byOwner!.columns.find((c) => c.slug === "Qualification")!.count
       ).toBe(1);
 
       const byAccount = await loadPipelineBoard(tx, {
@@ -295,7 +295,7 @@ describe("loadPipelineBoard", () => {
         filters: { accountId: accId },
       });
       expect(
-        byAccount!.columns.find((c) => c.slug === "qualification")!.count
+        byAccount!.columns.find((c) => c.slug === "Qualification")!.count
       ).toBe(1);
 
       const byDate = await loadPipelineBoard(tx, {
@@ -303,7 +303,7 @@ describe("loadPipelineBoard", () => {
         filters: { closeDateFrom: "2026-06-01", closeDateTo: "2026-06-30" },
       });
       const dateCards = byDate!.columns.find(
-        (c) => c.slug === "qualification"
+        (c) => c.slug === "Qualification"
       )!.cards;
       expect(dateCards.map((c) => c.name)).toEqual(["Mine"]);
     });

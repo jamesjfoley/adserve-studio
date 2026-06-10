@@ -64,7 +64,7 @@ async function seedAccount(crm: CrmTestSetup): Promise<string> {
     .values({
       tenantId: crm.tenantId,
       entityTypeId: entity!.id,
-      data: { name: uniqueToken(), status: "active" },
+      data: { name: uniqueToken(), status: "Active" },
     })
     .returning();
   return row.id;
@@ -205,7 +205,7 @@ describe("contact create — N accounts → 1 primary + (N-1) related", () => {
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Multi", lastName, status: "active" },
+        data: { firstName: "Multi", lastName, status: "Active" },
         accountId: primary,
         relatedAccounts: [{ accountId: relatedA }, { accountId: relatedB }],
       })
@@ -227,7 +227,7 @@ describe("contact create — N accounts → 1 primary + (N-1) related", () => {
     actAs(tenantA, tenantA.owner.authProviderId);
     const lastName = uniqueToken();
     const res = await createContact(
-      jsonReq({ data: { firstName: "Solo", lastName, status: "active" } })
+      jsonReq({ data: { firstName: "Solo", lastName, status: "Active" } })
     );
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -243,7 +243,7 @@ describe("contact create — N accounts → 1 primary + (N-1) related", () => {
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Overlap", lastName, status: "active" },
+        data: { firstName: "Overlap", lastName, status: "Active" },
         accountId: primary,
         relatedAccounts: [{ accountId: primary }], // same as primary → dropped
       })
@@ -263,7 +263,7 @@ describe("contact create — N accounts → 1 primary + (N-1) related", () => {
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Atomic", lastName, status: "active" },
+        data: { firstName: "Atomic", lastName, status: "Active" },
         accountId: primary,
         relatedAccounts: [{ accountId: foreignAccount }],
       })
@@ -286,7 +286,7 @@ describe("contact create — N accounts → 1 primary + (N-1) related", () => {
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Cross", lastName, status: "active" },
+        data: { firstName: "Cross", lastName, status: "Active" },
         accountId: foreignAccount,
       })
     );
@@ -303,7 +303,7 @@ describe("contact create — primary single account + inline create-new", () => 
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Single", lastName, status: "active" },
+        data: { firstName: "Single", lastName, status: "Active" },
         accountId,
       })
     );
@@ -321,7 +321,7 @@ describe("contact create — primary single account + inline create-new", () => 
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Maker", lastName, status: "active" },
+        data: { firstName: "Maker", lastName, status: "Active" },
         newAccountName: newName,
       })
     );
@@ -341,7 +341,7 @@ describe("contact create — primary single account + inline create-new", () => 
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "RelMaker", lastName, status: "active" },
+        data: { firstName: "RelMaker", lastName, status: "Active" },
         relatedAccounts: [{ newAccountName: relName }],
       })
     );
@@ -363,13 +363,13 @@ describe("contact create — primary single account + inline create-new", () => 
     await testDb.insert(records).values({
       tenantId: tenantA.tenantId,
       entityTypeId: accountEntity!.id,
-      data: { name: baseName, status: "active" },
+      data: { name: baseName, status: "Active" },
     });
     const lastName = uniqueToken();
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Dupe", lastName, status: "active" },
+        data: { firstName: "Dupe", lastName, status: "Active" },
         // Different case + surrounding whitespace → still a duplicate.
         newAccountName: `   ${baseName.toUpperCase()}   `,
       })
@@ -392,14 +392,14 @@ describe("contact create — primary single account + inline create-new", () => 
     await testDb.insert(records).values({
       tenantId: tenantB.tenantId,
       entityTypeId: bAccountEntity!.id,
-      data: { name: sharedName, status: "active" },
+      data: { name: sharedName, status: "Active" },
     });
 
     actAs(tenantA, tenantA.owner.authProviderId);
     const lastName = uniqueToken();
     const res = await createContact(
       jsonReq({
-        data: { firstName: "Iso", lastName, status: "active" },
+        data: { firstName: "Iso", lastName, status: "Active" },
         newAccountName: sharedName,
       })
     );
@@ -416,7 +416,7 @@ describe("contact create — primary single account + inline create-new", () => 
 
     const res = await createContact(
       jsonReq({
-        data: { firstName: "NoPerm", lastName, status: "active" },
+        data: { firstName: "NoPerm", lastName, status: "Active" },
         newAccountName: newName,
       })
     );

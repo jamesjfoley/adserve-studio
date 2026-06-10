@@ -199,7 +199,7 @@ describe("CrmDetailClient", () => {
       collectionSegment: "leads",
       entityName: "Lead",
       canConvert: true,
-      record: record({ data: { name: "Jo", status: "converted" } }),
+      record: record({ data: { name: "Jo", status: "Converted" } }),
     });
     expect(
       screen.queryByRole("button", { name: /convert lead/i })
@@ -218,7 +218,7 @@ describe("CrmDetailClient", () => {
       collectionSegment: "leads",
       entityName: "Lead",
       canConvert: true,
-      record: record({ data: { name: "Jo", status: "new" } }),
+      record: record({ data: { name: "Jo", status: "New" } }),
     });
 
     await user.click(screen.getByRole("button", { name: /convert lead/i }));
@@ -415,7 +415,7 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
       entityName: "Lead",
       title: "Jo Bloggs",
       canConvert: true,
-      record: record({ data: { name: "Jo", status: "converted" } }),
+      record: record({ data: { name: "Jo", status: "Converted" } }),
     });
     expect(
       screen.getByRole("heading", { name: /Jo Bloggs/ })

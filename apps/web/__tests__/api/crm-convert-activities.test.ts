@@ -57,8 +57,8 @@ describe("POST /api/crm/leads/[id]/convert", () => {
           firstName: "Dana",
           lastName: "Scully",
           company: "FBI",
-          source: "web",
-          status: "new",
+          source: "Web",
+          status: "New",
           estimatedValue: { amount: 5000, currency: "GBP" },
         },
       }),
@@ -81,7 +81,7 @@ describe("POST /api/crm/leads/[id]/convert", () => {
     const leadDetail = await getRecord(bare(), {
       params: Promise.resolve({ entityType: "leads", id: leadId }),
     });
-    expect((await leadDetail.json()).record.data.status).toBe("converted");
+    expect((await leadDetail.json()).record.data.status).toBe("Converted");
 
     // Account expands to its linked contact + opportunity.
     const acctDetail = await getRecord(bare(), {
@@ -102,7 +102,7 @@ describe("POST /api/crm/leads/[id]/convert", () => {
 describe("activities", () => {
   test("log an activity and read it back on the account timeline", async () => {
     const acctRes = await createRecord(
-      jsonReq({ data: { name: "Timeline Co", status: "active" } }),
+      jsonReq({ data: { name: "Timeline Co", status: "Active" } }),
       { params: Promise.resolve({ entityType: "accounts" }) }
     );
     const acctId = (await acctRes.json()).record.id as string;
@@ -123,7 +123,7 @@ describe("activities", () => {
 
   test("rejects an activity type outside the allowed set", async () => {
     const acctRes = await createRecord(
-      jsonReq({ data: { name: "Bad Activity Co", status: "active" } }),
+      jsonReq({ data: { name: "Bad Activity Co", status: "Active" } }),
       { params: Promise.resolve({ entityType: "accounts" }) }
     );
     const acctId = (await acctRes.json()).record.id as string;
@@ -161,7 +161,7 @@ describe("relationship expansion is query-bounded", () => {
           .values({
             tenantId: crm.tenantId,
             entityTypeId: accountEntity!.id,
-            data: { name: "Bounded", status: "active" },
+            data: { name: "Bounded", status: "Active" },
           })
           .returning();
         for (let i = 0; i < n; i += 1) {
@@ -170,7 +170,7 @@ describe("relationship expansion is query-bounded", () => {
             .values({
               tenantId: crm.tenantId,
               entityTypeId: contactEntity!.id,
-              data: { firstName: "C", lastName: String(i), status: "active" },
+              data: { firstName: "C", lastName: String(i), status: "Active" },
             })
             .returning();
           await tx.insert(recordRelationships).values({

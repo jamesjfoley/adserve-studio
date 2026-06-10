@@ -143,3 +143,11 @@ export const CAMPAIGN_STAGES: PipelineStageSpec[] = [
     isWon: false,
   },
 ];
+
+// Single-text option model: a stage select collapses to one field, so the
+// stored stage VALUE equals its display name. `slug` is the stored stage key
+// (it becomes the select choice value AND is stamped into
+// entity_types.settings.pipelineStages), so set it equal to `name`.
+for (const stage of [...DEFAULT_PIPELINE_STAGES, ...CAMPAIGN_STAGES]) {
+  stage.slug = stage.name;
+}

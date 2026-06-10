@@ -5,9 +5,9 @@
  * (DELETE) and relationship link/unlink, so the invariant holds now that
  * convert can attach a Campaign or Opportunity.
  *
- * Precise: only the `lead` entity type, only when `data.status === "converted"`.
+ * Precise: only the `lead` entity type, only when `data.status === "Converted"`.
  */
 export function isConvertedLead(slug: string, data: unknown): boolean {
   if (slug !== "lead") return false;
-  return (data as { status?: unknown } | null | undefined)?.status === "converted";
+  return (data as { status?: unknown } | null | undefined)?.status === "Converted";
 }

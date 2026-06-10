@@ -115,10 +115,10 @@ export interface LeadFunnelStage {
  * renders all four stages.
  */
 const LEAD_FUNNEL_STAGES: { status: string; label: string }[] = [
-  { status: "new", label: "New" },
-  { status: "contacted", label: "Contacted" },
-  { status: "qualified", label: "Qualified" },
-  { status: "converted", label: "Converted" },
+  { status: "New", label: "New" },
+  { status: "Contacted", label: "Contacted" },
+  { status: "Qualified", label: "Qualified" },
+  { status: "Converted", label: "Converted" },
 ];
 
 export async function leadConversionFunnel(

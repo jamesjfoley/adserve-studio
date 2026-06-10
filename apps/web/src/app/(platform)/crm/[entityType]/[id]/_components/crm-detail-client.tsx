@@ -136,7 +136,7 @@ export function CrmDetailClient({
     [locale]
   );
 
-  const isConverted = record.data.status === "converted";
+  const isConverted = record.data.status === "Converted";
   const showConvert = canConvert && !isConverted;
 
   async function handleSave(validated: Record<string, unknown>) {

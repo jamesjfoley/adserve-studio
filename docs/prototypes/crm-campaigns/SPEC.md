@@ -313,6 +313,29 @@ The select / multi_select **Options** editor (CRM → Fields, add + edit) was si
   `label:"Active"`) rewrites the values; existing record data keyed on the old value would need a
   migration. New fields are unaffected.
 
+## Select-options migration to single-text (value === label)
+
+Migrated **all existing** select / multi_select fields to the new single-text model — the stored
+value IS the display label (the "Pretty: all + update code" option):
+
+- **Single source of truth in code.** `field-definitions.ts` normalises every static choice to
+  `value = label` at module load; `pipeline.ts` sets each stage's `slug = name` (the stage value/key
+  is now the human name). So fresh tenants activate with single-text options automatically.
+- **Code updated for the renamed keys.** `crm/types.ts` unions (`LeadStatus`, `LeadSource`,
+  `CampaignStage`) now use the label values; the convert flow, `lead-guard`, dashboard lead-funnel,
+  `crm-detail` converted check, default record statuses (Prospect/Active), and `brands-panel`
+  category choices were updated. `statusTone()` already lowercases, so it was unaffected.
+- **Data migration (local dev).** `packages/database/src/seed/migrate-select-options-single-text.ts`
+  (idempotent) remaps stored record data (single + multi_select), rewrites field
+  `options.choices` to `value === label` (+ `sortAlphabetical: false`), and re-stamps
+  `entity_types.settings.pipelineStages` (`slug := name`). Run: 56 fields, 12 records, 5 entity-type
+  stage configs.
+- **Scope guard.** Strictly CRM record select fields. Tenant / user / module `status` (Postgres enum
+  types, NOT select fields) were deliberately left untouched.
+- **Production note:** stage/status keys are now human strings (e.g. `"Closed won"`, `"PCA"`). A
+  production rebuild may prefer stable slug keys + a separate display label; if so, that's a schema
+  decision to make there. The prod data migration must mirror this script against RDS (gated).
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

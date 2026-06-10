@@ -60,8 +60,8 @@ afterAll(async () => {
 describe("CRM bulk actions", () => {
   test("assignOwner reassigns selected records, and is idempotent", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} A`, status: "active" }, crm.owner.id);
-    const b = await createAccount({ name: `${uniqueToken()} B`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} A`, status: "Active" }, crm.owner.id);
+    const b = await createAccount({ name: `${uniqueToken()} B`, status: "Active" }, crm.owner.id);
 
     let res = await bulkAction(
       bulkReq({ action: "assignOwner", recordIds: [a, b], ownedBy: crm.member.id }),
@@ -82,7 +82,7 @@ describe("CRM bulk actions", () => {
 
   test("assignOwner with ownedBy:null unassigns", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} U`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} U`, status: "Active" }, crm.owner.id);
     const res = await bulkAction(
       bulkReq({ action: "assignOwner", recordIds: [a], ownedBy: null }),
       accountsParams
@@ -94,7 +94,7 @@ describe("CRM bulk actions", () => {
 
   test("assignOwner to a non-member → 400", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} NM`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} NM`, status: "Active" }, crm.owner.id);
     const res = await bulkAction(
       bulkReq({
         action: "assignOwner",
@@ -110,15 +110,15 @@ describe("CRM bulk actions", () => {
 
   test("changeStatus sets a single-select field; invalid value → 422", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} S`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} S`, status: "Active" }, crm.owner.id);
 
     let res = await bulkAction(
-      bulkReq({ action: "changeStatus", recordIds: [a], field: "status", value: "inactive" }),
+      bulkReq({ action: "changeStatus", recordIds: [a], field: "status", value: "Inactive" }),
       accountsParams
     );
     expect(res.status).toBe(200);
     expect((await res.json()).updated).toBe(1);
-    expect((await getRow(a)).data).toMatchObject({ status: "inactive" });
+    expect((await getRow(a)).data).toMatchObject({ status: "Inactive" });
 
     res = await bulkAction(
       bulkReq({ action: "changeStatus", recordIds: [a], field: "status", value: "not-a-choice" }),
@@ -129,7 +129,7 @@ describe("CRM bulk actions", () => {
 
   test("changeStatus on a non-existent field → 400", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} F`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} F`, status: "Active" }, crm.owner.id);
     const res = await bulkAction(
       bulkReq({ action: "changeStatus", recordIds: [a], field: "ghost", value: "x" }),
       accountsParams
@@ -139,7 +139,7 @@ describe("CRM bulk actions", () => {
 
   test("archive sets isArchived on selected records", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} Ar`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} Ar`, status: "Active" }, crm.owner.id);
     const res = await bulkAction(
       bulkReq({ action: "archive", recordIds: [a] }),
       accountsParams
@@ -151,7 +151,7 @@ describe("CRM bulk actions", () => {
 
   test("member without account.update → 403", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} P`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} P`, status: "Active" }, crm.owner.id);
 
     actAs(crm.member.authProviderId);
     const res = await bulkAction(
@@ -165,7 +165,7 @@ describe("CRM bulk actions", () => {
 
   test("a bad recordId fails the whole batch with zero writes (all-or-nothing)", async () => {
     actAs(crm.owner.authProviderId);
-    const a = await createAccount({ name: `${uniqueToken()} AON`, status: "active" }, crm.owner.id);
+    const a = await createAccount({ name: `${uniqueToken()} AON`, status: "Active" }, crm.owner.id);
     const bogus = "00000000-0000-0000-0000-0000000000aa";
 
     const res = await bulkAction(
@@ -189,7 +189,7 @@ describe("CRM bulk actions", () => {
         orgId: other.clerkOrgId,
       });
       const foreignId = await createAccount(
-        { name: `${uniqueToken()} Foreign`, status: "active" },
+        { name: `${uniqueToken()} Foreign`, status: "Active" },
         other.owner.id
       );
 

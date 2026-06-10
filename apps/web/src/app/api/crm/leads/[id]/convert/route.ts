@@ -106,7 +106,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!lead) return { kind: "not_found" as const };
 
     const leadData = (lead.data as Record<string, unknown>) ?? {};
-    if (leadData.status === "converted") {
+    if (leadData.status === "Converted") {
       return { kind: "already_converted" as const };
     }
 
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           .values({
             tenantId: tenant.id,
             entityTypeId: accountEntity.id,
-            data: { name: accountName, status: "prospect" },
+            data: { name: accountName, status: "Prospect" },
             ...stamp,
           })
           .returning()
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const contactCreated = !contactMatch;
     let contact = contactMatch;
     if (!contact) {
-      const contactData: Record<string, unknown> = { status: "active" };
+      const contactData: Record<string, unknown> = { status: "Active" };
       if (firstName) contactData.firstName = firstName;
       if (lastName) contactData.lastName = lastName;
       if (str(leadData.email)) contactData.email = leadData.email;
@@ -240,14 +240,14 @@ export async function POST(req: NextRequest, { params }: Params) {
       };
       if (target === "campaign") {
         // Fixed campaign enum — start at Brief; carry value/budget.
-        dealData.stage = "brief";
+        dealData.stage = "Brief";
         if (leadData.estimatedValue) dealData.value = leadData.estimatedValue;
       } else {
         // Opportunity — first configured pipeline stage; carry amount.
         const stages =
           (dealEntity.settings as { pipelineStages?: { slug: string }[] })
             ?.pipelineStages ?? [];
-        dealData.stage = stages[0]?.slug ?? "qualification";
+        dealData.stage = stages[0]?.slug ?? "Qualification";
         if (leadData.estimatedValue) dealData.amount = leadData.estimatedValue;
       }
       [deal] = await tx
@@ -314,7 +314,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     };
     if (deal && target === "campaign") convertedTo.campaignId = deal.id;
     if (deal && target === "opportunity") convertedTo.opportunityId = deal.id;
-    const newLeadData = { ...leadData, status: "converted", convertedTo };
+    const newLeadData = { ...leadData, status: "Converted", convertedTo };
     await tx
       .update(records)
       .set({ data: newLeadData, updatedBy: user.id, updatedAt: new Date() })
@@ -360,7 +360,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       resourceId: id,
       changes: {
         before: { status: leadData.status ?? null },
-        after: { status: "converted" },
+        after: { status: "Converted" },
       },
     });
 

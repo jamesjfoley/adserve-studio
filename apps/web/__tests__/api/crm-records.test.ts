@@ -73,12 +73,12 @@ describe("CRM records — lifecycle (owner)", () => {
 
     const acmeId = await createAccount({
       name: `${token} Acme`,
-      status: "active",
+      status: "Active",
       employeeCount: 50,
     });
     await createAccount({
       name: `${token} Globex`,
-      status: "prospect",
+      status: "Prospect",
       employeeCount: 10,
     });
 
@@ -99,7 +99,7 @@ describe("CRM records — lifecycle (owner)", () => {
       listReq({
         filters: JSON.stringify([
           tokenFilter,
-          { fieldSlug: "status", operator: "is", value: "active" },
+          { fieldSlug: "status", operator: "is", value: "Active" },
         ]),
       }),
       accountsParams
@@ -153,7 +153,7 @@ describe("CRM records — lifecycle (owner)", () => {
   test("create with missing required field → 422", async () => {
     actAs(crm.owner.authProviderId);
     const res = await createRecord(
-      jsonReq("POST", { data: { status: "active" } }), // no name
+      jsonReq("POST", { data: { status: "Active" } }), // no name
       accountsParams
     );
     expect(res.status).toBe(422);
@@ -179,7 +179,7 @@ describe("CRM records — permission + ownership matrix (member)", () => {
   test("member cannot create (no account.create) → 403", async () => {
     actAs(crm.member.authProviderId);
     const res = await createRecord(
-      jsonReq("POST", { data: { name: "Nope", status: "active" } }),
+      jsonReq("POST", { data: { name: "Nope", status: "Active" } }),
       accountsParams
     );
     expect(res.status).toBe(403);
@@ -188,29 +188,29 @@ describe("CRM records — permission + ownership matrix (member)", () => {
   test("member CAN patch a record they own (owner override)", async () => {
     actAs(crm.owner.authProviderId);
     const ownedId = await createAccount(
-      { name: `${uniqueToken()} Owned`, status: "active" },
+      { name: `${uniqueToken()} Owned`, status: "Active" },
       crm.member.id // ownedBy = member
     );
 
     actAs(crm.member.authProviderId);
     const res = await patchRecord(
-      jsonReq("PATCH", { data: { status: "inactive" } }),
+      jsonReq("PATCH", { data: { status: "Inactive" } }),
       idParams(ownedId)
     );
     expect(res.status).toBe(200);
-    expect((await res.json()).record.data.status).toBe("inactive");
+    expect((await res.json()).record.data.status).toBe("Inactive");
   });
 
   test("member CANNOT patch a record owned by someone else → 403", async () => {
     actAs(crm.owner.authProviderId);
     const notOwnedId = await createAccount(
-      { name: `${uniqueToken()} NotOwned`, status: "active" },
+      { name: `${uniqueToken()} NotOwned`, status: "Active" },
       crm.owner.id // ownedBy = owner
     );
 
     actAs(crm.member.authProviderId);
     const res = await patchRecord(
-      jsonReq("PATCH", { data: { status: "inactive" } }),
+      jsonReq("PATCH", { data: { status: "Inactive" } }),
       idParams(notOwnedId)
     );
     expect(res.status).toBe(403);
@@ -227,14 +227,14 @@ describe("CRM records — permission + ownership matrix (member)", () => {
       .values({
         tenantId: crm.tenantId,
         entityTypeId: accountEntity!.id,
-        data: { name: `${uniqueToken()} Orphan`, status: "active" },
+        data: { name: `${uniqueToken()} Orphan`, status: "Active" },
         ownedBy: null,
       })
       .returning();
 
     actAs(crm.member.authProviderId);
     const res = await patchRecord(
-      jsonReq("PATCH", { data: { status: "inactive" } }),
+      jsonReq("PATCH", { data: { status: "Inactive" } }),
       idParams(row.id)
     );
     expect(res.status).toBe(403);
@@ -250,7 +250,7 @@ describe("CRM create — ownedBy tenant-membership validation (1.4a)", () => {
   test("omitted ownedBy defaults to the acting user (201)", async () => {
     actAs(crm.owner.authProviderId);
     const res = await createRecord(
-      jsonReq("POST", { data: { name: `${uniqueToken()} Default`, status: "active" } }),
+      jsonReq("POST", { data: { name: `${uniqueToken()} Default`, status: "Active" } }),
       accountsParams
     );
     expect(res.status).toBe(201);
@@ -261,7 +261,7 @@ describe("CRM create — ownedBy tenant-membership validation (1.4a)", () => {
     actAs(crm.owner.authProviderId);
     const res = await createRecord(
       jsonReq("POST", {
-        data: { name: `${uniqueToken()} Member`, status: "active" },
+        data: { name: `${uniqueToken()} Member`, status: "Active" },
         ownedBy: crm.member.id,
       }),
       accountsParams
@@ -274,7 +274,7 @@ describe("CRM create — ownedBy tenant-membership validation (1.4a)", () => {
     actAs(crm.owner.authProviderId);
     const res = await createRecord(
       jsonReq("POST", {
-        data: { name: `${uniqueToken()} NonMember`, status: "active" },
+        data: { name: `${uniqueToken()} NonMember`, status: "Active" },
         ownedBy: "00000000-0000-0000-0000-0000000000ff",
       }),
       accountsParams
@@ -289,7 +289,7 @@ describe("CRM create — ownedBy tenant-membership validation (1.4a)", () => {
       actAs(crm.owner.authProviderId); // acting in OUR tenant
       const res = await createRecord(
         jsonReq("POST", {
-          data: { name: `${uniqueToken()} Foreign`, status: "active" },
+          data: { name: `${uniqueToken()} Foreign`, status: "Active" },
           ownedBy: other.owner.id, // a real user, but not a member here
         }),
         accountsParams

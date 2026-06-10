@@ -66,16 +66,16 @@ describe("PATCH /api/crm/pipeline/[id]", () => {
     actAs(crmA.owner.authProviderId, crmA.clerkOrgId);
     const id = await createOpp(crmA.tenantId, {
       name: "Big deal",
-      stage: "qualification",
+      stage: "Qualification",
       probability: 10,
       amount: { amount: 5000, currency: "GBP" },
     });
 
-    const res = await moveStage(moveReq(id, "proposal"), paramsFor(id));
+    const res = await moveStage(moveReq(id, "Proposal"), paramsFor(id));
     expect(res.status).toBe(200);
 
     const data = await getData(id);
-    expect(data.stage).toBe("proposal");
+    expect(data.stage).toBe("Proposal");
     expect(data.probability).toBe(50); // proposal defaultProbability
     expect(data.name).toBe("Big deal"); // preserved
     expect(data.amount).toEqual({ amount: 5000, currency: "GBP" }); // preserved
@@ -88,22 +88,22 @@ describe("PATCH /api/crm/pipeline/[id]", () => {
     const changes = audits[audits.length - 1].changes as {
       after?: { stage?: string; probability?: number };
     };
-    expect(changes.after?.stage).toBe("proposal");
+    expect(changes.after?.stage).toBe("Proposal");
     expect(changes.after?.probability).toBe(50);
   });
 
   test("rejects an unknown stage with 422", async () => {
     actAs(crmA.owner.authProviderId, crmA.clerkOrgId);
-    const id = await createOpp(crmA.tenantId, { name: "x", stage: "qualification" });
+    const id = await createOpp(crmA.tenantId, { name: "x", stage: "Qualification" });
     const res = await moveStage(moveReq(id, "not_a_stage"), paramsFor(id));
     expect(res.status).toBe(422);
-    expect((await getData(id)).stage).toBe("qualification"); // unchanged
+    expect((await getData(id)).stage).toBe("Qualification"); // unchanged
   });
 
   test("returns 404 for a missing opportunity", async () => {
     actAs(crmA.owner.authProviderId, crmA.clerkOrgId);
     const res = await moveStage(
-      moveReq("00000000-0000-0000-0000-000000000000", "proposal"),
+      moveReq("00000000-0000-0000-0000-000000000000", "Proposal"),
       paramsFor("00000000-0000-0000-0000-000000000000")
     );
     expect(res.status).toBe(404);
@@ -111,26 +111,26 @@ describe("PATCH /api/crm/pipeline/[id]", () => {
 
   test("forbids a user without pipeline.update (403)", async () => {
     actAs(crmA.member.authProviderId, crmA.clerkOrgId);
-    const id = await createOpp(crmA.tenantId, { name: "y", stage: "qualification" });
-    const res = await moveStage(moveReq(id, "proposal"), paramsFor(id));
+    const id = await createOpp(crmA.tenantId, { name: "y", stage: "Qualification" });
+    const res = await moveStage(moveReq(id, "Proposal"), paramsFor(id));
     expect(res.status).toBe(403);
-    expect((await getData(id)).stage).toBe("qualification"); // unchanged
+    expect((await getData(id)).stage).toBe("Qualification"); // unchanged
   });
 
   test("cross-tenant: cannot move another tenant's opportunity (404, no write)", async () => {
     // Opportunity belongs to tenant B; request made as tenant A's owner.
     const bOpp = await createOpp(crmB.tenantId, {
       name: "B deal",
-      stage: "qualification",
+      stage: "Qualification",
       probability: 10,
     });
     actAs(crmA.owner.authProviderId, crmA.clerkOrgId);
 
-    const res = await moveStage(moveReq(bOpp, "proposal"), paramsFor(bOpp));
+    const res = await moveStage(moveReq(bOpp, "Proposal"), paramsFor(bOpp));
     expect(res.status).toBe(404);
 
     const data = await getData(bOpp);
-    expect(data.stage).toBe("qualification"); // untouched
+    expect(data.stage).toBe("Qualification"); // untouched
     expect(data.probability).toBe(10);
   });
 });

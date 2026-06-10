@@ -41,7 +41,7 @@ function jsonReq(body: unknown) {
 
 async function createAccount(t: CrmTestSetup, name: string): Promise<string> {
   actAsOwner(t);
-  const res = await createRecord(jsonReq({ data: { name, status: "active" } }), {
+  const res = await createRecord(jsonReq({ data: { name, status: "Active" } }), {
     params: Promise.resolve({ entityType: "accounts" }),
   });
   expect(res.status).toBe(201);
@@ -51,7 +51,7 @@ async function createAccount(t: CrmTestSetup, name: string): Promise<string> {
 async function createContact(t: CrmTestSetup): Promise<string> {
   actAsOwner(t);
   const res = await createRecord(
-    jsonReq({ data: { firstName: "Pat", lastName: "Buyer", status: "active" } }),
+    jsonReq({ data: { firstName: "Pat", lastName: "Buyer", status: "Active" } }),
     { params: Promise.resolve({ entityType: "contacts" }) }
   );
   expect(res.status).toBe(201);
@@ -93,7 +93,7 @@ describe("Campaign create-with-account (Task 1)", () => {
     actAsOwner(A);
     const res = await createWithAccount(
       jsonReq({
-        data: { name: "Spring Brand Push", stage: "brief" },
+        data: { name: "Spring Brand Push", stage: "Brief" },
         newAccountName: "Northwind Media",
       })
     );
@@ -117,7 +117,7 @@ describe("Campaign create-with-account (Task 1)", () => {
     actAsOwner(A);
     const res = await createWithAccount(
       jsonReq({
-        data: { name: "Q3 Always-On", stage: "planning" },
+        data: { name: "Q3 Always-On", stage: "Planning" },
         accountId,
         primaryContactId: contactId,
       })
@@ -140,7 +140,7 @@ describe("Campaign create-with-account (Task 1)", () => {
   test("rejects a campaign with NO account (422)", async () => {
     actAsOwner(A);
     const res = await createWithAccount(
-      jsonReq({ data: { name: "No Account", stage: "brief" } })
+      jsonReq({ data: { name: "No Account", stage: "Brief" } })
     );
     expect(res.status).toBe(422);
   });
@@ -152,7 +152,7 @@ describe("Campaign tenant isolation + authz (Tasks 1/7)", () => {
     // B tries to attach A's account — invisible under RLS → invalid_account.
     actAsOwner(B);
     const res = await createWithAccount(
-      jsonReq({ data: { name: "B campaign", stage: "brief" }, accountId: aAccount })
+      jsonReq({ data: { name: "B campaign", stage: "Brief" }, accountId: aAccount })
     );
     expect(res.status).toBe(422);
   });
@@ -160,7 +160,7 @@ describe("Campaign tenant isolation + authz (Tasks 1/7)", () => {
   test("tenant B cannot read tenant A's campaign (404)", async () => {
     actAsOwner(A);
     const created = await createWithAccount(
-      jsonReq({ data: { name: "A private", stage: "live" }, newAccountName: "A Private Co" })
+      jsonReq({ data: { name: "A private", stage: "Live" }, newAccountName: "A Private Co" })
     );
     const campaignId = (await created.json()).record.id as string;
 
@@ -174,7 +174,7 @@ describe("Campaign tenant isolation + authz (Tasks 1/7)", () => {
   test("a member (no campaign.create) is forbidden from creating (403)", async () => {
     actAsMember(A);
     const res = await createWithAccount(
-      jsonReq({ data: { name: "Member try", stage: "brief" }, newAccountName: "Nope Inc" })
+      jsonReq({ data: { name: "Member try", stage: "Brief" }, newAccountName: "Nope Inc" })
     );
     expect(res.status).toBe(403);
   });
@@ -183,7 +183,7 @@ describe("Campaign tenant isolation + authz (Tasks 1/7)", () => {
     const accountId = await createAccount(A, "Readable Co");
     actAsOwner(A);
     const created = await createWithAccount(
-      jsonReq({ data: { name: "Readable campaign", stage: "brief" }, accountId })
+      jsonReq({ data: { name: "Readable campaign", stage: "Brief" }, accountId })
     );
     const campaignId = (await created.json()).record.id as string;
 

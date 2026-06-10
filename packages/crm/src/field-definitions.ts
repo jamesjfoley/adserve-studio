@@ -1246,6 +1246,25 @@ export const DEFAULT_BRAND_FIELDS: CrmFieldDefinitionSpec[] = [
   },
 ];
 
+// Single-text option model: a select/multi_select option is ONE text — the
+// stored value IS the display label. Collapse every static choice so
+// `value === label`. (Stage fields use `choicesFrom` and are resolved at
+// activation from ./pipeline.ts, whose slugs already equal their names.)
+for (const list of [
+  DEFAULT_ACCOUNT_FIELDS,
+  DEFAULT_CONTACT_FIELDS,
+  DEFAULT_LEAD_FIELDS,
+  DEFAULT_OPPORTUNITY_FIELDS,
+  DEFAULT_CAMPAIGN_FIELDS,
+  DEFAULT_BRAND_FIELDS,
+]) {
+  for (const f of list) {
+    const choices = (f.options as { choices?: { value: string; label: string }[] })
+      ?.choices;
+    if (choices) for (const c of choices) c.value = c.label;
+  }
+}
+
 /**
  * Convenience map from entity type slug → default field defs.
  * Task 0.6's activation flow uses this to drive provisioning.

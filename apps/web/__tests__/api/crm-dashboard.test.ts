@@ -67,17 +67,17 @@ async function insertTask(
 }
 
 const STAGES = [
-  { slug: "qualification", name: "Qualification" },
-  { slug: "proposal", name: "Proposal" },
+  { slug: "Qualification", name: "Qualification" },
+  { slug: "Proposal", name: "Proposal" },
 ];
 
 describe("pipelineValueByStage", () => {
   test("sums amounts by stage, coalesces missing amounts, ignores archived, buckets unknown", async () => {
-    await insertRecord("opportunity", { name: "A", stage: "qualification", amount: { amount: 1000, currency: "GBP" } });
-    await insertRecord("opportunity", { name: "B", stage: "qualification", amount: { amount: 500, currency: "GBP" } });
-    await insertRecord("opportunity", { name: "C", stage: "qualification" }); // no amount → 0
-    await insertRecord("opportunity", { name: "D", stage: "proposal", amount: { amount: 2000, currency: "GBP" } });
-    await insertRecord("opportunity", { name: "E", stage: "qualification", amount: { amount: 9999, currency: "GBP" } }, { archived: true }); // ignored
+    await insertRecord("opportunity", { name: "A", stage: "Qualification", amount: { amount: 1000, currency: "GBP" } });
+    await insertRecord("opportunity", { name: "B", stage: "Qualification", amount: { amount: 500, currency: "GBP" } });
+    await insertRecord("opportunity", { name: "C", stage: "Qualification" }); // no amount → 0
+    await insertRecord("opportunity", { name: "D", stage: "Proposal", amount: { amount: 2000, currency: "GBP" } });
+    await insertRecord("opportunity", { name: "E", stage: "Qualification", amount: { amount: 9999, currency: "GBP" } }, { archived: true }); // ignored
     await insertRecord("opportunity", { name: "F", stage: "weird", amount: { amount: 100, currency: "GBP" } }); // unknown stage
 
     const result = await pipelineValueByStage(testDb, {
@@ -87,8 +87,8 @@ describe("pipelineValueByStage", () => {
     });
 
     const bySlug = new Map(result.map((r) => [r.slug, r]));
-    expect(bySlug.get("qualification")).toMatchObject({ total: 1500, count: 3 });
-    expect(bySlug.get("proposal")).toMatchObject({ total: 2000, count: 1 });
+    expect(bySlug.get("Qualification")).toMatchObject({ total: 1500, count: 3 });
+    expect(bySlug.get("Proposal")).toMatchObject({ total: 2000, count: 1 });
     expect(bySlug.get("__other__")).toMatchObject({ total: 100, count: 1 });
   });
 
@@ -98,14 +98,14 @@ describe("pipelineValueByStage", () => {
       opportunityEntityTypeId: await entityId("opportunity"),
       stages: STAGES,
     });
-    expect(result.find((r) => r.slug === "qualification")).toMatchObject({ total: 0, count: 0 });
+    expect(result.find((r) => r.slug === "Qualification")).toMatchObject({ total: 0, count: 0 });
     expect(result.some((r) => r.slug === "__other__")).toBe(false);
   });
 });
 
 describe("upcomingActivities", () => {
   test("returns in-window task dueDates ascending; excludes out-of-window, no-dueDate, and non-task", async () => {
-    const rec = await insertRecord("account", { name: "Acme", status: "active" });
+    const rec = await insertRecord("account", { name: "Acme", status: "Active" });
     await insertTask(rec, "account", "2026-06-08"); // boundary in (to inclusive)
     await insertTask(rec, "account", "2026-06-03"); // in
     await insertTask(rec, "account", "2026-06-09"); // out (after to)
@@ -125,8 +125,8 @@ describe("upcomingActivities", () => {
   });
 
   test("permission boundary: tasks on a non-readable entity type are excluded", async () => {
-    const acct = await insertRecord("account", { name: "Acme", status: "active" });
-    const opp = await insertRecord("opportunity", { name: "Big deal", stage: "qualification" });
+    const acct = await insertRecord("account", { name: "Acme", status: "Active" });
+    const opp = await insertRecord("opportunity", { name: "Big deal", stage: "Qualification" });
     await insertTask(acct, "account", "2026-06-03"); // readable
     await insertTask(opp, "opportunity", "2026-06-04"); // NOT readable below
 
@@ -181,15 +181,15 @@ describe("recentlyModifiedRecords", () => {
 
 describe("leadConversionFunnel", () => {
   test("counts leads per funnel stage in order; excludes lost + archived", async () => {
-    await insertRecord("lead", { name: "n1", status: "new" });
-    await insertRecord("lead", { name: "n2", status: "new" });
-    await insertRecord("lead", { name: "n3", status: "new" });
-    await insertRecord("lead", { name: "c1", status: "contacted" });
-    await insertRecord("lead", { name: "c2", status: "contacted" });
-    await insertRecord("lead", { name: "q1", status: "qualified" });
-    await insertRecord("lead", { name: "cv1", status: "converted" });
-    await insertRecord("lead", { name: "lost1", status: "lost" }); // off-funnel
-    await insertRecord("lead", { name: "arch", status: "new" }, { archived: true });
+    await insertRecord("lead", { name: "n1", status: "New" });
+    await insertRecord("lead", { name: "n2", status: "New" });
+    await insertRecord("lead", { name: "n3", status: "New" });
+    await insertRecord("lead", { name: "c1", status: "Contacted" });
+    await insertRecord("lead", { name: "c2", status: "Contacted" });
+    await insertRecord("lead", { name: "q1", status: "Qualified" });
+    await insertRecord("lead", { name: "cv1", status: "Converted" });
+    await insertRecord("lead", { name: "lost1", status: "Lost" }); // off-funnel
+    await insertRecord("lead", { name: "arch", status: "New" }, { archived: true });
 
     const funnel = await leadConversionFunnel(testDb, {
       tenantId: crm.tenantId,
@@ -197,10 +197,10 @@ describe("leadConversionFunnel", () => {
     });
 
     expect(funnel.map((s) => [s.status, s.count])).toEqual([
-      ["new", 3],
-      ["contacted", 2],
-      ["qualified", 1],
-      ["converted", 1],
+      ["New", 3],
+      ["Contacted", 2],
+      ["Qualified", 1],
+      ["Converted", 1],
     ]);
   });
 
@@ -223,19 +223,19 @@ describe("revenueForecast", () => {
   test("weights amount × probability/100 within cumulative close-date windows", async () => {
     const amt = (n: number) => ({ amount: n, currency: "GBP" });
     // +10d, £1000 @ 50% → 500  (in 30/60/90)
-    await insertRecord("opportunity", { name: "soon", stage: "proposal", amount: amt(1000), probability: 50, closeDate: ymd(10) });
+    await insertRecord("opportunity", { name: "soon", stage: "Proposal", amount: amt(1000), probability: 50, closeDate: ymd(10) });
     // +45d, £2000 @ 25% → 500  (in 60/90)
-    await insertRecord("opportunity", { name: "mid", stage: "proposal", amount: amt(2000), probability: 25, closeDate: ymd(45) });
+    await insertRecord("opportunity", { name: "mid", stage: "Proposal", amount: amt(2000), probability: 25, closeDate: ymd(45) });
     // +80d, £4000 @ 100% → 4000 (in 90)
-    await insertRecord("opportunity", { name: "late", stage: "negotiation", amount: amt(4000), probability: 100, closeDate: ymd(80) });
+    await insertRecord("opportunity", { name: "late", stage: "Negotiation", amount: amt(4000), probability: 100, closeDate: ymd(80) });
     // +200d → outside all windows
-    await insertRecord("opportunity", { name: "far", stage: "proposal", amount: amt(9999), probability: 100, closeDate: ymd(200) });
+    await insertRecord("opportunity", { name: "far", stage: "Proposal", amount: amt(9999), probability: 100, closeDate: ymd(200) });
     // past → excluded (closeDate < today)
-    await insertRecord("opportunity", { name: "past", stage: "proposal", amount: amt(9999), probability: 100, closeDate: ymd(-5) });
+    await insertRecord("opportunity", { name: "past", stage: "Proposal", amount: amt(9999), probability: 100, closeDate: ymd(-5) });
     // archived → excluded
-    await insertRecord("opportunity", { name: "arch", stage: "proposal", amount: amt(9999), probability: 100, closeDate: ymd(5) }, { archived: true });
+    await insertRecord("opportunity", { name: "arch", stage: "Proposal", amount: amt(9999), probability: 100, closeDate: ymd(5) }, { archived: true });
     // missing probability → contributes 0
-    await insertRecord("opportunity", { name: "noprob", stage: "proposal", amount: amt(9999), closeDate: ymd(5) });
+    await insertRecord("opportunity", { name: "noprob", stage: "Proposal", amount: amt(9999), closeDate: ymd(5) });
 
     const f = await revenueForecast(testDb, {
       tenantId: crm.tenantId,

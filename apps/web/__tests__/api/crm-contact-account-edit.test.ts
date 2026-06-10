@@ -73,7 +73,7 @@ async function seedAccount(name?: string): Promise<string> {
     .values({
       tenantId: crm.tenantId,
       entityTypeId: entity!.id,
-      data: { name: name ?? uniqueToken(), status: "active" },
+      data: { name: name ?? uniqueToken(), status: "Active" },
     })
     .returning();
   return row.id;
@@ -83,7 +83,7 @@ async function seedAccount(name?: string): Promise<string> {
 async function createContactLinkedTo(accountId: string): Promise<string> {
   const res = await createContact(
     jsonReq("POST", {
-      data: { firstName: "Edit", lastName: uniqueToken(), status: "active" },
+      data: { firstName: "Edit", lastName: uniqueToken(), status: "Active" },
       accountId,
     })
   );
@@ -405,7 +405,7 @@ async function reportsToTargets(contactId: string): Promise<string[]> {
 async function createPlainContact(): Promise<string> {
   const res = await createContact(
     jsonReq("POST", {
-      data: { firstName: "P", lastName: uniqueToken(), status: "active" },
+      data: { firstName: "P", lastName: uniqueToken(), status: "Active" },
     })
   );
   expect(res.status).toBe(201);
@@ -418,7 +418,7 @@ describe("reports-to hierarchy (contact → contact)", () => {
     const manager = await createPlainContact();
     const res = await createContact(
       jsonReq("POST", {
-        data: { firstName: "Sub", lastName: uniqueToken(), status: "active" },
+        data: { firstName: "Sub", lastName: uniqueToken(), status: "Active" },
         reportsTo: { contactId: manager },
       })
     );
@@ -506,7 +506,7 @@ async function seedAccountWithAddress(addr: {
     .values({
       tenantId: crm.tenantId,
       entityTypeId: entity!.id,
-      data: { name: uniqueToken(), status: "active", ...addr },
+      data: { name: uniqueToken(), status: "Active", ...addr },
     })
     .returning();
   return row.id;
@@ -526,7 +526,7 @@ describe("Same as Site account address — inherit from the primary account", ()
         data: {
           firstName: "Addr",
           lastName: uniqueToken(),
-          status: "active",
+          status: "Active",
           sameAsAccountAddress: true,
         },
         accountId: account,
@@ -571,7 +571,7 @@ describe("reactivation — never deleted, only inactive ↔ active", () => {
       .values({
         tenantId: crm.tenantId,
         entityTypeId: entity!.id,
-        data: { firstName: "Arch", lastName: uniqueToken(), status: "active" },
+        data: { firstName: "Arch", lastName: uniqueToken(), status: "Active" },
         isArchived: true,
       })
       .returning();

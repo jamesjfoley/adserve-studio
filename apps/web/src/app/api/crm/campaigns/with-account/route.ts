@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
         .values({
           tenantId: tenant.id,
           entityTypeId: accountEntity.id,
-          data: { name: newAccountName, status: "prospect" },
+          data: { name: newAccountName, status: "Prospect" },
           createdBy: user.id,
           updatedBy: user.id,
           ownedBy: user.id,

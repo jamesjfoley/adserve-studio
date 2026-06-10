@@ -40,7 +40,7 @@ const bare = () => new NextRequest("http://localhost");
 
 async function createLead(data: Record<string, unknown>): Promise<string> {
   const res = await createRecord(
-    jsonReq({ data: { firstName: "Lee", lastName: "Add", source: "web", status: "new", ...data } }),
+    jsonReq({ data: { firstName: "Lee", lastName: "Add", source: "Web", status: "New", ...data } }),
     { params: Promise.resolve({ entityType: "leads" }) }
   );
   expect(res.status).toBe(201);
@@ -85,7 +85,7 @@ describe("Lead convert — config-driven target (Task 5)", () => {
 
     const campaignId = body.campaign.id as string;
     expect(body.campaign.data.name).toMatch(/^Brightwave \d{4}-\d{2}-\d{2}$/);
-    expect(body.campaign.data.stage).toBe("brief");
+    expect(body.campaign.data.stage).toBe("Brief");
     // Carries the lead's estimated value as the campaign value.
     expect(body.campaign.data.value).toEqual({ amount: 5000, currency: "GBP" });
 
@@ -98,7 +98,7 @@ describe("Lead convert — config-driven target (Task 5)", () => {
     const convertedTo = (lead.data as { convertedTo?: Record<string, unknown> }).convertedTo!;
     expect(convertedTo.campaignId).toBe(campaignId);
     expect(convertedTo.opportunityId).toBeUndefined();
-    expect((lead.data as { status?: string }).status).toBe("converted");
+    expect((lead.data as { status?: string }).status).toBe("Converted");
   });
 
   test("null target (no pipeline entity) creates Account + Contact only", async () => {

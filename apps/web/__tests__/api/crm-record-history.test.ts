@@ -43,7 +43,7 @@ interface HistoryRow {
 
 async function createAccount(t: CrmTestSetup, name: string): Promise<string> {
   actAsOwner(t);
-  const res = await createRecord(jsonReq("POST", { data: { name, status: "active" } }), {
+  const res = await createRecord(jsonReq("POST", { data: { name, status: "Active" } }), {
     params: Promise.resolve({ entityType: "accounts" }),
   });
   expect(res.status).toBe(201);

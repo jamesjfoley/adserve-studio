@@ -42,7 +42,7 @@ const notesParams = (id: string) =>
 
 async function makeAccount(t: CrmTestSetup, name: string): Promise<string> {
   owner(t);
-  const res = await createRecord(jsonReq({ data: { name, status: "active" } }), {
+  const res = await createRecord(jsonReq({ data: { name, status: "Active" } }), {
     params: Promise.resolve({ entityType: "accounts" }),
   });
   expect(res.status).toBe(201);

@@ -8,13 +8,13 @@ import type { RelatedRecord } from "@/lib/crm/relationships";
 
 /** Brand category choices (mirror DEFAULT_BRAND_FIELDS in @adserve/crm). */
 const CATEGORY_CHOICES: { value: string; label: string }[] = [
-  { value: "government", label: "Government" },
-  { value: "retail", label: "Retail" },
-  { value: "automotive", label: "Automotive" },
-  { value: "finance", label: "Finance" },
-  { value: "fmcg", label: "FMCG" },
-  { value: "leisure", label: "Leisure" },
-  { value: "other", label: "Other" },
+  { value: "Government", label: "Government" },
+  { value: "Retail", label: "Retail" },
+  { value: "Automotive", label: "Automotive" },
+  { value: "Finance", label: "Finance" },
+  { value: "FMCG", label: "FMCG" },
+  { value: "Leisure", label: "Leisure" },
+  { value: "Other", label: "Other" },
 ];
 const CATEGORY_LABEL = new Map(CATEGORY_CHOICES.map((c) => [c.value, c.label]));
 
