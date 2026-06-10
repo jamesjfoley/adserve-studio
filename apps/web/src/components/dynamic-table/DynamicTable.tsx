@@ -2,12 +2,39 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
   type MouseEvent,
 } from "react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Background style that continues the row zebra-banding into the empty space
+ * below the last row (full-height tables), so the whole table is banded even
+ * when there are fewer records than fit. Returns undefined until the row
+ * height is measured. The first band's colour continues the parity from the
+ * row that would follow the last rendered one — Tailwind's `even:` bands rows
+ * at 0-based odd indices, so the filler starts on `--row-alt` when an odd
+ * number of rows is rendered.
+ */
+export function stripeFillStyle(
+  renderedRowCount: number,
+  rowHeight: number
+): CSSProperties | undefined {
+  if (rowHeight <= 0) return undefined;
+  const alt = "var(--row-alt)";
+  const plain = "transparent";
+  const firstIsAlt = renderedRowCount % 2 === 1;
+  const a = firstIsAlt ? alt : plain;
+  const b = firstIsAlt ? plain : alt;
+  return {
+    backgroundImage: `repeating-linear-gradient(to bottom, ${a} 0, ${a} ${rowHeight}px, ${b} ${rowHeight}px, ${b} ${rowHeight * 2}px)`,
+  };
+}
 import { formatFieldValue } from "../dynamic-form/format-field-value";
 import { ColumnToggle } from "./column-toggle";
 import { Pagination } from "./pagination";
@@ -162,6 +189,26 @@ export function DynamicTable({
     onRowClick(record);
   }
 
+  // Measure a body-row height so the empty space below the last row can be
+  // banded to match (full-height tables only). Guarded for non-DOM test envs.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const [rowHeight, setRowHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!fillHeight) return;
+    const container = scrollRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const firstRow = bodyRef.current?.querySelector("tr");
+      setRowHeight(firstRow ? firstRow.clientHeight : 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [fillHeight, records]);
+
   return (
     <div
       className={cn(
@@ -208,9 +255,12 @@ export function DynamicTable({
       </div>
 
       <div
+        ref={scrollRef}
         className={cn(
           "rounded-lg border border-[var(--border)]",
-          fillHeight ? "min-h-0 flex-1 overflow-auto" : "overflow-x-auto"
+          fillHeight
+            ? "flex min-h-0 flex-1 flex-col overflow-auto"
+            : "overflow-x-auto"
         )}
       >
         <table className="w-full text-sm">
@@ -227,7 +277,7 @@ export function DynamicTable({
             onColumnFilterChange={handleColumnFilterChange}
             columnFacets={columnFacets}
           />
-          <tbody className="divide-y divide-[var(--border)]">
+          <tbody ref={bodyRef} className="divide-y divide-[var(--border)]">
             {records.length === 0 ? (
               <tr>
                 <td
@@ -288,6 +338,18 @@ export function DynamicTable({
             )}
           </tbody>
         </table>
+        {/* Continue the zebra banding into the empty space below the last row
+            so the whole table is banded even when records don't fill it. */}
+        {fillHeight ? (
+          <div
+            aria-hidden="true"
+            className="min-h-0 flex-1"
+            style={stripeFillStyle(
+              records.length === 0 ? 1 : records.length,
+              rowHeight
+            )}
+          />
+        ) : null}
       </div>
 
       <Pagination pagination={pagination} onPageChange={onPageChange} />

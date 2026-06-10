@@ -10,6 +10,7 @@ import type {
   LayoutConfig,
 } from "@adserve/module-framework";
 import { DynamicTable } from "@/components/dynamic-table";
+import { stripeFillStyle } from "@/components/dynamic-table/DynamicTable";
 import type {
   DynamicTableProps,
   DynamicTableRecord,
@@ -406,6 +407,27 @@ describe("DynamicTable — column value-picker filters", () => {
       filters: [{ fieldSlug: "status", operator: "is", value: "active" }],
       includeArchived: false,
     });
+  });
+});
+
+describe("stripeFillStyle — full-height row banding", () => {
+  test("returns undefined until a row height is known", () => {
+    expect(stripeFillStyle(3, 0)).toBeUndefined();
+    expect(stripeFillStyle(0, 0)).toBeUndefined();
+  });
+
+  test("continues the zebra parity below the last row", () => {
+    // Odd row count → the next (banded) row index is even → starts on --row-alt.
+    expect(stripeFillStyle(3, 40)?.backgroundImage).toContain(
+      "var(--row-alt) 0,"
+    );
+    // Even row count → next row is unbanded → starts transparent.
+    expect(stripeFillStyle(4, 40)?.backgroundImage).toContain("transparent 0,");
+  });
+
+  test("the band period is two rows tall", () => {
+    expect(stripeFillStyle(2, 30)?.backgroundImage).toContain("30px");
+    expect(stripeFillStyle(2, 30)?.backgroundImage).toContain("60px");
   });
 });
 
