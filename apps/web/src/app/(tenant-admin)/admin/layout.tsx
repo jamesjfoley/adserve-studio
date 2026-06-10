@@ -12,6 +12,7 @@ import {
   ListChecks,
   KanbanSquare,
   ToggleRight,
+  Palette,
 } from "lucide-react";
 import { requireTenantAdmin } from "@/lib/tenant-admin";
 import { readTenantPalette } from "@/lib/theme/palettes";
@@ -25,6 +26,7 @@ const navigation = [
   { name: "CRM fields", href: "/admin/crm/fields", icon: ListChecks },
   { name: "CRM layouts", href: "/admin/crm/layouts", icon: Columns3 },
   { name: "CRM pipeline", href: "/admin/crm/pipeline", icon: KanbanSquare },
+  { name: "Branding", href: "/admin/branding", icon: Palette },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

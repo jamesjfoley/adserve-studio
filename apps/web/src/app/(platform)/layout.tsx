@@ -4,6 +4,14 @@ import { getTenantContextOrNull } from "@/lib/permissions";
 import { PrimaryNav, type NavItem } from "@/components/nav/primary-nav";
 import { readTenantPalette } from "@/lib/theme/palettes";
 import { readCrmModuleConfig } from "@/lib/crm/module-config";
+import { TitleBar } from "@/components/shell/title-bar";
+import {
+  getTenantModules,
+  readShellConfig,
+  userInitials,
+  APP_VERSION,
+  type ShellModule,
+} from "@/lib/shell";
 
 export default async function PlatformLayout({
   children,
@@ -26,6 +34,14 @@ export default async function PlatformLayout({
   // Media-first module visibility, resolved per request from the SAME tenant
   // context (no caching, mirrors the palette). Filtering the nav here — in the
   // server layout, before render — means disabled modules never flash.
+  // Platform title-bar shell (above every module surface). Modules → candy box;
+  // logo + display mode from tenant settings; initials from the signed-in user.
+  const shell = readShellConfig(tenantCtx?.tenant.settings);
+  const shellModules: ShellModule[] = tenantCtx
+    ? await getTenantModules(tenantCtx.tenant.id)
+    : [];
+  const shellUser = tenantCtx?.user ?? superAdmin ?? null;
+
   const crm = readCrmModuleConfig(tenantCtx?.tenant.settings);
   const navigation: NavItem[] = [
     { name: "Dashboard", href: "/dashboard", iconName: "dashboard" },
@@ -75,8 +91,18 @@ export default async function PlatformLayout({
   }
 
   return (
-    <div data-palette={palette} className="flex h-screen flex-col md:flex-row">
-      <PrimaryNav
+    <div data-palette={palette} className="flex h-screen flex-col">
+      <TitleBar
+        modules={shellModules}
+        logoUrl={shell.logoUrl}
+        moduleName="CRM"
+        initials={userInitials(shellUser?.fullName, shellUser?.email)}
+        userName={shellUser?.fullName ?? shellUser?.email ?? ""}
+        version={APP_VERSION}
+        mode={shell.titleBarMode}
+      />
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <PrimaryNav
         items={navigation}
         topItems={topItems}
         groupLabel="CRM"
@@ -108,9 +134,10 @@ export default async function PlatformLayout({
 
       {/* Main content — full-width, with internal scroll so pages can fill the
           viewport height (e.g. full-height list tables). */}
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--page-bg)]">
-        <div className="min-h-0 flex-1 overflow-auto px-6 py-6">{children}</div>
-      </main>
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--page-bg)]">
+          <div className="min-h-0 flex-1 overflow-auto px-6 py-6">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }
