@@ -32,7 +32,8 @@ afterEach(async () => {
 
 async function seedAccount(
   crm: CrmTestSetup,
-  name: string
+  name: string,
+  status?: string
 ): Promise<string> {
   const entity = await getEntityTypeBySlug(testDb, {
     tenantId: crm.tenantId,
@@ -43,7 +44,7 @@ async function seedAccount(
     .values({
       tenantId: crm.tenantId,
       entityTypeId: entity!.id,
-      data: { name },
+      data: status ? { name, status } : { name },
       ownedBy: crm.owner.id,
     })
     .returning();
@@ -149,6 +150,38 @@ describe("CRM list page data path under enforced RLS (adserve_app)", () => {
 
     // Only tenant A's distinct values — never B's "Beta"/"Zeta".
     expect(data!.facets.name).toEqual(["Acme", "Globex"]);
+  });
+
+  test("a select column facets its PRESENT values only (even a single one)", async () => {
+    // All accounts "prospect" → one present value. A select is categorical so
+    // it stays filterable, but the picker lists only the value(s) that exist.
+    await seedAccount(tenantA, "Acme", "prospect");
+    await seedAccount(tenantA, "Globex", "prospect");
+
+    const data = await loadCrmListData({
+      tenantId: tenantA.tenantId,
+      slug: "account",
+      parsed: defaultParsed(),
+      userId: tenantA.owner.id,
+    });
+
+    // Only "prospect" is present — not the unused "active"/"inactive" choices.
+    expect(data!.facets.status).toEqual(["prospect"]);
+  });
+
+  test("a select column facets multiple present values, alphabetical", async () => {
+    await seedAccount(tenantA, "Acme", "prospect");
+    await seedAccount(tenantA, "Globex", "active");
+    await seedAccount(tenantA, "Initech", "active");
+
+    const data = await loadCrmListData({
+      tenantId: tenantA.tenantId,
+      slug: "account",
+      parsed: defaultParsed(),
+      userId: tenantA.owner.id,
+    });
+
+    expect(data!.facets.status).toEqual(["active", "prospect"]);
   });
 
   test("unactivated entity type → null (page 404s)", async () => {

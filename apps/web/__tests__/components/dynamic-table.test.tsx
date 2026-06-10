@@ -356,18 +356,33 @@ describe("DynamicTable — column value-picker filters", () => {
     });
   });
 
-  // A select column is categorical, so it is ALWAYS filterable from its
-  // declared choices — no server facet, independent of the current data.
-  test("a select column is filterable from its choices (no facet needed)", async () => {
+  // A select column lists only the values PRESENT in the data (server facet),
+  // shown via their display labels — not every declared choice.
+  test("a select column lists only present values, by label, alphabetically", async () => {
     const user = userEvent.setup();
     render(
-      <DynamicTable {...buildProps({ fields: [NAME, STATUS], columnFacets: {} })} />
+      <DynamicTable
+        {...buildProps({
+          fields: [NAME, STATUS],
+          // Only "prospect" + "active" are present; "inactive" is not.
+          columnFacets: { status: ["prospect", "active"] },
+        })}
+      />
     );
 
     await user.click(screen.getByRole("button", { name: "Filter by Status" }));
-    // Choices shown as their labels, alphabetical.
     const options = screen.getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["Active", "Inactive", "Prospect"]);
+    // Labels, alphabetical; "Inactive" absent (no record has it).
+    expect(options).toEqual(["Active", "Prospect"]);
+  });
+
+  test("a select column with no facet (no values present) gets no filter", () => {
+    render(
+      <DynamicTable {...buildProps({ fields: [NAME, STATUS], columnFacets: {} })} />
+    );
+    expect(
+      screen.queryByRole("button", { name: "Filter by Status" })
+    ).not.toBeInTheDocument();
   });
 
   test("picking a select value commits an `is` filter on the stored value", async () => {
@@ -378,7 +393,7 @@ describe("DynamicTable — column value-picker filters", () => {
         {...buildProps({
           onFiltersChange,
           fields: [NAME, STATUS],
-          columnFacets: {},
+          columnFacets: { status: ["prospect", "active"] },
         })}
       />
     );

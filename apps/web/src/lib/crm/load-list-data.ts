@@ -12,11 +12,15 @@ import { loadEntityForm } from "./load-entity-form";
 import { listActiveMembers, type TenantMember } from "./members";
 
 /**
- * Per-column distinct values for the header value-picker. A column appears
- * here ONLY when it is "intelligently filterable": a text-value column with
- * ≥2 distinct values where at least one repeats. That single rule both
- * excludes always-unique columns (email, phone, free-text) and one-value
- * columns, and includes repeating categorical text. Values are alphabetical.
+ * Per-column distinct values ACTUALLY PRESENT in the table, for the header
+ * value-picker. Eligibility (which columns appear here):
+ *   - free-text columns: ≥2 distinct values where at least one repeats — this
+ *     excludes always-unique columns (email, phone, free-text) and one-value
+ *     columns while keeping repeating text.
+ *   - select columns: categorical by nature, so eligible whenever ≥1 value is
+ *     present (the picker still lists only the values that exist in the data).
+ * Values are the stored values (the client maps select values → labels), and
+ * are alphabetical.
  */
 export type ColumnFacets = Record<string, string[]>;
 
@@ -111,7 +115,8 @@ export async function loadCrmListData(args: {
 
     const facets: ColumnFacets = {};
     for (const field of fields) {
-      if (!isTextFilterable(field.fieldType)) continue;
+      const isSelect = field.fieldType === "select";
+      if (!isTextFilterable(field.fieldType) && !isSelect) continue;
       const valExpr = sql<string>`(${records.data} ->> ${field.slug})`;
       const groups = await tx
         .select({ value: valExpr, count: sql<number>`count(*)::int` })
@@ -122,10 +127,13 @@ export async function loadCrmListData(args: {
         // would not match it to the SELECT target.
         .groupBy(sql`1`);
 
-      // "Intelligently filterable": ≥2 distinct values AND at least one
-      // repeats (so always-unique columns like email/phone are excluded).
-      const repeats = groups.some((g) => g.count >= 2);
-      if (groups.length >= 2 && repeats) {
+      // select: categorical → eligible whenever a value is present.
+      // free-text: ≥2 distinct AND at least one repeats (so always-unique
+      // columns like email/phone are excluded).
+      const eligible = isSelect
+        ? groups.length >= 1
+        : groups.length >= 2 && groups.some((g) => g.count >= 2);
+      if (eligible) {
         facets[field.slug] = groups
           .map((g) => g.value)
           .sort((a, b) => a.localeCompare(b));

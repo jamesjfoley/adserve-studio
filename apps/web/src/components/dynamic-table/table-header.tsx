@@ -12,31 +12,34 @@ import type { Filter, SortState } from "./types";
 
 /**
  * Resolve a column's value-picker options + operator, or null when the column
- * isn't filterable. Two sources:
- *  - `select` columns are categorical by definition → always filterable from
- *    their declared choices (operator `is`), independent of the current data.
- *  - free-text columns are filterable only when the server supplied facet
- *    values (a repeating, non-unique text column) → operator `equals`.
+ * isn't filterable. Filterability is entirely server-driven: a column is
+ * filterable iff the server supplied facet values (the distinct values ACTUALLY
+ * present in the table). The picker therefore only ever lists real values.
+ *  - `select` columns map their present stored values → display labels
+ *    (operator `is`).
+ *  - free-text columns use the values verbatim (operator `equals`).
  */
 function resolveColumnFilter(
   field: FieldDefinitionWithLabels,
   facetValues: string[] | undefined
 ): { options: ColumnFilterOption[]; operator: FilterOperator } | null {
+  if (!facetValues || facetValues.length === 0) return null;
   if (field.fieldType === "select") {
-    const choices = (field.options as { choices?: ColumnFilterOption[] })
-      ?.choices;
-    if (Array.isArray(choices) && choices.length >= 2) {
-      return { options: choices, operator: "is" };
-    }
-    return null;
-  }
-  if (facetValues && facetValues.length > 0) {
+    const choices =
+      (field.options as { choices?: ColumnFilterOption[] })?.choices ?? [];
+    const labelByValue = new Map(choices.map((c) => [c.value, c.label]));
     return {
-      options: facetValues.map((v) => ({ value: v, label: v })),
-      operator: "equals",
+      options: facetValues.map((v) => ({
+        value: v,
+        label: labelByValue.get(v) ?? v,
+      })),
+      operator: "is",
     };
   }
-  return null;
+  return {
+    options: facetValues.map((v) => ({ value: v, label: v })),
+    operator: "equals",
+  };
 }
 
 interface TableHeaderProps {
