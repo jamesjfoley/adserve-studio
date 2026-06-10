@@ -174,6 +174,15 @@ when either pipeline entity is enabled.
   Brand Category / Brand Values; Field Name / New / Old / Changed By / Date) — their actual fields
   live on the Brand entity / the audit log, so they're previews, not editable cells.
 
+### Full-page create (replaces the New-record modal)
+- `New {entity}` navigates to `/crm/[entityType]/new` (static route, precedence over `[id]`) instead
+  of opening a modal. The page loads the entity's detail layout + fields and renders them in
+  `DynamicForm` create mode — the same panelled surface (accordions, field spans) the record is
+  viewed on. Mandatory fields are enforced by DynamicForm before submit; on success it lands on the
+  new record's detail page. Widget panels (Brands/Account History) are skipped on create (no record
+  yet). Inline relationship fields route to the atomic create-with-link endpoints as before. The
+  list modal + create-routing props were removed.
+
 ### Account-detail production considerations
 - **Required fields kept optional.** Account type / Required credit limit / Company registration are
   starred in the design but seeded OPTIONAL — Lead-convert and Campaign create-with-account
