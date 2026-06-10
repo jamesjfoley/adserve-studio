@@ -309,9 +309,15 @@ const DEFAULT_SECTION_COLUMNS = 2 as const;
 
 /**
  * Build a sensible default `LayoutConfig` from the entity type's current
- * field definitions. Groups fields by `groupName` (null/empty → "General"),
- * orders sections by the minimum `displayOrder` of any field in that
- * group, orders fields within each section by `displayOrder` then name.
+ * field definitions. Groups fields by `groupName`, orders sections by the
+ * minimum `displayOrder` of any field in that group, orders fields within each
+ * section by `displayOrder` then name.
+ *
+ * Catch-all behaviour: when SOME fields are grouped (a real panel structure
+ * exists), fields with NO `groupName` are NOT collected into a junk
+ * "General"/"More" panel — they're left unplaced (the admin can add them via
+ * the layout editor). Only when NO field is grouped does everything fall back
+ * into a single default panel, so an entity always renders something.
  *
  * Returns the config object only — caller persists via `createLayout`.
  */
@@ -342,10 +348,16 @@ export async function generateDefaultLayoutConfig(
     }
   >();
 
+  // Only fall back to a catch-all panel when NOTHING is grouped; otherwise
+  // ungrouped fields are left unplaced (no junk panel beside real ones).
+  const hasGrouped = fields.some(
+    (f) => f.groupName && f.groupName.trim() !== ""
+  );
+
   for (const f of fields) {
-    const group = f.groupName && f.groupName.trim() !== ""
-      ? f.groupName
-      : DEFAULT_GROUP_NAME;
+    const named = f.groupName && f.groupName.trim() !== "" ? f.groupName : null;
+    if (named === null && hasGrouped) continue; // unplaced straggler
+    const group = named ?? DEFAULT_GROUP_NAME;
     const existing = groups.get(group);
     if (existing) {
       existing.fields.push(f);

@@ -517,13 +517,14 @@ describe("layout engine — getDefaultLayout", () => {
 // generateDefaultLayoutConfig
 // ============================================================
 describe("layout engine — generateDefaultLayoutConfig", () => {
-  test("produces sections grouped by groupName ordered by min displayOrder", async () => {
+  test("produces sections grouped by groupName ordered by min displayOrder; ungrouped fields are omitted", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant, entityType, fields } = await setupTenantWithFields(tx, [
         { slug: "amount", name: "Amount", displayOrder: 30, groupName: "Financials" },
-        { slug: "name", name: "Name", displayOrder: 10 }, // no group → General
+        { slug: "name", name: "Name", displayOrder: 10, groupName: "Basics" },
         { slug: "employees", name: "Employees", displayOrder: 40, groupName: "Financials" },
-        { slug: "email", name: "Email", displayOrder: 20 },
+        { slug: "email", name: "Email", displayOrder: 20, groupName: "Basics" },
+        { slug: "loose", name: "Loose", displayOrder: 5 }, // no group → omitted
       ]);
 
       const config = await generateDefaultLayoutConfig(tx, {
@@ -531,22 +532,23 @@ describe("layout engine — generateDefaultLayoutConfig", () => {
         entityTypeId: entityType.id,
       });
 
+      // Two grouped sections; the ungrouped "loose" field is NOT auto-placed.
       expect(config.sections).toHaveLength(2);
-
-      // "General" group has min displayOrder 10, "Financials" has 30.
-      // So General comes first.
-      expect(config.sections[0].title).toBe("General");
+      // "Basics" min displayOrder 10, "Financials" 30 → Basics first.
+      expect(config.sections[0].title).toBe("Basics");
       expect(config.sections[1].title).toBe("Financials");
 
-      // Within "General": name (10), email (20)
       const fieldById = new Map(fields.map((f) => [f.id, f]));
       expect(
         config.sections[0].fieldIds.map((id) => fieldById.get(id)?.slug)
       ).toEqual(["name", "email"]);
-      // Within "Financials": amount (30), employees (40)
       expect(
         config.sections[1].fieldIds.map((id) => fieldById.get(id)?.slug)
       ).toEqual(["amount", "employees"]);
+      // The ungrouped field appears in no section.
+      const placed = config.sections.flatMap((s) => s.fieldIds);
+      const loose = fields.find((f) => f.slug === "loose")!;
+      expect(placed).not.toContain(loose.id);
     });
   });
 
@@ -564,7 +566,7 @@ describe("layout engine — generateDefaultLayoutConfig", () => {
   test("uses 2 columns by default per section", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant, entityType } = await setupTenantWithFields(tx, [
-        { slug: "x", name: "X", displayOrder: 10 },
+        { slug: "x", name: "X", displayOrder: 10, groupName: "Main" },
       ]);
       const config = await generateDefaultLayoutConfig(tx, {
         tenantId: tenant.id,
@@ -574,7 +576,24 @@ describe("layout engine — generateDefaultLayoutConfig", () => {
     });
   });
 
-  test("fields with null/empty groupName go into General", async () => {
+  test("ungrouped fields are omitted when a grouped panel exists (no catch-all)", async () => {
+    await withTestTransaction(async (tx) => {
+      const { tenant, entityType, fields } = await setupTenantWithFields(tx, [
+        { slug: "x", name: "X", displayOrder: 10, groupName: "Main" },
+        { slug: "y", name: "Y", displayOrder: 20, groupName: null },
+      ]);
+      const config = await generateDefaultLayoutConfig(tx, {
+        tenantId: tenant.id,
+        entityTypeId: entityType.id,
+      });
+      expect(config.sections).toHaveLength(1);
+      expect(config.sections[0].title).toBe("Main");
+      const y = fields.find((f) => f.slug === "y")!;
+      expect(config.sections.flatMap((s) => s.fieldIds)).not.toContain(y.id);
+    });
+  });
+
+  test("falls back to a single default panel when NO field is grouped", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant, entityType } = await setupTenantWithFields(tx, [
         { slug: "a", name: "A", displayOrder: 10, groupName: null },
@@ -585,7 +604,6 @@ describe("layout engine — generateDefaultLayoutConfig", () => {
         entityTypeId: entityType.id,
       });
       expect(config.sections).toHaveLength(1);
-      expect(config.sections[0].title).toBe("General");
       expect(config.sections[0].fieldIds).toHaveLength(2);
     });
   });

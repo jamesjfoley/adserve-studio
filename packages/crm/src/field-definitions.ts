@@ -891,13 +891,14 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     displayOrder: 360,
     options: { disabledWhen: { field: "sameAsAccountAddress", equals: true } },
   },
-  // ---- More ----
+  // ---- Ungrouped (no panel): not auto-placed; the admin can add them to a
+  // panel via the layout editor. We deliberately do NOT bucket them into a
+  // catch-all "More"/"General" panel.
   {
     slug: "notes",
     name: "Notes",
     labels: { en: "Notes" },
     fieldType: "long_text",
-    groupName: "More",
     displayOrder: 410,
   },
   {
@@ -906,7 +907,6 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     labels: { en: "External reference ID" },
     fieldType: "text",
     isSystem: true,
-    groupName: "More",
     displayOrder: 420,
   },
   {
@@ -915,7 +915,6 @@ export const DEFAULT_CONTACT_FIELDS: CrmFieldDefinitionSpec[] = [
     labels: { en: "Make favourite" },
     fieldType: "boolean",
     isSystem: true,
-    groupName: "More",
     displayOrder: 430,
   },
 ];

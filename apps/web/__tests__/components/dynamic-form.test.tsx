@@ -421,7 +421,7 @@ describe("DynamicForm — view mode", () => {
   // DynamicForm initializes form state via useState's lazy initializer
   // — rerender with new initialData would not change the displayed
   // value (the initializer only runs on first mount).
-  test("boolean view renders Yes when flag is true", () => {
+  test("boolean view renders a checked, read-only checkbox when flag is true", () => {
     const f = fieldDef({ id: "b1", slug: "flag", name: "Flag", fieldType: "boolean" });
     render(
       <DynamicForm
@@ -431,10 +431,13 @@ describe("DynamicForm — view mode", () => {
         mode="view"
       />
     );
-    expect(screen.getByText("Yes")).toBeInTheDocument();
+    const cb = screen.getByRole("checkbox");
+    expect(cb).toBeChecked();
+    expect(cb).toBeDisabled();
+    expect(screen.queryByText("Yes")).not.toBeInTheDocument();
   });
 
-  test("boolean view renders No when flag is false", () => {
+  test("boolean view renders an unchecked checkbox when flag is false", () => {
     const f = fieldDef({ id: "b1", slug: "flag", name: "Flag", fieldType: "boolean" });
     render(
       <DynamicForm
@@ -444,10 +447,12 @@ describe("DynamicForm — view mode", () => {
         mode="view"
       />
     );
-    expect(screen.getByText("No")).toBeInTheDocument();
+    const cb = screen.getByRole("checkbox");
+    expect(cb).not.toBeChecked();
+    expect(screen.queryByText("No")).not.toBeInTheDocument();
   });
 
-  test("boolean view renders em-dash when flag is null", () => {
+  test("boolean view renders an unchecked checkbox when flag is null", () => {
     const f = fieldDef({ id: "b1", slug: "flag", name: "Flag", fieldType: "boolean" });
     render(
       <DynamicForm
@@ -457,7 +462,7 @@ describe("DynamicForm — view mode", () => {
         mode="view"
       />
     );
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
   });
 });
 
@@ -731,5 +736,41 @@ describe("DynamicForm — hideLabelInView (compact view-mode addresses)", () => 
       />
     );
     expect(screen.getByLabelText("Site City")).toBeInTheDocument();
+  });
+});
+
+describe("DynamicForm — view-mode address compaction", () => {
+  test("boolean renders as a read-only checkbox in view mode (not Yes/No text)", () => {
+    const b = fieldDef({ id: "bb", slug: "flag", name: "Flag", fieldType: "boolean" });
+    render(
+      <DynamicForm
+        layoutConfig={sectionConfig({ title: "S", fieldIds: ["bb"] })}
+        fields={[b]}
+        initialData={{ flag: true }}
+        mode="view"
+      />
+    );
+    const cb = screen.getByRole("checkbox");
+    expect(cb).toBeChecked();
+    expect(cb).toBeDisabled();
+    expect(screen.queryByText("Yes")).not.toBeInTheDocument();
+  });
+
+  test("an empty value-only field is omitted in view mode; populated ones remain", () => {
+    const a = fieldDef({ id: "a", slug: "line1", name: "Line 1", fieldType: "text", options: { hideLabelInView: true } });
+    const b = fieldDef({ id: "b", slug: "line2", name: "Line 2", fieldType: "text", options: { hideLabelInView: true } });
+    const c = fieldDef({ id: "c", slug: "city", name: "City", fieldType: "text", options: { hideLabelInView: true } });
+    render(
+      <DynamicForm
+        layoutConfig={sectionConfig({ title: "Addresses", fieldIds: ["a", "b", "c"] })}
+        fields={[a, b, c]}
+        initialData={{ line1: "36 Gibbon Road", line2: "", city: "Kingston" }}
+        mode="view"
+      />
+    );
+    expect(screen.getByText("36 Gibbon Road")).toBeInTheDocument();
+    expect(screen.getByText("Kingston")).toBeInTheDocument();
+    // The empty field renders nothing — no stray "—" placeholder.
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 });

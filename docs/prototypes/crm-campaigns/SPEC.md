@@ -373,6 +373,25 @@ panel is compact. Create/edit still show the labels + inputs. Applied to the 12 
 (`field-definitions.ts`, scoped to `groupName === "Addresses"` + text); existing local-dev fields
 updated in place (24 rows). Reusable for any other label-noisy view-mode field.
 
+## Addresses panel — further view-mode compaction
+
+Four refinements (mostly generic, in `DynamicForm` / the layout generator):
+
+- **Empty value-only fields are omitted in view mode** and the cells beneath move up to fill the
+  space. For flow layouts the remaining cells auto-pack; for absolute-positioned layouts each column's
+  visible cells are re-packed to sequential rows (so a hidden empty in the Site column doesn't leave a
+  gap, and Site/Billing stay independent columns). Only applies to `hideLabelInView` empties.
+- **Booleans show as a read-only checkbox** in view mode (`BooleanField`), not "Yes / No" text.
+- **Tighter line spacing**: sections containing value-only fields use `gap-y-1.5` (vs `gap-4`) in view
+  mode, so address lines are compact.
+- **No catch-all panel for unassigned fields**: `generateDefaultLayoutConfig` now only buckets
+  ungrouped fields into a default panel when NO field is grouped (so all-ungrouped entities —
+  lead/opportunity/brand — still render). When a real panel structure exists (account/contact),
+  ungrouped fields are left unplaced (admin can add them via the layout editor) — no junk
+  "More"/"General" panel. The seed's contact "More" group was removed (those fields are now
+  ungrouped); existing local-dev contact layouts had the "More" section stripped + `group_name`
+  cleared.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

@@ -235,6 +235,55 @@ export function DynamicForm({
             ) : null;
           }
 
+          const allItems = sectionItems(section);
+          const isEmptyVal = (v: unknown) =>
+            v == null || v === "" || (Array.isArray(v) && v.length === 0);
+          // In VIEW mode, a value-only (hideLabelInView) field with no value is
+          // omitted entirely — the fields beneath it move up to fill the space.
+          const isOmittedInView = (item: LayoutItem) => {
+            if (mode !== "view" || !("fieldId" in item)) return false;
+            const f = fieldsById.get(item.fieldId);
+            if (!f) return false;
+            const o = (f.options as Record<string, unknown> | null) ?? {};
+            return (
+              o.hideLabelInView === true &&
+              isEmptyVal(effectiveValue(f, state))
+            );
+          };
+          const visibleItems = allItems.filter((it) => !isOmittedInView(it));
+          // Sections holding value-only fields use a tighter vertical rhythm.
+          const tightView =
+            mode === "view" &&
+            allItems.some(
+              (it) =>
+                "fieldId" in it &&
+                ((fieldsById.get(it.fieldId)?.options as Record<
+                  string,
+                  unknown
+                > | null)?.hideLabelInView === true)
+            );
+          // VIEW mode: re-pack positioned cells per column so a hidden empty
+          // collapses and the cells below it rise (no reserved gap).
+          const packedRow = new Map<LayoutItem, number>();
+          if (mode === "view") {
+            const byCol = new Map<number, LayoutItem[]>();
+            for (const it of visibleItems) {
+              if (
+                "fieldId" in it &&
+                typeof it.col === "number" &&
+                typeof it.row === "number"
+              ) {
+                const arr = byCol.get(it.col) ?? [];
+                arr.push(it);
+                byCol.set(it.col, arr);
+              }
+            }
+            for (const arr of byCol.values()) {
+              arr.sort((a, b) => (a.row ?? 0) - (b.row ?? 0));
+              arr.forEach((it, i) => packedRow.set(it, i));
+            }
+          }
+
           return (
             <CollapsiblePanel
               key={`${section.title}-${sIdx}`}
@@ -245,12 +294,15 @@ export function DynamicForm({
               defaultOpen
             >
               <div
-                className="mt-3 grid gap-4"
+                className={cn(
+                  "mt-3 grid",
+                  tightView ? "gap-x-8 gap-y-1.5" : "gap-4"
+                )}
                 style={{
                   gridTemplateColumns: `repeat(${section.columns}, minmax(0, 1fr))`,
                 }}
               >
-                {sectionItems(section).map((item, itemIdx) => {
+                {visibleItems.map((item, itemIdx) => {
                   // Absolute placement: the cell carries a zero-based row/col, so
                   // it's pinned to that exact grid position (no flow). Otherwise
                   // the cell flows row-major (legacy layouts).
@@ -269,7 +321,10 @@ export function DynamicForm({
                     col != null
                       ? {
                           gridColumn: `${col + 1} / span ${span}`,
-                          gridRowStart: (item.row ?? 0) + 1,
+                          // Packed row in view mode (collapses hidden empties);
+                          // the stored row otherwise.
+                          gridRowStart:
+                            (packedRow.get(item) ?? item.row ?? 0) + 1,
                         }
                       : { gridColumn: `span ${span}` };
                   // Spacer cell — leaves a gap / pushes following fields to a

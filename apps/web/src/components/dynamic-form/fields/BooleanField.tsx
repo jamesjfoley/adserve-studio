@@ -1,6 +1,5 @@
 "use client";
 
-import { formatFieldValue } from "../format-field-value";
 import { FieldShell, type FieldComponentProps } from "./FieldShell";
 
 export function BooleanField(props: FieldComponentProps) {
@@ -11,6 +10,7 @@ export function BooleanField(props: FieldComponentProps) {
     (typeof value === "string" && value.toLowerCase() === "true");
 
   if (mode === "view") {
+    // Show the boolean as a read-only checkbox, not "Yes / No" text.
     return (
       <FieldShell
         field={field}
@@ -18,7 +18,15 @@ export function BooleanField(props: FieldComponentProps) {
         error={error}
         locale={locale}
       >
-        {formatFieldValue(field, value, locale)}
+        <input
+          id={inputId}
+          type="checkbox"
+          className="h-4 w-4 rounded border-[var(--border)]"
+          checked={bool}
+          disabled
+          readOnly
+          aria-readonly="true"
+        />
       </FieldShell>
     );
   }
