@@ -10,12 +10,15 @@ import {
   CONTACT_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
+  CAMPAIGN_BELONGS_TO_ACCOUNT,
+  CAMPAIGN_HAS_PRIMARY_CONTACT,
 } from "@adserve/crm";
 import { getEntityTypeBySlug } from "@adserve/module-framework";
 import { apiRequirePermission } from "@/lib/permissions";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
 import { findAccountByName } from "@/lib/crm/account-name";
+import { readCrmModuleConfig, type ConvertTarget } from "@/lib/crm/module-config";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -45,10 +48,15 @@ async function readConfirm(req: NextRequest): Promise<boolean> {
  * duplicate checks run before the first insert).
  *
  * Confirmed (`?confirm=1` / `{ confirm: true }`, AC 23): link to the matched
- * account/contact instead of duplicating, create only what is missing (always
- * the opportunity), write the lead's `data.convertedTo` back-links, and emit
- * `link` audit rows for matched entities + `create` rows for new ones — all in
- * the same transaction. The opportunity name is `<Account> <YYYY-MM-DD>` (AC 20).
+ * account/contact instead of duplicating, create only what is missing, write
+ * the lead's `data.convertedTo` back-links, and emit `link` audit rows for
+ * matched entities + `create` rows for new ones — all in the same transaction.
+ * The deal record's name is `<Account> <YYYY-MM-DD>` (AC 20).
+ *
+ * Which deal record is created is DETERMINISTIC from the module config's
+ * `effectiveConvertTarget` (no per-convert picker): `campaign` → a Campaign,
+ * `opportunity` → an Opportunity, `null` (neither pipeline entity enabled) →
+ * Account + Contact only.
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params;
@@ -57,17 +65,31 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (guard.error) return guard.error;
   const { tenant, user } = guard.ctx;
 
+  // Deterministic deal target from the tenant's module config (per request).
+  const target: ConvertTarget | null = readCrmModuleConfig(
+    tenant.settings
+  ).effectiveConvertTarget;
+
   const confirm = await readConfirm(req);
 
   const outcome = await withTenant(tenant.id, async (tx) => {
-    const [leadEntity, accountEntity, contactEntity, opportunityEntity] =
+    const dealSlug = target === "campaign" ? "campaign" : "opportunity";
+    const [leadEntity, accountEntity, contactEntity, dealEntity] =
       await Promise.all([
         getEntityTypeBySlug(tx, { tenantId: tenant.id, slug: "lead" }),
         getEntityTypeBySlug(tx, { tenantId: tenant.id, slug: "account" }),
         getEntityTypeBySlug(tx, { tenantId: tenant.id, slug: "contact" }),
-        getEntityTypeBySlug(tx, { tenantId: tenant.id, slug: "opportunity" }),
+        target
+          ? getEntityTypeBySlug(tx, { tenantId: tenant.id, slug: dealSlug })
+          : Promise.resolve(undefined),
       ]);
-    if (!leadEntity || !accountEntity || !contactEntity || !opportunityEntity) {
+    // The deal entity is only required when a target is configured.
+    if (
+      !leadEntity ||
+      !accountEntity ||
+      !contactEntity ||
+      (target && !dealEntity)
+    ) {
       return { kind: "not_activated" as const };
     }
 
@@ -100,6 +122,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       CONTACT_BELONGS_TO_ACCOUNT.name,
       OPPORTUNITY_BELONGS_TO_ACCOUNT.name,
       OPPORTUNITY_HAS_PRIMARY_CONTACT.name,
+      CAMPAIGN_BELONGS_TO_ACCOUNT.name,
+      CAMPAIGN_HAS_PRIMARY_CONTACT.name,
     ];
     const relRows = await tx
       .select({ id: schemaRelationships.id, name: schemaRelationships.name })
@@ -169,11 +193,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     // --- Proceed: link-to-existing for matches, create the rest. ---
-    const stages =
-      (opportunityEntity.settings as { pipelineStages?: { slug: string }[] })
-        ?.pipelineStages ?? [];
-    const stage = stages[0]?.slug ?? "qualification";
-
     const ownedBy = lead.ownedBy ?? user.id;
     const stamp = { createdBy: user.id, updatedBy: user.id, ownedBy };
 
@@ -211,44 +230,61 @@ export async function POST(req: NextRequest, { params }: Params) {
         .returning();
     }
 
-    // Opportunity is always created. Name: `<Account> <YYYY-MM-DD>` (AC 20).
+    // Deal record (Campaign | Opportunity | none) per effectiveConvertTarget.
+    // Name: `<Account> <YYYY-MM-DD>` (AC 20).
     const conversionDate = new Date().toISOString().slice(0, 10);
-    const opportunityData: Record<string, unknown> = {
-      name: `${accountName} ${conversionDate}`,
-      stage,
-    };
-    if (leadData.estimatedValue) {
-      opportunityData.amount = leadData.estimatedValue;
+    let deal: typeof records.$inferSelect | undefined;
+    if (target && dealEntity) {
+      const dealData: Record<string, unknown> = {
+        name: `${accountName} ${conversionDate}`,
+      };
+      if (target === "campaign") {
+        // Fixed campaign enum — start at Brief; carry value/budget.
+        dealData.stage = "brief";
+        if (leadData.estimatedValue) dealData.value = leadData.estimatedValue;
+      } else {
+        // Opportunity — first configured pipeline stage; carry amount.
+        const stages =
+          (dealEntity.settings as { pipelineStages?: { slug: string }[] })
+            ?.pipelineStages ?? [];
+        dealData.stage = stages[0]?.slug ?? "qualification";
+        if (leadData.estimatedValue) dealData.amount = leadData.estimatedValue;
+      }
+      [deal] = await tx
+        .insert(records)
+        .values({
+          tenantId: tenant.id,
+          entityTypeId: dealEntity.id,
+          data: dealData,
+          ...stamp,
+        })
+        .returning();
     }
-    const [opportunity] = await tx
-      .insert(records)
-      .values({
-        tenantId: tenant.id,
-        entityTypeId: opportunityEntity.id,
-        data: opportunityData,
-        ...stamp,
-      })
-      .returning();
 
     // Link via record_relationships. A matched contact↔account link already
     // exists, so insertion is idempotent (onConflictDoNothing on the unique
-    // (relationship, source, target) index).
+    // (relationship, source, target) index). The deal links are added only
+    // when a deal was created.
+    const dealAccountRel =
+      target === "campaign"
+        ? CAMPAIGN_BELONGS_TO_ACCOUNT.name
+        : OPPORTUNITY_BELONGS_TO_ACCOUNT.name;
+    const dealContactRel =
+      target === "campaign"
+        ? CAMPAIGN_HAS_PRIMARY_CONTACT.name
+        : OPPORTUNITY_HAS_PRIMARY_CONTACT.name;
     const links: Array<{ name: string; source: string; target: string }> = [
       {
         name: CONTACT_BELONGS_TO_ACCOUNT.name,
         source: contact.id,
         target: account.id,
       },
-      {
-        name: OPPORTUNITY_BELONGS_TO_ACCOUNT.name,
-        source: opportunity.id,
-        target: account.id,
-      },
-      {
-        name: OPPORTUNITY_HAS_PRIMARY_CONTACT.name,
-        source: opportunity.id,
-        target: contact.id,
-      },
+      ...(deal
+        ? [
+            { name: dealAccountRel, source: deal.id, target: account.id },
+            { name: dealContactRel, source: deal.id, target: contact.id },
+          ]
+        : []),
     ];
     const linkValues = links
       .map((l) => ({ relationshipId: relIdByName.get(l.name), ...l }))
@@ -264,12 +300,20 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     // Mark the lead converted + write the back-links (ordinary records.data
-    // JSONB write — no new relationship type, no schema change).
-    const convertedTo = {
+    // JSONB write — no new relationship type, no schema change). Exactly one
+    // deal id is set (or none), and `opportunityId` stays present-but-optional
+    // so historical converted leads remain intact.
+    const convertedTo: {
+      accountId: string;
+      contactId: string;
+      opportunityId?: string;
+      campaignId?: string;
+    } = {
       accountId: account.id,
       contactId: contact.id,
-      opportunityId: opportunity.id,
     };
+    if (deal && target === "campaign") convertedTo.campaignId = deal.id;
+    if (deal && target === "opportunity") convertedTo.opportunityId = deal.id;
     const newLeadData = { ...leadData, status: "converted", convertedTo };
     await tx
       .update(records)
@@ -298,14 +342,16 @@ export async function POST(req: NextRequest, { params }: Params) {
         ? { after: contact.data }
         : { linkedExisting: true },
     });
-    await writeAuditLog(tx, {
-      tenantId: tenant.id,
-      userId: user.id,
-      action: "create",
-      resourceType: "opportunity",
-      resourceId: opportunity.id,
-      changes: { after: opportunity.data },
-    });
+    if (deal) {
+      await writeAuditLog(tx, {
+        tenantId: tenant.id,
+        userId: user.id,
+        action: "create",
+        resourceType: target === "campaign" ? "campaign" : "opportunity",
+        resourceId: deal.id,
+        changes: { after: deal.data },
+      });
+    }
     await writeAuditLog(tx, {
       tenantId: tenant.id,
       userId: user.id,
@@ -318,7 +364,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
     });
 
-    return { kind: "ok" as const, account, contact, opportunity };
+    return { kind: "ok" as const, account, contact, deal, target };
   });
 
   switch (outcome.kind) {
@@ -344,14 +390,19 @@ export async function POST(req: NextRequest, { params }: Params) {
         { warning: "contact_exists", existing: outcome.existing },
         { status: 409 }
       );
-    case "ok":
+    case "ok": {
+      const dealKey = outcome.target === "campaign" ? "campaign" : "opportunity";
       return NextResponse.json(
         {
           account: serializeRecord(outcome.account),
           contact: serializeRecord(outcome.contact),
-          opportunity: serializeRecord(outcome.opportunity),
+          target: outcome.target,
+          ...(outcome.deal
+            ? { [dealKey]: serializeRecord(outcome.deal) }
+            : {}),
         },
         { status: 201 }
       );
+    }
   }
 }

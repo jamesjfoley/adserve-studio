@@ -10,7 +10,12 @@ import {
 } from "@adserve/database";
 import { getEntityTypeBySlug } from "@adserve/module-framework";
 import { CONTACT_BELONGS_TO_ACCOUNT } from "@adserve/crm";
-import { setupCrmTenant, teardownCrmTenant, type CrmTestSetup } from "../helpers/crm";
+import {
+  setupCrmTenant,
+  teardownCrmTenant,
+  setCrmModuleConfig,
+  type CrmTestSetup,
+} from "../helpers/crm";
 
 const authMock = vi.hoisted(() => vi.fn());
 vi.mock("@clerk/nextjs/server", () => ({ auth: authMock }));
@@ -101,6 +106,11 @@ async function linkContactToAccount(tenantId: string, contactId: string, account
 beforeAll(async () => {
   A = await setupCrmTenant();
   B = await setupCrmTenant();
+  // This suite asserts the OPPORTUNITY-target convert semantics (AC 20–24), so
+  // pin both tenants to opportunities-enabled. (Campaign + null targets are
+  // covered in crm-convert-targets.test.ts.)
+  await setCrmModuleConfig(A.tenantId, { opportunities: true, convertTarget: "opportunity" });
+  await setCrmModuleConfig(B.tenantId, { opportunities: true, convertTarget: "opportunity" });
 });
 afterAll(async () => {
   if (A?.tenantId) await teardownCrmTenant(A.tenantId);

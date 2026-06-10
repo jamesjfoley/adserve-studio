@@ -16,6 +16,7 @@ import {
 import { writeAuditLog } from "@/lib/crm/audit";
 import { createRecordLink } from "@/lib/crm/link-records";
 import { isPrimaryAccountOf } from "@/lib/crm/contact-account";
+import { isConvertedLead } from "@/lib/crm/lead-guard";
 
 type Params = { params: Promise<{ entityType: string; id: string }> };
 
@@ -138,6 +139,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       );
     if (!owningRecord) return { kind: "not_found" as const };
 
+    // AC 24 (extended): a converted lead is read-only — block link/unlink
+    // before the permission/ownership gate.
+    if (isConvertedLead(owningSlug, owningRecord.data)) {
+      return { kind: "converted" as const };
+    }
+
     // Authorization: permission-OR-ownership on the OWNING record.
     if (!canMutate(ctx, `${owningSlug}.update`, owningRecord.ownedBy ?? null)) {
       return { kind: "forbidden" as const };
@@ -209,6 +216,11 @@ export async function POST(req: NextRequest, { params }: Params) {
   switch (outcome.kind) {
     case "not_found":
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    case "converted":
+      return NextResponse.json(
+        { error: "Lead is converted and read-only" },
+        { status: 409 }
+      );
     case "forbidden":
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     case "unknown_relationship":
@@ -290,6 +302,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       );
     if (!owningRecord) return { kind: "not_found" as const };
 
+    // AC 24 (extended): a converted lead is read-only — block unlink.
+    if (isConvertedLead(owningSlug, owningRecord.data)) {
+      return { kind: "converted" as const };
+    }
+
     if (!canMutate(ctx, `${owningSlug}.update`, owningRecord.ownedBy ?? null)) {
       return { kind: "forbidden" as const };
     }
@@ -340,6 +357,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   switch (outcome.kind) {
     case "not_found":
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    case "converted":
+      return NextResponse.json(
+        { error: "Lead is converted and read-only" },
+        { status: 409 }
+      );
     case "forbidden":
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     case "unknown_relationship":

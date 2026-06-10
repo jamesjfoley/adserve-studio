@@ -95,3 +95,35 @@ export async function setupCrmTenant(): Promise<CrmTestSetup> {
 export async function teardownCrmTenant(tenantId: string): Promise<void> {
   await deleteTestTenant(testDb, tenantId);
 }
+
+/**
+ * Merge a CRM module-visibility config into a tenant's `settings.modules.crm`
+ * (the same JSONB key the admin write targets). Lets convert/route-guard tests
+ * exercise specific toggle combinations + convertTarget.
+ */
+export async function setCrmModuleConfig(
+  tenantId: string,
+  crm: Partial<{
+    leads: boolean;
+    campaigns: boolean;
+    opportunities: boolean;
+    convertTarget: "campaign" | "opportunity";
+  }>
+): Promise<void> {
+  const [row] = await testDb
+    .select({ settings: tenants.settings })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  const settings = (row?.settings ?? {}) as Record<string, unknown>;
+  const modules = (settings.modules ?? {}) as Record<string, unknown>;
+  const current = (modules.crm ?? {}) as Record<string, unknown>;
+  await testDb
+    .update(tenants)
+    .set({
+      settings: {
+        ...settings,
+        modules: { ...modules, crm: { ...current, ...crm } },
+      },
+    })
+    .where(eq(tenants.id, tenantId));
+}

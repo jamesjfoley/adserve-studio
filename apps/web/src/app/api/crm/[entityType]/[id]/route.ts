@@ -16,6 +16,7 @@ import {
 import { loadRecordWithRelationships } from "@/lib/crm/relationships";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { writeAuditLog } from "@/lib/crm/audit";
+import { isConvertedLead } from "@/lib/crm/lead-guard";
 import {
   applyContactAccount,
   applyContactReportsTo,
@@ -154,13 +155,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!existing) return { kind: "not_found" as const };
 
     // AC 24: a converted lead is server-side read-only — reject edits for
-    // EVERYONE (before the permission/ownership gate). Precise: only the lead
-    // entity type, only when its status is "converted"; other entity types and
-    // non-converted records are unaffected.
-    if (
-      slug === "lead" &&
-      ((existing.data as Record<string, unknown>) ?? {}).status === "converted"
-    ) {
+    // EVERYONE (before the permission/ownership gate).
+    if (isConvertedLead(slug, existing.data)) {
       return { kind: "converted" as const };
     }
 
@@ -379,6 +375,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       );
     if (!existing) return { kind: "not_found" as const };
 
+    // AC 24 (extended): a converted lead is read-only — block archive too,
+    // before the permission/ownership gate.
+    if (isConvertedLead(slug, existing.data)) {
+      return { kind: "converted" as const };
+    }
+
     if (!canMutate(ctx, `${slug}.delete`, existing.ownedBy ?? null)) {
       return { kind: "forbidden" as const };
     }
@@ -403,6 +405,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   if (outcome.kind === "not_found") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (outcome.kind === "converted") {
+    return NextResponse.json(
+      { error: "Lead is converted and read-only" },
+      { status: 409 }
+    );
   }
   if (outcome.kind === "forbidden") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

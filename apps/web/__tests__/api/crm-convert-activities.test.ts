@@ -6,7 +6,12 @@ import { records, recordRelationships, schemaRelationships } from "@adserve/data
 import { getEntityTypeBySlug } from "@adserve/module-framework";
 import { CONTACT_BELONGS_TO_ACCOUNT } from "@adserve/crm";
 import { loadRecordWithRelationships } from "@/lib/crm/relationships";
-import { setupCrmTenant, teardownCrmTenant, type CrmTestSetup } from "../helpers/crm";
+import {
+  setupCrmTenant,
+  teardownCrmTenant,
+  setCrmModuleConfig,
+  type CrmTestSetup,
+} from "../helpers/crm";
 
 const authMock = vi.hoisted(() => vi.fn());
 vi.mock("@clerk/nextjs/server", () => ({ auth: authMock }));
@@ -30,6 +35,11 @@ const bare = () => new NextRequest("http://localhost");
 
 beforeAll(async () => {
   crm = await setupCrmTenant();
+  // Pin to the opportunity convert target for this legacy suite.
+  await setCrmModuleConfig(crm.tenantId, {
+    opportunities: true,
+    convertTarget: "opportunity",
+  });
   authMock.mockResolvedValue({
     userId: crm.owner.authProviderId,
     orgId: crm.clerkOrgId,
