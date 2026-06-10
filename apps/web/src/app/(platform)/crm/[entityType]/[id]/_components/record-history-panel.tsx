@@ -174,7 +174,7 @@ function rowsForEntry(entry: HistoryEntry): HistoryRow[] {
 export function RecordHistoryPanel({
   entitySegment,
   recordId,
-  title = "History",
+  title = "Audit History",
 }: RecordHistoryPanelProps) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,8 +204,10 @@ export function RecordHistoryPanel({
     };
   }, [entitySegment, recordId]);
 
-  const cellClass = "px-4 py-3 text-sm align-top";
-  const headClass = "px-4 py-3 text-left text-xs font-medium";
+  // Dense, read-only audit table — minimal row height so more changes are
+  // visible at once (this table is reference-only, rarely scrolled).
+  const cellClass = "px-3 py-1 text-xs align-top leading-tight";
+  const headClass = "px-3 py-1.5 text-left text-[11px] font-medium";
 
   const rows =
     entries == null ? [] : entries.flatMap((e) => rowsForEntry(e));
@@ -224,8 +226,8 @@ export function RecordHistoryPanel({
         </p>
       ) : (
         <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--border)]">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--table-header-bg)] text-left text-xs font-medium text-[var(--muted-foreground)]">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--table-header-bg)] text-left text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
               <tr>
                 <th className={headClass}>Field Name</th>
                 <th className={headClass}>New Value</th>

@@ -348,8 +348,12 @@ export function CrmDetailClient({
 
   // The "Details" form, reused as the first tab (account/opportunity variants)
   // and as the main column (contact/lead).
-  // Account-only "widget" panels placed by the layout's widget sections
-  // (Brands + Account History) — reorderable/hideable via the layout editor.
+  // "Widget" panels placed by the layout's widget sections (reorderable/hideable
+  // via the layout editor). The Audit History panel is shared by Account +
+  // Contact (the same component + name); Brands is Account-only.
+  const historyWidget: ReactNode = (
+    <RecordHistoryPanel entitySegment={collectionSegment} recordId={recordId} />
+  );
   const widgetRenderers: Record<string, ReactNode> | undefined =
     entitySlug === "account"
       ? {
@@ -360,15 +364,11 @@ export function CrmDetailClient({
               canEdit={canEdit}
             />
           ),
-          history: (
-            <RecordHistoryPanel
-              entitySegment={collectionSegment}
-              recordId={recordId}
-              title="Account History"
-            />
-          ),
+          history: historyWidget,
         }
-      : undefined;
+      : entitySlug === "contact"
+        ? { history: historyWidget }
+        : undefined;
 
   const formNode: ReactNode = (
     <div className="space-y-6">

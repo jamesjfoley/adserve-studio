@@ -157,31 +157,35 @@ export async function activateCrmForTenant(
     entityTypeIds[entitySpec.slug] = result.entityType.id;
   }
 
-  // The Account detail layout carries the Brands + Account History "widget"
-  // panels as layout sections, so the admin can reorder / show-hide them in the
-  // layout editor alongside the field panels (not just the page hard-coding
-  // them). Idempotent: append the widgets only when missing; create the layout
-  // if it's absent (e.g. a prototype tenant whose layout was reset).
-  const accountEntityId = entityTypeIds["account"];
-  if (accountEntityId) {
-    const accountWidgets = [
+  // Detail layouts carry "widget" panels as layout sections so the admin can
+  // reorder / show-hide them in the layout editor alongside the field panels.
+  // Account gets Brands + Audit History; Contact gets the same Audit History
+  // panel (consistent across entities). Idempotent: append widgets only when
+  // missing; create the layout if it's absent (e.g. a reset prototype tenant).
+  const widgetsByEntity: Record<string, { title: string; widget: string }[]> = {
+    account: [
       { title: "Brands", widget: "brands" },
-      { title: "Account History", widget: "history" },
-    ];
+      { title: "Audit History", widget: "history" },
+    ],
+    contact: [{ title: "Audit History", widget: "history" }],
+  };
+  for (const [entitySlug, widgets] of Object.entries(widgetsByEntity)) {
+    const entityId = entityTypeIds[entitySlug];
+    if (!entityId) continue;
     const existingLayout = await getDefaultLayout(tx, {
       tenantId,
-      entityTypeId: accountEntityId,
+      entityTypeId: entityId,
       layoutType: "detail",
     });
     if (!existingLayout) {
       const config = await generateDefaultLayoutConfig(tx, {
         tenantId,
-        entityTypeId: accountEntityId,
-        widgets: accountWidgets,
+        entityTypeId: entityId,
+        widgets,
       });
       await createLayout(tx, {
         tenantId,
-        entityTypeId: accountEntityId,
+        entityTypeId: entityId,
         layoutType: "detail",
         name: "Default",
         isDefault: true,
@@ -196,7 +200,7 @@ export async function activateCrmForTenant(
           config: {
             sections: [
               ...config.sections,
-              ...accountWidgets.map((w) => ({
+              ...widgets.map((w) => ({
                 title: w.title,
                 columns: 1 as const,
                 fieldIds: [],
