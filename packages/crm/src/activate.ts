@@ -10,7 +10,12 @@ import {
 } from "@adserve/database";
 import {
   provisionEntityType,
+  getDefaultLayout,
+  createLayout,
+  updateLayoutConfig,
+  generateDefaultLayoutConfig,
   type ProvisionFieldSpec,
+  type LayoutConfig,
 } from "@adserve/module-framework";
 import { CRM_ENTITY_TYPES } from "./entity-types";
 import { DEFAULT_FIELDS_BY_ENTITY } from "./field-definitions";
@@ -150,6 +155,58 @@ export async function activateCrmForTenant(
       settings,
     });
     entityTypeIds[entitySpec.slug] = result.entityType.id;
+  }
+
+  // The Account detail layout carries the Brands + Account History "widget"
+  // panels as layout sections, so the admin can reorder / show-hide them in the
+  // layout editor alongside the field panels (not just the page hard-coding
+  // them). Idempotent: append the widgets only when missing; create the layout
+  // if it's absent (e.g. a prototype tenant whose layout was reset).
+  const accountEntityId = entityTypeIds["account"];
+  if (accountEntityId) {
+    const accountWidgets = [
+      { title: "Brands", widget: "brands" },
+      { title: "Account History", widget: "history" },
+    ];
+    const existingLayout = await getDefaultLayout(tx, {
+      tenantId,
+      entityTypeId: accountEntityId,
+      layoutType: "detail",
+    });
+    if (!existingLayout) {
+      const config = await generateDefaultLayoutConfig(tx, {
+        tenantId,
+        entityTypeId: accountEntityId,
+        widgets: accountWidgets,
+      });
+      await createLayout(tx, {
+        tenantId,
+        entityTypeId: accountEntityId,
+        layoutType: "detail",
+        name: "Default",
+        isDefault: true,
+        config,
+      });
+    } else {
+      const config = existingLayout.config as LayoutConfig;
+      if (!config.sections.some((s) => s.widget)) {
+        await updateLayoutConfig(tx, {
+          layoutId: existingLayout.id,
+          tenantId,
+          config: {
+            sections: [
+              ...config.sections,
+              ...accountWidgets.map((w) => ({
+                title: w.title,
+                columns: 1 as const,
+                fieldIds: [],
+                widget: w.widget,
+              })),
+            ],
+          },
+        });
+      }
+    }
   }
 
   // Relationships — SELECT-then-INSERT keyed on the STABLE NATURAL KEY

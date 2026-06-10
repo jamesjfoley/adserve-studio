@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 
 interface LayoutSection {
   title: string;
-  columns: 1 | 2 | 3;
+  columns: 1 | 2 | 3 | 4;
   fieldIds: string[];
+  hidden?: boolean;
+  widget?: string;
 }
 interface LayoutConfig {
   sections: LayoutSection[];
@@ -34,11 +36,21 @@ export function LayoutEditor({
   const [saving, setSaving] = useState(false);
 
   const nameById = new Map(fields.map((f) => [f.id, f.name]));
-  const placed = new Set(sections.flatMap((s) => s.fieldIds));
+  // Only normal (non-widget) sections place fields; widget sections have none.
+  const placed = new Set(
+    sections.filter((s) => !s.widget).flatMap((s) => s.fieldIds)
+  );
   const unplaced = fields.filter((f) => !placed.has(f.id));
 
   function setSection(i: number, patch: Partial<LayoutSection>) {
     setSections(sections.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  }
+  function moveSection(i: number, dir: -1 | 1) {
+    const t = i + dir;
+    if (t < 0 || t >= sections.length) return;
+    const next = sections.slice();
+    [next[i], next[t]] = [next[t], next[i]];
+    setSections(next);
   }
   function moveField(si: number, fi: number, dir: -1 | 1) {
     const t = fi + dir;
@@ -105,94 +117,143 @@ export function LayoutEditor({
       )}
 
       <div className="space-y-4">
-        {sections.map((section, si) => (
-          <div
-            key={si}
-            className="rounded-xl border border-[var(--border)] p-4"
-          >
-            <div className="flex flex-wrap items-center gap-3">
-              <input
-                className={`${input} flex-1 min-w-[12rem] font-medium`}
-                value={section.title}
-                onChange={(e) => setSection(si, { title: e.target.value })}
-              />
-              <label className="flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
-                Columns
-                <select
-                  className={input}
-                  value={section.columns}
-                  onChange={(e) =>
-                    setSection(si, {
-                      columns: Number(e.target.value) as 1 | 2 | 3,
-                    })
-                  }
+        {sections.map((section, si) => {
+          const isWidget = Boolean(section.widget);
+          return (
+            <div
+              key={si}
+              className={`rounded-xl border border-[var(--border)] p-4 ${
+                section.hidden ? "opacity-50" : ""
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => moveSection(si, -1)}
+                  disabled={si === 0}
+                  className="rounded border border-[var(--border)] px-1 text-sm disabled:opacity-30"
+                  aria-label="Move section up"
                 >
-                  <option value={1}>1</option>
-                  <option value={2}>2</option>
-                  <option value={3}>3</option>
-                </select>
-              </label>
-              <button
-                onClick={() => removeSection(si)}
-                className="ml-auto text-xs text-red-600 hover:underline"
-              >
-                Remove section
-              </button>
-            </div>
-
-            <ul className="mt-3 space-y-1">
-              {section.fieldIds.map((id, fi) => (
-                <li
-                  key={id}
-                  className="flex items-center gap-2 rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+                  ↑
+                </button>
+                <button
+                  onClick={() => moveSection(si, 1)}
+                  disabled={si === sections.length - 1}
+                  className="rounded border border-[var(--border)] px-1 text-sm disabled:opacity-30"
+                  aria-label="Move section down"
                 >
-                  <button
-                    onClick={() => moveField(si, fi, -1)}
-                    disabled={fi === 0}
-                    className="rounded border border-[var(--border)] px-1 disabled:opacity-30"
-                    aria-label="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    onClick={() => moveField(si, fi, 1)}
-                    disabled={fi === section.fieldIds.length - 1}
-                    className="rounded border border-[var(--border)] px-1 disabled:opacity-30"
-                    aria-label="Move down"
-                  >
-                    ↓
-                  </button>
-                  <span className="flex-1">
-                    {nameById.get(id) ?? (
-                      <span className="text-red-600">unknown field</span>
-                    )}
+                  ↓
+                </button>
+                <input
+                  className={`${input} flex-1 min-w-[12rem] font-medium`}
+                  value={section.title}
+                  onChange={(e) => setSection(si, { title: e.target.value })}
+                />
+                {isWidget && (
+                  <span className="rounded-md bg-[var(--muted)] px-2 py-1 text-xs text-[var(--muted-foreground)]">
+                    {section.title} — panel ({section.widget})
                   </span>
-                  <button
-                    onClick={() => removeField(si, id)}
-                    className="text-xs text-[var(--muted-foreground)] hover:text-red-600"
-                  >
-                    remove
-                  </button>
-                </li>
-              ))}
-            </ul>
+                )}
+                {section.hidden && (
+                  <span className="rounded-md bg-[var(--muted)] px-2 py-1 text-xs font-medium text-[var(--muted-foreground)]">
+                    Hidden
+                  </span>
+                )}
+                {!isWidget && (
+                  <label className="flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
+                    Columns
+                    <select
+                      className={input}
+                      value={section.columns}
+                      onChange={(e) =>
+                        setSection(si, {
+                          columns: Number(e.target.value) as 1 | 2 | 3 | 4,
+                        })
+                      }
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                      <option value={4}>4</option>
+                    </select>
+                  </label>
+                )}
+                <label className="flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(section.hidden)}
+                    onChange={(e) =>
+                      setSection(si, { hidden: e.target.checked })
+                    }
+                    aria-label="Hidden"
+                  />
+                  Hidden
+                </label>
+                <button
+                  onClick={() => removeSection(si)}
+                  className="ml-auto text-xs text-red-600 hover:underline"
+                >
+                  Remove section
+                </button>
+              </div>
 
-            {unplaced.length > 0 && (
-              <select
-                className={`${input} mt-2`}
-                value=""
-                onChange={(e) => addField(si, e.target.value)}
-              >
-                <option value="">+ Add field…</option>
-                {unplaced.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        ))}
+              {!isWidget && (
+                <>
+                  <ul className="mt-3 space-y-1">
+                    {section.fieldIds.map((id, fi) => (
+                      <li
+                        key={id}
+                        className="flex items-center gap-2 rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+                      >
+                        <button
+                          onClick={() => moveField(si, fi, -1)}
+                          disabled={fi === 0}
+                          className="rounded border border-[var(--border)] px-1 disabled:opacity-30"
+                          aria-label="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          onClick={() => moveField(si, fi, 1)}
+                          disabled={fi === section.fieldIds.length - 1}
+                          className="rounded border border-[var(--border)] px-1 disabled:opacity-30"
+                          aria-label="Move down"
+                        >
+                          ↓
+                        </button>
+                        <span className="flex-1">
+                          {nameById.get(id) ?? (
+                            <span className="text-red-600">unknown field</span>
+                          )}
+                        </span>
+                        <button
+                          onClick={() => removeField(si, id)}
+                          className="text-xs text-[var(--muted-foreground)] hover:text-red-600"
+                        >
+                          remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {unplaced.length > 0 && (
+                    <select
+                      className={`${input} mt-2`}
+                      value=""
+                      onChange={(e) => addField(si, e.target.value)}
+                    >
+                      <option value="">+ Add field…</option>
+                      {unplaced.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-4 flex gap-2">

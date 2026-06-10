@@ -77,9 +77,20 @@ export type FieldDefinitionWithLabels = FieldDefinition;
  */
 export interface LayoutSection {
   title: string;
-  columns: 1 | 2 | 3;
+  columns: 1 | 2 | 3 | 4;
   /** Field definition IDs in display order within this section. */
   fieldIds: string[];
+  /**
+   * When true the section is configured but NOT rendered on the detail page
+   * (show/hide, distinct from removing it — the fields/widget are retained).
+   */
+  hidden?: boolean;
+  /**
+   * Marks a non-field "widget" panel (e.g. "brands", "history") rendered by a
+   * registered component instead of a field grid; `fieldIds` is empty. Lets
+   * special panels be reordered/hidden alongside field panels in the editor.
+   */
+  widget?: string;
 }
 
 export interface LayoutConfig {

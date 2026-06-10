@@ -1,6 +1,12 @@
 "use client";
 
-import { useId, useMemo, useState, type FormEvent } from "react";
+import {
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { coerceFieldValue } from "@adserve/module-framework/client";
 import type {
   FieldDefinitionWithLabels,
@@ -33,6 +39,13 @@ export interface DynamicFormProps {
   /** Locale for label resolution + value formatting. Defaults to "en". */
   locale?: string;
   className?: string;
+  /**
+   * Renderers for non-field "widget" layout sections, keyed by `section.widget`
+   * (e.g. { brands: <BrandsPanel/>, history: <RecordHistoryPanel/> }). A widget
+   * section renders its node in place (the component supplies its own panel) so
+   * special panels participate in the layout's order + show/hide.
+   */
+  widgetRenderers?: Record<string, ReactNode>;
 }
 
 /**
@@ -93,6 +106,7 @@ export function DynamicForm({
   submitLabel,
   locale = "en",
   className,
+  widgetRenderers,
 }: DynamicFormProps) {
   const formId = useId();
   const [state, setState] = useState<Record<string, unknown>>(() =>
@@ -165,53 +179,70 @@ export function DynamicForm({
       noValidate
       aria-busy={submitting}
     >
-      {layoutConfig.sections.map((section, sIdx) => (
-        // Each section is a shaded Panel — distinguishing panel surface from the
-        // page background, with the inputs (--background) sitting on the panel.
-        // The first section is always open and not collapsible; every later
-        // section is collapsible (open by default, user can close it).
-        <CollapsiblePanel
-          key={`${section.title}-${sIdx}`}
-          as="section"
-          title={section.title}
-          aria-label={section.title}
-          collapsible={sIdx >= 1}
-          defaultOpen
-        >
-          <div
-            className={cn(
-              "mt-3 grid gap-4",
-              section.columns === 1 && "grid-cols-1",
-              section.columns === 2 && "grid-cols-1 sm:grid-cols-2",
-              section.columns === 3 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-            )}
-          >
-            {section.fieldIds.map((fieldId) => {
-              const field = fieldsById.get(fieldId);
-              if (!field) return null; // shouldn't happen — layout was validated
-              const inputId = `${formId}-${field.id}`;
-              // A field can be inactive for data-entry — statically
-              // (`options.readOnly`) or conditionally (`options.disabledWhen`,
-              // e.g. the site-address fields while "Same as account" is ticked).
-              // It's rendered read-only (view mode) within the editable form.
-              const fieldMode =
-                mode !== "view" && fieldInactive(field, state) ? "view" : mode;
-              return (
-                <FieldRenderer
-                  key={field.id}
-                  field={field}
-                  value={state[field.slug]}
-                  onChange={(next) => setSlug(field.slug, next)}
-                  mode={fieldMode}
-                  error={errors[field.slug] ?? null}
-                  locale={locale}
-                  inputId={inputId}
-                />
-              );
-            })}
-          </div>
-        </CollapsiblePanel>
-      ))}
+      {(() => {
+        // Hidden sections are configured but not rendered. The first VISIBLE
+        // section is always open + non-collapsible; the rest are collapsible
+        // accordions (open by default).
+        const firstVisible = layoutConfig.sections.findIndex((s) => !s.hidden);
+        return layoutConfig.sections.map((section, sIdx) => {
+          if (section.hidden) return null;
+
+          // Widget section: render its registered node in place (the widget
+          // supplies its own panel) so it participates in layout order.
+          if (section.widget) {
+            const node = widgetRenderers?.[section.widget];
+            return node ? (
+              <div key={`${section.title}-${sIdx}`}>{node}</div>
+            ) : null;
+          }
+
+          return (
+            <CollapsiblePanel
+              key={`${section.title}-${sIdx}`}
+              as="section"
+              title={section.title}
+              aria-label={section.title}
+              collapsible={sIdx !== firstVisible}
+              defaultOpen
+            >
+              <div
+                className={cn(
+                  "mt-3 grid gap-4",
+                  section.columns === 1 && "grid-cols-1",
+                  section.columns === 2 && "grid-cols-1 sm:grid-cols-2",
+                  section.columns === 3 &&
+                    "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+                  section.columns === 4 &&
+                    "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+                )}
+              >
+                {section.fieldIds.map((fieldId) => {
+                  const field = fieldsById.get(fieldId);
+                  if (!field) return null; // shouldn't happen — layout was validated
+                  const inputId = `${formId}-${field.id}`;
+                  // A field can be inactive for data-entry — statically
+                  // (`options.readOnly`) or conditionally (`options.disabledWhen`,
+                  // e.g. site-address fields while "Same as account" is ticked).
+                  const fieldMode =
+                    mode !== "view" && fieldInactive(field, state) ? "view" : mode;
+                  return (
+                    <FieldRenderer
+                      key={field.id}
+                      field={field}
+                      value={state[field.slug]}
+                      onChange={(next) => setSlug(field.slug, next)}
+                      mode={fieldMode}
+                      error={errors[field.slug] ?? null}
+                      locale={locale}
+                      inputId={inputId}
+                    />
+                  );
+                })}
+              </div>
+            </CollapsiblePanel>
+          );
+        });
+      })()}
 
       {submitError ? (
         <p className="text-sm text-red-600" role="alert">

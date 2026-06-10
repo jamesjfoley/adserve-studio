@@ -44,7 +44,7 @@ const ALLOWED_LAYOUT_TYPES: ReadonlySet<LayoutType> = new Set([
   "card",
 ]);
 
-const VALID_COLUMN_COUNTS = new Set([1, 2, 3]);
+const VALID_COLUMN_COUNTS = new Set([1, 2, 3, 4]);
 
 export interface CreateLayoutInput {
   tenantId: string;
@@ -76,6 +76,12 @@ export interface GetDefaultLayoutArgs {
 export interface GenerateDefaultLayoutConfigArgs {
   tenantId: string;
   entityTypeId: string;
+  /**
+   * Non-field "widget" panels to append after the field sections (e.g. the
+   * account's Brands + Account History panels), so they're part of the default
+   * layout and reorderable/hideable in the editor.
+   */
+  widgets?: { title: string; widget: string }[];
 }
 
 export interface ValidateLayoutConfigArgs {
@@ -315,8 +321,15 @@ export async function generateDefaultLayoutConfig(
 ): Promise<LayoutConfig> {
   const fields = await listFieldDefinitions(tx, args);
 
+  const widgetSections: LayoutSection[] = (args.widgets ?? []).map((w) => ({
+    title: w.title,
+    columns: 1,
+    fieldIds: [],
+    widget: w.widget,
+  }));
+
   if (fields.length === 0) {
-    return { sections: [] };
+    return { sections: widgetSections };
   }
 
   // Group by groupName, treating null/empty as DEFAULT_GROUP_NAME.
@@ -364,7 +377,7 @@ export async function generateDefaultLayoutConfig(
       };
     });
 
-  return { sections: sortedSections };
+  return { sections: [...sortedSections, ...widgetSections] };
 }
 
 /**
@@ -414,7 +427,7 @@ export async function validateLayoutConfig(
     if (!VALID_COLUMN_COUNTS.has(section.columns)) {
       errors.push({
         code: "invalid_columns",
-        message: `Section ${i} ("${section.title}"): columns must be 1, 2, or 3 (got ${section.columns}).`,
+        message: `Section ${i} ("${section.title}"): columns must be 1, 2, 3 or 4 (got ${section.columns}).`,
         details: { sectionIndex: i, columns: section.columns },
       });
     }

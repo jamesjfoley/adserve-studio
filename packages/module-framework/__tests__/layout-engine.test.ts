@@ -666,7 +666,7 @@ describe("layout engine — validateLayoutConfig", () => {
           sections: [
             {
               title: "S",
-              columns: 4 as unknown as 1 | 2 | 3,
+              columns: 5 as unknown as 1 | 2 | 3 | 4,
               fieldIds: [fields[0].id],
             },
           ],
@@ -694,7 +694,7 @@ describe("layout engine — validateLayoutConfig", () => {
           sections: [
             {
               title: "Mess",
-              columns: 4 as unknown as 1 | 2 | 3,
+              columns: 5 as unknown as 1 | 2 | 3 | 4,
               fieldIds: [
                 fields[0].id,
                 fields[0].id, // duplicate

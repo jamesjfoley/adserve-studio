@@ -348,8 +348,30 @@ export function CrmDetailClient({
 
   // The "Details" form, reused as the first tab (account/opportunity variants)
   // and as the main column (contact/lead).
+  // Account-only "widget" panels placed by the layout's widget sections
+  // (Brands + Account History) — reorderable/hideable via the layout editor.
+  const widgetRenderers: Record<string, ReactNode> | undefined =
+    entitySlug === "account"
+      ? {
+          brands: (
+            <BrandsPanel
+              accountId={recordId}
+              items={relationships.brand ?? []}
+              canEdit={canEdit}
+            />
+          ),
+          history: (
+            <RecordHistoryPanel
+              entitySegment={collectionSegment}
+              recordId={recordId}
+              title="Account History"
+            />
+          ),
+        }
+      : undefined;
+
   const formNode: ReactNode = (
-    <div>
+    <div className="space-y-6">
       <DynamicForm
         key={mode}
         layoutConfig={layoutConfig}
@@ -360,6 +382,7 @@ export function CrmDetailClient({
         submitError={editError}
         submitLabel="Save changes"
         locale={locale}
+        widgetRenderers={widgetRenderers}
       />
       {mode === "edit" ? (
         <button
@@ -474,26 +497,12 @@ export function CrmDetailClient({
 
   let tabs: DetailTab[] = [];
   if (isAccount) {
-    // The Details tab stacks the field panels (DynamicForm — first panel open,
-    // the rest collapsible accordions) followed by the Brands child-record
-    // panel and the Account History (audit) panel, both collapsible.
-    const accountDetails: ReactNode = (
-      <div className="space-y-6">
-        {formNode}
-        <BrandsPanel
-          accountId={recordId}
-          items={relationships.brand ?? []}
-          canEdit={canEdit}
-        />
-        <RecordHistoryPanel
-          entitySegment={collectionSegment}
-          recordId={recordId}
-          title="Account History"
-        />
-      </div>
-    );
+    // The Details tab is fully layout-driven: DynamicForm renders the field
+    // panels (first open, rest collapsible accordions) AND the Brands +
+    // Account History widget panels in their configured layout order, honouring
+    // show/hide + reorder from the layout editor.
     tabs = [
-      { id: "details", label: "Details", content: accountDetails },
+      { id: "details", label: "Details", content: formNode },
       ...(activityNode
         ? [{ id: "activity", label: "Activity", content: activityNode }]
         : []),
