@@ -41,10 +41,12 @@ async function setup(tx: Tx) {
     tenantId: tenant.id,
     userId: user.id,
     oppType: typeId("opportunity"),
+    campaignType: typeId("campaign"),
     accountType: typeId("account"),
     contactType: typeId("contact"),
     acctRel: relId("opportunity_belongs_to_account"),
     contactRel: relId("opportunity_has_primary_contact"),
+    campaignAcctRel: relId("campaign_belongs_to_account"),
   };
 }
 
@@ -176,6 +178,80 @@ describe("loadPipelineBoard", () => {
       const board = await loadPipelineBoard(tx, { tenantId: s.tenantId });
       const qual = board!.columns.find((c) => c.slug === "qualification")!;
       expect(qual.count).toBe(0);
+    });
+  });
+
+  test("campaign board uses CAMPAIGN_STAGES and sums the `value` field", async () => {
+    await withTestTransaction(async (tx) => {
+      const s = await setup(tx);
+      await insertRecord(tx, s.tenantId, s.campaignType, {
+        name: "Spring push",
+        stage: "planning",
+        value: amount(8000),
+      });
+      await insertRecord(tx, s.tenantId, s.campaignType, {
+        name: "Summer",
+        stage: "live",
+        value: amount(2000),
+      });
+      // An opportunity must NOT appear on the campaign board (separate stage set).
+      await insertRecord(tx, s.tenantId, s.oppType, {
+        name: "An opp",
+        stage: "qualification",
+        amount: amount(9999),
+      });
+
+      const board = await loadPipelineBoard(tx, {
+        tenantId: s.tenantId,
+        entity: "campaign",
+      });
+      expect(board).not.toBeNull();
+      expect(board!.columns.map((c) => c.slug)).toEqual([
+        "brief",
+        "planning",
+        "booking",
+        "live",
+        "pca",
+        "lost",
+      ]);
+      const planning = board!.columns.find((c) => c.slug === "planning")!;
+      expect(planning.count).toBe(1);
+      expect(planning.total).toBe(8000); // read from `value`, not `amount`
+      const live = board!.columns.find((c) => c.slug === "live")!;
+      expect(live.total).toBe(2000);
+      // The opportunity is absent from the campaign board.
+      const allNames = board!.columns.flatMap((c) =>
+        c.cards.map((card) => card.name)
+      );
+      expect(allNames).not.toContain("An opp");
+    });
+  });
+
+  test("campaign board resolves the account name via campaign_belongs_to_account", async () => {
+    await withTestTransaction(async (tx) => {
+      const s = await setup(tx);
+      const campId = await insertRecord(tx, s.tenantId, s.campaignType, {
+        name: "Promo",
+        stage: "brief",
+      });
+      const accId = await insertRecord(tx, s.tenantId, s.accountType, {
+        name: "Advertiser Ltd",
+      });
+      await tx.insert(recordRelationships).values({
+        tenantId: s.tenantId,
+        relationshipId: s.campaignAcctRel,
+        sourceRecordId: campId,
+        targetRecordId: accId,
+      });
+
+      const board = await loadPipelineBoard(tx, {
+        tenantId: s.tenantId,
+        entity: "campaign",
+      });
+      const card = board!.columns
+        .find((c) => c.slug === "brief")!
+        .cards.find((c) => c.id === campId)!;
+      expect(card.accountName).toBe("Advertiser Ltd");
     });
   });
 

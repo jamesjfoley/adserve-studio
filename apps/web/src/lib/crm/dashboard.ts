@@ -32,23 +32,36 @@ export async function pipelineValueByStage(
   tx: typeof db,
   args: {
     tenantId: string;
-    opportunityEntityTypeId: string;
+    /** The pipeline entity's entity_type id (campaign or opportunity). */
+    entityTypeId?: string;
+    /**
+     * Back-compat alias for `entityTypeId` (opportunity-only callers). Either
+     * this or `entityTypeId` must be supplied.
+     */
+    opportunityEntityTypeId?: string;
+    /** Currency field slug summed for the value: `value` / `amount`. */
+    valueField?: string;
     stages: PipelineStageRef[];
   }
 ): Promise<PipelineStageValue[]> {
-  const { tenantId, opportunityEntityTypeId, stages } = args;
+  const { tenantId, stages } = args;
+  const entityTypeId = args.entityTypeId ?? args.opportunityEntityTypeId;
+  const valueField = args.valueField ?? "amount";
+  if (!entityTypeId) {
+    throw new Error("pipelineValueByStage requires entityTypeId");
+  }
 
   const rows = await tx
     .select({
       stage: sql<string | null>`${records.data} ->> 'stage'`,
-      total: sql<string>`coalesce(sum(coalesce(nullif(${records.data} -> 'amount' ->> 'amount', '')::numeric, 0)), 0)`,
+      total: sql<string>`coalesce(sum(coalesce(nullif(${records.data} -> ${valueField} ->> 'amount', '')::numeric, 0)), 0)`,
       count: sql<number>`count(*)::int`,
     })
     .from(records)
     .where(
       and(
         eq(records.tenantId, tenantId),
-        eq(records.entityTypeId, opportunityEntityTypeId),
+        eq(records.entityTypeId, entityTypeId),
         eq(records.isArchived, false)
       )
     )

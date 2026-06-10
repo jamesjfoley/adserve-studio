@@ -47,9 +47,10 @@ describe("/crm dashboard page data path (loadCrmDashboardData) under enforced RL
     const data = await loadCrmDashboardData({
       tenantId: tenantA.tenantId,
       readableSlugs: ALL_SLUGS,
-      canPipeline: true,
+      pipelineEntities: ["campaign", "opportunity"],
       canLead: true,
       canActivities: true,
+      canForecast: true,
     });
     const recentIds = data.recent.map((r) => r.id);
     expect(recentIds).toContain(aId); // positive: page's withTenant established context

@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { entityTypes, withTenant } from "@adserve/database";
+import type { PipelineEntity } from "./pipeline";
 import {
   leadConversionFunnel,
   pipelineValueByStage,
@@ -13,13 +14,41 @@ import {
   type UpcomingActivity,
 } from "./dashboard";
 
-const CRM_ENTITY_SLUGS = ["account", "contact", "lead", "opportunity"] as const;
+const CRM_ENTITY_SLUGS = [
+  "account",
+  "contact",
+  "lead",
+  "campaign",
+  "opportunity",
+] as const;
+
+/** Value field per pipeline entity (mirrors pipeline.ts). */
+const PIPELINE_VALUE_FIELD: Record<PipelineEntity, string> = {
+  campaign: "value",
+  opportunity: "amount",
+};
+
+const PIPELINE_LABEL: Record<PipelineEntity, string> = {
+  campaign: "Campaign pipeline by stage",
+  opportunity: "Opportunity pipeline by stage",
+};
+
+/** One aggregated pipeline section (a campaign board or an opportunity board). */
+export interface PipelineSection {
+  entity: PipelineEntity;
+  label: string;
+  /** Noun for KPI copy: "campaign" / "opportunity". */
+  noun: string;
+  stages: PipelineStageValue[];
+}
 
 export interface CrmDashboardData {
-  pipeline: PipelineStageValue[];
+  /** One section per enabled pipeline entity, campaign-first. */
+  pipelines: PipelineSection[];
   upcoming: UpcomingActivity[];
   recent: RecentRecord[];
   funnel: LeadFunnelStage[];
+  /** Weighted forecast — opportunity-only (campaign has no probability). */
   forecast: RevenueForecast | null;
 }
 
@@ -28,16 +57,29 @@ const ymd = (d: Date) => d.toISOString().slice(0, 10);
 /**
  * Server-side data path for the CRM dashboard (/crm). Extracted from the page
  * so it is testable under enforced RLS (owns the page's withTenant call).
- * Permission flags are resolved by the caller (page) and passed in.
+ *
+ * Module-aware + campaign-first: aggregates a pipeline section for each enabled
+ * pipeline entity (campaign when `campaigns`, opportunity when `opportunities`),
+ * campaign first. The weighted revenue forecast stays opportunity-only.
  */
 export async function loadCrmDashboardData(args: {
   tenantId: string;
   readableSlugs: string[];
-  canPipeline: boolean;
+  /** Which pipeline entities to aggregate, campaign-first. */
+  pipelineEntities: PipelineEntity[];
   canLead: boolean;
   canActivities: boolean;
+  /** Whether the opportunity forecast should be computed (opportunity-only). */
+  canForecast: boolean;
 }): Promise<CrmDashboardData> {
-  const { tenantId, readableSlugs, canPipeline, canLead, canActivities } = args;
+  const {
+    tenantId,
+    readableSlugs,
+    pipelineEntities,
+    canLead,
+    canActivities,
+    canForecast,
+  } = args;
 
   const today = new Date();
   const weekOut = new Date(today);
@@ -64,23 +106,32 @@ export async function loadCrmDashboardData(args: {
       );
 
     const bySlug = new Map(types.map((t) => [t.slug, t]));
-    const opportunity = bySlug.get("opportunity");
 
     const readableIds = readableSlugs
       .map((s) => bySlug.get(s)?.id)
       .filter((id): id is string => Boolean(id));
 
-    let pipeline: PipelineStageValue[] = [];
-    if (canPipeline && opportunity) {
+    // Aggregate each enabled pipeline entity from ITS OWN stage set
+    // (settings.pipelineStages) — campaign and opportunity never merge.
+    const pipelines: PipelineSection[] = [];
+    for (const entity of pipelineEntities) {
+      const type = bySlug.get(entity);
+      if (!type) continue;
       const stages = (
-        (opportunity.settings as {
-          pipelineStages?: { slug: string; name: string }[];
-        })?.pipelineStages ?? []
+        (type.settings as { pipelineStages?: { slug: string; name: string }[] })
+          ?.pipelineStages ?? []
       ).map((s) => ({ slug: s.slug, name: s.name }));
-      pipeline = await pipelineValueByStage(tx, {
+      const stageValues = await pipelineValueByStage(tx, {
         tenantId,
-        opportunityEntityTypeId: opportunity.id,
+        entityTypeId: type.id,
+        valueField: PIPELINE_VALUE_FIELD[entity],
         stages,
+      });
+      pipelines.push({
+        entity,
+        label: PIPELINE_LABEL[entity],
+        noun: entity,
+        stages: stageValues,
       });
     }
 
@@ -109,7 +160,8 @@ export async function loadCrmDashboardData(args: {
     }
 
     let forecast: RevenueForecast | null = null;
-    if (canPipeline && opportunity) {
+    const opportunity = bySlug.get("opportunity");
+    if (canForecast && opportunity) {
       forecast = await revenueForecast(tx, {
         tenantId,
         opportunityEntityTypeId: opportunity.id,
@@ -120,6 +172,6 @@ export async function loadCrmDashboardData(args: {
       });
     }
 
-    return { pipeline, upcoming, recent, funnel, forecast };
+    return { pipelines, upcoming, recent, funnel, forecast };
   });
 }

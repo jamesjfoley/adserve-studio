@@ -20,7 +20,11 @@ import {
   roles,
   schemaRelationships,
 } from "@adserve/database";
-import { DEFAULT_CRM_ROLE_PERMISSIONS } from "@adserve/crm";
+import {
+  DEFAULT_CRM_ROLE_PERMISSIONS,
+  CRM_ENTITY_TYPES,
+  CRM_RELATIONSHIPS,
+} from "@adserve/crm";
 
 /**
  * Smoke test: the dev provisioning endpoint triggers CRM activation
@@ -83,7 +87,7 @@ describe("GET /api/dev/provision-tenant → CRM activation", () => {
     vi.unstubAllEnvs();
   });
 
-  test("provisioning a tenant registers 4 entity types + 5 relationships", async () => {
+  test("provisioning a tenant registers all CRM entity types + relationships", async () => {
     const { GET } = await import(
       "@/app/api/dev/provision-tenant/route"
     );
@@ -99,18 +103,15 @@ describe("GET /api/dev/provision-tenant → CRM activation", () => {
       .select()
       .from(entityTypes)
       .where(eq(entityTypes.tenantId, tenantId));
-    expect(ets.map((e) => e.slug).sort()).toEqual([
-      "account",
-      "contact",
-      "lead",
-      "opportunity",
-    ]);
+    expect(ets.map((e) => e.slug).sort()).toEqual(
+      CRM_ENTITY_TYPES.map((e) => e.slug).sort()
+    );
 
     const rels = await testDb
       .select()
       .from(schemaRelationships)
       .where(eq(schemaRelationships.tenantId, tenantId));
-    expect(rels).toHaveLength(5);
+    expect(rels).toHaveLength(CRM_RELATIONSHIPS.length);
 
     // Member role got exactly the 7 CRM grants from activation (the
     // provisioning route itself grants member nothing).

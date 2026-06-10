@@ -4,6 +4,7 @@ import { listActiveMembers, type TenantMember } from "./members";
 import {
   loadPipelineBoard,
   type PipelineBoardData,
+  type PipelineEntity,
   type PipelineFilters,
 } from "./pipeline";
 
@@ -24,12 +25,13 @@ export interface PipelinePageData {
  */
 export async function loadPipelineData(args: {
   tenantId: string;
+  entity?: PipelineEntity;
   filters?: PipelineFilters;
 }): Promise<PipelinePageData> {
-  const { tenantId, filters = {} } = args;
+  const { tenantId, entity = "opportunity", filters = {} } = args;
 
   return withTenant(tenantId, async (tx) => {
-    const board = await loadPipelineBoard(tx, { tenantId, filters });
+    const board = await loadPipelineBoard(tx, { tenantId, entity, filters });
     const members = await listActiveMembers(tx, tenantId);
 
     const [accountType] = await tx

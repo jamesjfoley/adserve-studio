@@ -3,7 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/crm/format";
-import type { PipelineColumn, PipelineFilters } from "@/lib/crm/pipeline";
+import type {
+  PipelineColumn,
+  PipelineEntity,
+  PipelineFilters,
+} from "@/lib/crm/pipeline";
 
 interface Member {
   id: string;
@@ -15,6 +19,7 @@ interface Account {
 }
 
 interface Props {
+  entity: PipelineEntity;
   columns: PipelineColumn[];
   currency: string;
   members: Member[];
@@ -26,7 +31,37 @@ interface Props {
 
 const OTHER_SLUG = "__other__";
 
+/**
+ * Per-entity wiring. Campaigns persist a stage move via the generic record
+ * PATCH (`/api/crm/campaigns/[id]` with `{ data: { stage } }`), which is gated
+ * by `campaign.update`. Opportunities keep the legacy pipeline endpoint
+ * (`/api/crm/pipeline/[id]` with `{ stage }`), gated by `pipeline.update`.
+ */
+const ENTITY_WIRING: Record<
+  PipelineEntity,
+  {
+    label: string;
+    detailSegment: string;
+    moveUrl: (id: string) => string;
+    moveBody: (stage: string) => string;
+  }
+> = {
+  campaign: {
+    label: "campaigns",
+    detailSegment: "campaigns",
+    moveUrl: (id) => `/api/crm/campaigns/${id}`,
+    moveBody: (stage) => JSON.stringify({ data: { stage } }),
+  },
+  opportunity: {
+    label: "opportunities",
+    detailSegment: "opportunities",
+    moveUrl: (id) => `/api/crm/pipeline/${id}`,
+    moveBody: (stage) => JSON.stringify({ stage }),
+  },
+};
+
 export function PipelineBoard({
+  entity,
   columns: initialColumns,
   currency,
   members,
@@ -35,6 +70,7 @@ export function PipelineBoard({
   canMove,
   locale,
 }: Props) {
+  const wiring = ENTITY_WIRING[entity];
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [columns, setColumns] = useState(initialColumns);
@@ -78,10 +114,10 @@ export function PipelineBoard({
     setColumns(next);
 
     try {
-      const res = await fetch(`/api/crm/pipeline/${cardId}`, {
+      const res = await fetch(wiring.moveUrl(cardId), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: toSlug }),
+        body: wiring.moveBody(toSlug),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -99,12 +135,15 @@ export function PipelineBoard({
   function applyFilter(patch: Partial<PipelineFilters>) {
     const merged = { ...filters, ...patch };
     const params = new URLSearchParams();
+    // Keep the active board selected when both pipelines are enabled.
+    params.set("entity", entity);
     if (merged.owner) params.set("owner", merged.owner);
     if (merged.accountId) params.set("accountId", merged.accountId);
     if (merged.closeDateFrom) params.set("closeDateFrom", merged.closeDateFrom);
     if (merged.closeDateTo) params.set("closeDateTo", merged.closeDateTo);
-    const qs = params.toString();
-    startTransition(() => router.push(qs ? `/crm/pipeline?${qs}` : "/crm/pipeline"));
+    startTransition(() =>
+      router.push(`/crm/pipeline?${params.toString()}`)
+    );
   }
 
   const inputClass =
@@ -221,7 +260,7 @@ export function PipelineBoard({
               <div className="flex flex-col gap-2 p-2">
                 {col.cards.length === 0 && (
                   <p className="px-1 py-4 text-center text-xs text-[var(--muted-foreground)]">
-                    No opportunities
+                    No {wiring.label}
                   </p>
                 )}
                 {col.cards.map((card) => (
@@ -236,7 +275,7 @@ export function PipelineBoard({
                     onDragEnd={() => setDragCardId(null)}
                     onClick={() =>
                       startTransition(() =>
-                        router.push(`/crm/opportunities/${card.id}`)
+                        router.push(`/crm/${wiring.detailSegment}/${card.id}`)
                       )
                     }
                     className={`cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-sm shadow-sm transition ${

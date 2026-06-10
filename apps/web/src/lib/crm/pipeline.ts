@@ -59,14 +59,37 @@ export interface PipelineBoardData {
   currency: string;
 }
 
+/**
+ * Which pipeline entity a board is built for. Campaign and opportunity each
+ * have their OWN stage set (never merged) and their own value field slug
+ * (`value` vs `amount`) — see PIPELINE_ENTITY_CONFIG below.
+ */
+export type PipelineEntity = "campaign" | "opportunity";
+
+interface PipelineEntityConfig {
+  slug: PipelineEntity;
+  /** Currency field slug on records.data ({ amount, currency } shape). */
+  valueField: string;
+  /** Optional date field surfaced on the card (display only). */
+  dateField: string;
+}
+
+const PIPELINE_ENTITY_CONFIG: Record<PipelineEntity, PipelineEntityConfig> = {
+  campaign: { slug: "campaign", valueField: "value", dateField: "flightEnd" },
+  opportunity: { slug: "opportunity", valueField: "amount", dateField: "closeDate" },
+};
+
 const DEFAULT_CURRENCY = "GBP";
 const OTHER_SLUG = "__other__";
 
-function readAmount(data: Record<string, unknown>): {
+function readAmount(
+  data: Record<string, unknown>,
+  field: string
+): {
   amount: number | null;
   currency: string;
 } {
-  const raw = data.amount as
+  const raw = data[field] as
     | { amount?: number | string; currency?: string }
     | undefined;
   if (!raw || raw.amount === undefined || raw.amount === null || raw.amount === "") {
@@ -87,11 +110,12 @@ function readAmount(data: Record<string, unknown>): {
  */
 export async function loadPipelineBoard(
   tx: typeof db,
-  args: { tenantId: string; filters?: PipelineFilters }
+  args: { tenantId: string; entity?: PipelineEntity; filters?: PipelineFilters }
 ): Promise<PipelineBoardData | null> {
-  const { tenantId, filters = {} } = args;
+  const { tenantId, entity = "opportunity", filters = {} } = args;
+  const cfg = PIPELINE_ENTITY_CONFIG[entity];
 
-  // Entity types we need (opportunity for the board, account for names).
+  // Entity types we need (the pipeline entity for the board, account for names).
   const types = await tx
     .select({
       id: entityTypes.id,
@@ -102,23 +126,26 @@ export async function loadPipelineBoard(
     .where(
       and(
         eq(entityTypes.tenantId, tenantId),
-        inArray(entityTypes.slug, ["opportunity", "account"])
+        inArray(entityTypes.slug, [cfg.slug, "account"])
       )
     );
-  const opp = types.find((t) => t.slug === "opportunity");
+  const dealType = types.find((t) => t.slug === cfg.slug);
   const account = types.find((t) => t.slug === "account");
-  if (!opp) return null;
+  if (!dealType) return null;
 
+  // Stage set comes from THIS entity's settings.pipelineStages — campaign
+  // (CAMPAIGN_STAGES) and opportunity (DEFAULT_PIPELINE_STAGES) are stamped
+  // separately at activation, so the two boards never share a column set.
   const stages =
-    ((opp.settings as { pipelineStages?: PipelineStageSpec[] } | null)
+    ((dealType.settings as { pipelineStages?: PipelineStageSpec[] } | null)
       ?.pipelineStages ?? [])
       .slice()
       .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  // ----- opportunity WHERE -----
+  // ----- deal WHERE -----
   const conditions = [
     eq(records.tenantId, tenantId),
-    eq(records.entityTypeId, opp.id),
+    eq(records.entityTypeId, dealType.id),
     eq(records.isArchived, false),
   ];
 
@@ -129,18 +156,18 @@ export async function loadPipelineBoard(
   }
   if (filters.closeDateFrom) {
     conditions.push(
-      sql`(${records.data} ->> 'closeDate')::date >= ${filters.closeDateFrom}::date`
+      sql`(${records.data} ->> ${cfg.dateField})::date >= ${filters.closeDateFrom}::date`
     );
   }
   if (filters.closeDateTo) {
     conditions.push(
-      sql`(${records.data} ->> 'closeDate')::date <= ${filters.closeDateTo}::date`
+      sql`(${records.data} ->> ${cfg.dateField})::date <= ${filters.closeDateTo}::date`
     );
   }
   if (filters.accountId) {
-    // Opportunities related to this account (opp is the source).
-    const relatedOpps = await tx
-      .select({ oppId: recordRelationships.sourceRecordId })
+    // Deals related to this account (the deal is the source).
+    const relatedDeals = await tx
+      .select({ dealId: recordRelationships.sourceRecordId })
       .from(recordRelationships)
       .where(
         and(
@@ -148,25 +175,25 @@ export async function loadPipelineBoard(
           eq(recordRelationships.targetRecordId, filters.accountId)
         )
       );
-    const oppIds = relatedOpps.map((r) => r.oppId);
-    if (oppIds.length === 0) {
+    const dealIds = relatedDeals.map((r) => r.dealId);
+    if (dealIds.length === 0) {
       return { columns: buildColumns(stages, []), currency: DEFAULT_CURRENCY };
     }
-    conditions.push(inArray(records.id, oppIds));
+    conditions.push(inArray(records.id, dealIds));
   }
 
-  const oppRows = await tx
+  const dealRows = await tx
     .select()
     .from(records)
     .where(and(...conditions));
 
   // ----- bulk account-name resolution (filter target to ACCOUNT type) -----
-  const accountNameByOpp = new Map<string, string>();
-  if (account && oppRows.length > 0) {
+  const accountNameByDeal = new Map<string, string>();
+  if (account && dealRows.length > 0) {
     const acc = alias(records, "acc");
     const relRows = await tx
       .select({
-        oppId: recordRelationships.sourceRecordId,
+        dealId: recordRelationships.sourceRecordId,
         accountData: acc.data,
       })
       .from(recordRelationships)
@@ -183,32 +210,33 @@ export async function loadPipelineBoard(
           eq(recordRelationships.tenantId, tenantId),
           inArray(
             recordRelationships.sourceRecordId,
-            oppRows.map((o) => o.id)
+            dealRows.map((o) => o.id)
           )
         )
       );
     for (const r of relRows) {
       const name = (r.accountData as Record<string, unknown>)?.name;
-      if (typeof name === "string" && !accountNameByOpp.has(r.oppId)) {
-        accountNameByOpp.set(r.oppId, name);
+      if (typeof name === "string" && !accountNameByDeal.has(r.dealId)) {
+        accountNameByDeal.set(r.dealId, name);
       }
     }
   }
 
-  const cards: PipelineCard[] = oppRows.map((row) => {
+  const cards: PipelineCard[] = dealRows.map((row) => {
     const data = (row.data as Record<string, unknown>) ?? {};
-    const { amount, currency } = readAmount(data);
+    const { amount, currency } = readAmount(data, cfg.valueField);
     const probability =
       data.probability === undefined || data.probability === null
         ? null
         : Number(data.probability);
+    const date = data[cfg.dateField];
     return {
       id: row.id,
       name: typeof data.name === "string" ? data.name : row.id,
-      accountName: accountNameByOpp.get(row.id) ?? null,
+      accountName: accountNameByDeal.get(row.id) ?? null,
       amount,
       currency,
-      closeDate: typeof data.closeDate === "string" ? data.closeDate : null,
+      closeDate: typeof date === "string" ? date : null,
       probability: Number.isFinite(probability) ? probability : null,
       stage: typeof data.stage === "string" ? data.stage : null,
       ownedBy: row.ownedBy ?? null,
