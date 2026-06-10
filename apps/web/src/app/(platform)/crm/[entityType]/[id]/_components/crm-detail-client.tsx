@@ -12,6 +12,8 @@ import {
   CONTACT_RELATED_TO_ACCOUNT,
   OPPORTUNITY_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
+  CAMPAIGN_BELONGS_TO_ACCOUNT,
+  CAMPAIGN_HAS_PRIMARY_CONTACT,
 } from "@adserve/crm/relationships";
 import type { CrmActivityType } from "@adserve/crm";
 import { DynamicForm } from "@/components/dynamic-form";
@@ -451,7 +453,8 @@ export function CrmDetailClient({
   const isAccount = entitySlug === "account";
   const isOpportunity = entitySlug === "opportunity";
   const isContact = entitySlug === "contact";
-  const useTabs = isAccount || isOpportunity || isContact;
+  const isCampaign = entitySlug === "campaign";
+  const useTabs = isAccount || isOpportunity || isContact || isCampaign;
 
   // Placeholder for tabs whose pages are designed as separate activities.
   const comingSoon = (what: string): ReactNode => (
@@ -613,6 +616,52 @@ export function CrmDetailClient({
         content: comingSoon("Notes & Attachments"),
       },
       { id: "campaigns", label: "Campaigns", content: comingSoon("Campaigns") },
+    ];
+  } else if (isCampaign) {
+    // Campaign mirrors Opportunity: Details + Notes & Activities, plus owning
+    // Account (M2O) and primary Contact (M2M) management. Link/unlink is scoped
+    // to the campaign as source → cosmetic gate is `campaign.update`.
+    tabs = [
+      { id: "details", label: "Details", content: formNode },
+      ...(activityNode
+        ? [{ id: "activity", label: "Notes & Activities", content: activityNode }]
+        : []),
+      {
+        id: "account",
+        label: "Account",
+        content: (
+          <RelatedRecordsPanel
+            relatedSlug="account"
+            relatedPluralLabel="account"
+            owningSegment={collectionSegment}
+            owningId={recordId}
+            relationshipName={CAMPAIGN_BELONGS_TO_ACCOUNT.name}
+            direction="owner-is-source"
+            items={relationships.account ?? []}
+            editPermission="campaign.update"
+            supportsPrimary={false}
+            canEdit={canEdit}
+          />
+        ),
+      },
+      {
+        id: "contacts",
+        label: "Contacts",
+        content: (
+          <RelatedRecordsPanel
+            relatedSlug="contact"
+            relatedPluralLabel="contacts"
+            owningSegment={collectionSegment}
+            owningId={recordId}
+            relationshipName={CAMPAIGN_HAS_PRIMARY_CONTACT.name}
+            direction="owner-is-source"
+            items={relationships.contact ?? []}
+            editPermission="campaign.update"
+            supportsPrimary
+            canEdit={canEdit}
+          />
+        ),
+      },
     ];
   }
 
