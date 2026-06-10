@@ -391,6 +391,22 @@ here anyway (the dev accounts are all `prospect`, a single distinct value).
   present), which guarantees the filter is always available and useful for a known enumeration. If
   present-only is preferred later, it's a small change (intersect choices with a server facet).
 
+## Iteration 19 — Picklists list only values present in the data (incl. selects)
+
+Correction to Iteration 18: select pickers listed every declared choice. The picker must show only
+the distinct values that actually exist in the table (as free-text columns already did).
+- **Server (`loadCrmListData`):** now facets `select` columns too, returning their PRESENT distinct
+  values. Eligibility — select: ≥1 present value (categorical, stays filterable even with a single
+  value); free-text: ≥2 distinct with a repeat (unchanged).
+- **Client (`resolveColumnFilter`):** filterability is fully facet-driven (a column is filterable
+  iff the server faceted it). Select columns map present stored values → display labels
+  (operator `is`); free-text uses values verbatim (operator `equals`). Sorted alphabetically by
+  label.
+- Result: a Status where every row is `prospect` lists just **[Prospect]**; a contact Status with
+  active + inactive lists **[Active, Inactive]** — never unused choices.
+- Tests: select picker lists present values by label (not all choices) + no-facet → no icon; RLS
+  harness covers single-value and multi-value select facets. 446 web green.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
