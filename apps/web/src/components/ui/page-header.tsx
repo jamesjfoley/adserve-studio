@@ -3,10 +3,13 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 /**
- * PageHeader — the standard page/record header below the app top bar (per the
- * style guides): an optional back-arrow icon, an optional uppercase eyebrow
- * ("CONTACT"), a large bold title with an optional inline status, an optional
- * subtitle, and right-aligned actions. Server-safe.
+ * PageHeader — the standard page/record header below the app top bar.
+ *
+ * Layout: an optional square back-arrow button, vertically CENTRED against the
+ * label stack, then the label stack itself — a small uppercase eyebrow
+ * ("ACCOUNT") directly above the title row, where the bold title and an
+ * optional status pill sit on one centred baseline. Right-aligned actions
+ * balance the row. Server-safe (react types only).
  */
 export function PageHeader({
   eyebrow,
@@ -19,7 +22,7 @@ export function PageHeader({
 }: {
   eyebrow?: ReactNode;
   title: ReactNode;
-  /** Rendered inline after the title in muted weight, e.g. "(Active)". */
+  /** A pill/badge shown beside the title (e.g. a StatusPill). */
   status?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
@@ -28,35 +31,35 @@ export function PageHeader({
   backLabel?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="flex min-w-0 items-start gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex min-w-0 items-center gap-3">
         {backHref != null ? (
           <Link
             href={backHref}
             aria-label={backLabel}
             title={backLabel}
-            className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel-bg)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel-bg)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           >
-            <ArrowLeft size={16} aria-hidden="true" />
+            <ArrowLeft size={18} aria-hidden="true" />
           </Link>
         ) : null}
         <div className="min-w-0">
-        {eyebrow != null ? (
-          <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-            {eyebrow}
-          </p>
-        ) : null}
-        <h1 className="mt-0.5 flex items-center gap-2 truncate text-2xl font-semibold tracking-tight text-[var(--foreground)]">
-          {title}
-          {status != null ? (
-            <span className="text-base font-normal text-[var(--muted-foreground)]">
-              {status}
-            </span>
+          {eyebrow != null ? (
+            <p className="text-[11px] font-semibold uppercase leading-none tracking-[0.08em] text-[var(--muted-foreground)]">
+              {eyebrow}
+            </p>
           ) : null}
-        </h1>
-        {subtitle != null ? (
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{subtitle}</p>
-        ) : null}
+          <div className="mt-1 flex items-center gap-2.5">
+            <h1 className="truncate text-2xl font-semibold leading-tight tracking-tight text-[var(--foreground)]">
+              {title}
+            </h1>
+            {status != null ? <span className="shrink-0">{status}</span> : null}
+          </div>
+          {subtitle != null ? (
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
       </div>
       {actions != null ? (
