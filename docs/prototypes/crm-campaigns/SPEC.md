@@ -345,6 +345,24 @@ value IS the display label (the "Pretty: all + update code" option):
   `updateFieldDefinition` applies them with no system guard (only `fieldType` change + delete are
   blocked for system fields). This was a UI-only addition.
 
+## Account addresses — Billing same as Site (live mirror)
+
+The Account form has Site + Billing address field sets and a "Billing address same as site address"
+checkbox:
+
+- **Ticked** → each Billing field is read-only AND **live-mirrors** its matching Site field: as the
+  user types in a Site field the Billing value follows, and that mirrored value is what's submitted /
+  stored. Toggling the checkbox on immediately reflects the current Site values.
+- **Unticked** → Billing fields are independently editable; they keep whatever value they hold.
+- **Mechanism (generic, config-driven):** a new field option `mirrorFrom: "<sourceSlug>"` on each
+  billing field (alongside the existing `disabledWhen`). `DynamicForm` derives a field's effective
+  value — `state[mirrorFrom]` while the field is inactive, else its own state — used for both render
+  and submit. No account-specific logic in the generic form. Pairs: `billingAddressLine1←addressLine1`,
+  `…Line2←addressLine2`, `billingCity←city`, `billingStateCounty←stateCounty`,
+  `billingPostcode←postcode`, `billingCountry←country`.
+- Seed (`field-definitions.ts`) carries `mirrorFrom` for fresh tenants; existing local-dev billing
+  fields were updated in place (provisioning skips existing fields).
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

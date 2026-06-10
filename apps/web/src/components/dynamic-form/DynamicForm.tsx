@@ -82,6 +82,29 @@ function fieldInactive(
   return false;
 }
 
+/**
+ * The slug a field mirrors FROM (`options.mirrorFrom`), or null. A mirrored
+ * field copies the source's value live WHILE it is inactive — e.g. the billing
+ * address fields mirror the matching site-address field while "Billing same as
+ * site" is ticked (which is also what `disabledWhen` keys off). Untick → the
+ * field becomes active and independent again.
+ */
+function mirrorSourceSlug(field: FieldDefinitionWithLabels): string | null {
+  const opts = (field.options as Record<string, unknown> | null) ?? {};
+  return typeof opts.mirrorFrom === "string" ? opts.mirrorFrom : null;
+}
+
+/** Value a field should display / submit: the mirrored source while inactive,
+ * else its own state. */
+function effectiveValue(
+  field: FieldDefinitionWithLabels,
+  state: Record<string, unknown>
+): unknown {
+  const src = mirrorSourceSlug(field);
+  if (src && fieldInactive(field, state)) return state[src] ?? null;
+  return state[field.slug];
+}
+
 interface InitialStateArgs {
   fields: FieldDefinitionWithLabels[];
   initialData: Record<string, unknown> | null;
@@ -164,7 +187,9 @@ export function DynamicForm({
         coerced[f.slug] = state[f.slug];
         continue;
       }
-      const result = coerceFieldValue(f, state[f.slug]);
+      // Mirrored fields (e.g. billing-while-same-as-site) submit the source's
+      // value, so the copied address is persisted.
+      const result = coerceFieldValue(f, effectiveValue(f, state));
       if (!result.ok) {
         newErrors[f.slug] = result.error.message;
       } else {
@@ -271,7 +296,7 @@ export function DynamicForm({
                     <div key={field.id} style={cellStyle}>
                       <FieldRenderer
                         field={field}
-                        value={state[field.slug]}
+                        value={effectiveValue(field, state)}
                         onChange={(next) => setSlug(field.slug, next)}
                         mode={fieldMode}
                         error={errors[field.slug] ?? null}

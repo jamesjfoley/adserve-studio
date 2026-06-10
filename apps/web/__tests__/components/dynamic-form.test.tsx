@@ -619,3 +619,81 @@ describe("DynamicForm — inactive (read-only) fields", () => {
     expect(screen.getByText("Fixed")).toBeInTheDocument();
   });
 });
+
+describe("DynamicForm — mirrorFrom (billing same as site)", () => {
+  const SITE = fieldDef({
+    id: "s1",
+    slug: "addressLine1",
+    name: "Site line 1",
+    fieldType: "text",
+  });
+  const SAME = fieldDef({
+    id: "same",
+    slug: "billingSameAsSite",
+    name: "Billing same as site",
+    fieldType: "boolean",
+  });
+  const BILLING = fieldDef({
+    id: "b1",
+    slug: "billingAddressLine1",
+    name: "Billing line 1",
+    fieldType: "text",
+    options: {
+      disabledWhen: { field: "billingSameAsSite", equals: true },
+      mirrorFrom: "addressLine1",
+    },
+  });
+  const layout = sectionConfig({
+    title: "Addresses",
+    fieldIds: ["s1", "same", "b1"],
+  });
+
+  test("unticked: site and billing are independently editable and submit separately", async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicForm
+        layoutConfig={layout}
+        fields={[SITE, SAME, BILLING]}
+        initialData={null}
+        mode="create"
+        onSubmit={onSubmit}
+      />
+    );
+
+    await user.type(screen.getByLabelText("Site line 1"), "10 High St");
+    await user.type(screen.getByLabelText("Billing line 1"), "99 Other Rd");
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const data = onSubmit.mock.calls[0][0] as Record<string, unknown>;
+    expect(data.addressLine1).toBe("10 High St");
+    expect(data.billingAddressLine1).toBe("99 Other Rd");
+  });
+
+  test("ticked: billing becomes read-only and mirrors the site value (display + submit)", async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicForm
+        layoutConfig={layout}
+        fields={[SITE, SAME, BILLING]}
+        initialData={null}
+        mode="create"
+        onSubmit={onSubmit}
+      />
+    );
+
+    await user.type(screen.getByLabelText("Site line 1"), "10 High St");
+    await user.click(screen.getByLabelText("Billing same as site"));
+
+    // Billing is now read-only (no input) and shows the mirrored site value.
+    expect(screen.queryByLabelText("Billing line 1")).not.toBeInTheDocument();
+    expect(screen.getAllByText("10 High St").length).toBeGreaterThanOrEqual(1);
+
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    const data = onSubmit.mock.calls[0][0] as Record<string, unknown>;
+    expect(data.addressLine1).toBe("10 High St");
+    expect(data.billingAddressLine1).toBe("10 High St");
+  });
+});

@@ -545,7 +545,10 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Addresses",
     displayOrder: 460,
-    options: { disabledWhen: { field: "billingSameAsSite", equals: true } },
+    options: {
+      disabledWhen: { field: "billingSameAsSite", equals: true },
+      mirrorFrom: "addressLine1",
+    },
   },
   {
     slug: "billingAddressLine2",
@@ -555,7 +558,10 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Addresses",
     displayOrder: 470,
-    options: { disabledWhen: { field: "billingSameAsSite", equals: true } },
+    options: {
+      disabledWhen: { field: "billingSameAsSite", equals: true },
+      mirrorFrom: "addressLine2",
+    },
   },
   {
     slug: "billingCity",
@@ -565,7 +571,10 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Addresses",
     displayOrder: 480,
-    options: { disabledWhen: { field: "billingSameAsSite", equals: true } },
+    options: {
+      disabledWhen: { field: "billingSameAsSite", equals: true },
+      mirrorFrom: "city",
+    },
   },
   {
     slug: "billingStateCounty",
@@ -575,7 +584,10 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Addresses",
     displayOrder: 490,
-    options: { disabledWhen: { field: "billingSameAsSite", equals: true } },
+    options: {
+      disabledWhen: { field: "billingSameAsSite", equals: true },
+      mirrorFrom: "stateCounty",
+    },
   },
   {
     slug: "billingPostcode",
@@ -585,7 +597,10 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Addresses",
     displayOrder: 500,
-    options: { disabledWhen: { field: "billingSameAsSite", equals: true } },
+    options: {
+      disabledWhen: { field: "billingSameAsSite", equals: true },
+      mirrorFrom: "postcode",
+    },
   },
   {
     slug: "billingCountry",
@@ -595,7 +610,10 @@ export const DEFAULT_ACCOUNT_FIELDS: CrmFieldDefinitionSpec[] = [
     isSystem: true,
     groupName: "Addresses",
     displayOrder: 510,
-    options: { disabledWhen: { field: "billingSameAsSite", equals: true } },
+    options: {
+      disabledWhen: { field: "billingSameAsSite", equals: true },
+      mirrorFrom: "country",
+    },
   },
 ];
 
