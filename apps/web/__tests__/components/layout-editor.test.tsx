@@ -199,4 +199,106 @@ describe("LayoutEditor", () => {
     expect(values).toEqual(["1", "2", "3", "4"]);
     expect(select.value).toBe("4");
   });
+
+  test("changing a field cell's width span is sent in the saved items", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({}), { status: 200 }) as Response
+      );
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          sections: [{ title: "Alpha", columns: 3, fieldIds: ["f1", "f2"] }],
+        }}
+      />
+    );
+
+    // The first field cell's width <select>.
+    const widthSelect = screen.getByLabelText(
+      "Width for Field First name"
+    ) as HTMLSelectElement;
+    // 1..columns offered.
+    expect(Array.from(widthSelect.options).map((o) => o.value)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+    await user.selectOptions(widthSelect, "3");
+
+    await user.click(screen.getByText("Save layout"));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0][1] as RequestInit).body as string
+    ) as { config: { sections: Array<Record<string, unknown>> } };
+    const section = body.config.sections[0];
+    // items carries the field cell with the new span; fieldIds preserved in order.
+    expect(section.items).toEqual([
+      { fieldId: "f1", span: 3 },
+      { fieldId: "f2", span: 1 },
+    ]);
+    expect(section.fieldIds).toEqual(["f1", "f2"]);
+    fetchMock.mockRestore();
+  });
+
+  test("Add empty cell and Add row break append spacer cells", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({}), { status: 200 }) as Response
+      );
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          // One field at span 1 in a 2-col section: row has 1 column remaining.
+          sections: [{ title: "Alpha", columns: 2, fieldIds: ["f1"] }],
+        }}
+      />
+    );
+
+    await user.click(screen.getByText("Add empty cell"));
+    await user.click(screen.getByText("Add row break"));
+    await user.click(screen.getByText("Save layout"));
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0][1] as RequestInit).body as string
+    ) as { config: { sections: Array<Record<string, unknown>> } };
+    const section = body.config.sections[0];
+    // field(1) + empty(1) = 2 used (row full) -> row break is a full-width 2 spacer.
+    expect(section.items).toEqual([
+      { fieldId: "f1", span: 1 },
+      { spacer: true, span: 1 },
+      { spacer: true, span: 2 },
+    ]);
+    // fieldIds excludes spacers.
+    expect(section.fieldIds).toEqual(["f1"]);
+    fetchMock.mockRestore();
+  });
+
+  test("widget section shows a read-only preview of its panel fields", () => {
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          sections: [
+            { title: "Brands", columns: 2, fieldIds: [], widget: "brands" },
+          ],
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText("Panel fields (managed by the panel)")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Brand Values")).toBeInTheDocument();
+    expect(screen.getByText("Brand Category")).toBeInTheDocument();
+  });
 });
