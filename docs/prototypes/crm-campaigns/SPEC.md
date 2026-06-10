@@ -263,6 +263,14 @@ contacts):
 - **User-adjustable row count** — the panel header has a `Rows` stepper (−/+, default **8**, bounds
   3–50) that drives the table's `minRows`. The user resizes the Contacts / Linked Contacts panels by
   the number of rows shown; more contacts than the count still all render (page scroll).
+- **Persistent per user, across logins** — the chosen row count for each panel persists via
+  `localStorage`, keyed `adserve:crm:rowCount:<userId>:<panel>` (`account-contacts` /
+  `account-linked-contacts`). `userId` is threaded from the server-resolved `user.id`, so two users
+  on the same browser don't share settings; the choice survives logout/login and reloads. New
+  reusable hook: `lib/use-persistent-state.ts` (SSR-safe, validated read, write-after-load guard).
+  **Production consideration:** localStorage is per-device — a per-user preference that follows the
+  account across devices belongs in a server-side user-settings store (deferred; a new table / RLS
+  policy is a standing human gate).
 
 ## Production Considerations log (deferred — handoff to the production rebuild)
 

@@ -22,6 +22,7 @@ import {
   operatorsForType,
 } from "@/components/dynamic-table/operators";
 import { PermissionGate } from "@/lib/permissions-client";
+import { usePersistentState } from "@/lib/use-persistent-state";
 import { Panel } from "@/components/ui/panel";
 import { RecordPicker, recordSearchConfig } from "@/components/crm/record-picker";
 
@@ -58,6 +59,14 @@ interface ContactsTableProps {
   canEdit: boolean;
   /** Enables the "New contact" create flow (the primary Contacts table only). */
   createContext?: ContactCreateContext;
+  /**
+   * Stable identifier for this table's user preferences (e.g. row count). When
+   * given (with `storageScope`), the chosen row count persists per user across
+   * logins via localStorage. Omit to keep the setting in-memory only.
+   */
+  persistKey?: string;
+  /** Per-user namespace for persisted prefs (the current user's id). */
+  storageScope?: string;
 }
 
 /**
@@ -229,6 +238,8 @@ export function ContactsTable({
   editPermission,
   canEdit,
   createContext,
+  persistKey,
+  storageScope,
 }: ContactsTableProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -360,8 +371,22 @@ export function ContactsTable({
     useState<string[]>(defaultVisibleColumns);
 
   // User-controlled row count → drives the table's minimum banded height, so
-  // the user effectively resizes the panel by the number of rows shown.
-  const [rowCount, setRowCount] = useState(DEFAULT_TABLE_ROWS);
+  // the user effectively resizes the panel by the number of rows shown. The
+  // choice persists per user across logins (localStorage) when a persistKey is
+  // given; otherwise it's in-memory only.
+  const rowCountKey =
+    persistKey != null
+      ? `adserve:crm:rowCount:${storageScope ?? "anon"}:${persistKey}`
+      : null;
+  const [rowCount, setRowCount] = usePersistentState<number>(
+    rowCountKey,
+    DEFAULT_TABLE_ROWS,
+    (v): v is number =>
+      typeof v === "number" &&
+      Number.isInteger(v) &&
+      v >= MIN_TABLE_ROWS &&
+      v <= MAX_TABLE_ROWS
+  );
   const stepRows = (delta: number) =>
     setRowCount((n) =>
       Math.min(MAX_TABLE_ROWS, Math.max(MIN_TABLE_ROWS, n + delta))

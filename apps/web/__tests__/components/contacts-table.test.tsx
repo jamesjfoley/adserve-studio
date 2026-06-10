@@ -121,6 +121,7 @@ function bodyRowNames(): string[] {
 afterEach(() => {
   push.mockClear();
   refresh.mockClear();
+  window.localStorage.clear();
   cleanup();
 });
 
@@ -196,6 +197,45 @@ describe("ContactsTable (client-side DynamicTable)", () => {
     await user.click(within(group).getByRole("button", { name: /fewer rows/i }));
     await user.click(within(group).getByRole("button", { name: /fewer rows/i }));
     expect(within(group).getByText("7")).toBeInTheDocument();
+  });
+
+  test("persists the row count per user across remounts when a persistKey is set", async () => {
+    const user = userEvent.setup();
+    const persist = { persistKey: "account-contacts", storageScope: "user-1" };
+
+    const { unmount } = renderTable(persist);
+    let group = screen.getByRole("group", { name: /rows shown/i });
+    await user.click(within(group).getByRole("button", { name: /more rows/i }));
+    expect(within(group).getByText("9")).toBeInTheDocument();
+    unmount();
+
+    // Fresh mount (simulates a later login / page load) restores the choice.
+    renderTable(persist);
+    group = screen.getByRole("group", { name: /rows shown/i });
+    expect(await within(group).findByText("9")).toBeInTheDocument();
+  });
+
+  test("a different user's persisted row count does not leak across scopes", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderTable({
+      persistKey: "account-contacts",
+      storageScope: "user-1",
+    });
+    await user.click(
+      within(screen.getByRole("group", { name: /rows shown/i })).getByRole(
+        "button",
+        { name: /more rows/i }
+      )
+    );
+    unmount();
+
+    // A different user on the same browser starts from the default.
+    renderTable({ persistKey: "account-contacts", storageScope: "user-2" });
+    expect(
+      await within(
+        screen.getByRole("group", { name: /rows shown/i })
+      ).findByText("8")
+    ).toBeInTheDocument();
   });
 
   test("the 'New contact' action shows only when a create context is given", () => {

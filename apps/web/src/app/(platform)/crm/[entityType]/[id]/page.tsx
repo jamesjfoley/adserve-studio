@@ -107,6 +107,7 @@ export default async function CrmDetailPage({ params }: PageProps) {
       showAiSummary={slug === "account" && canViewActivities}
       showCampaigns={moduleConfig.campaigns}
       showOpportunities={moduleConfig.opportunities}
+      userId={user.id}
       locale="en-GB"
     />
   );

@@ -65,6 +65,8 @@ interface CrmDetailClientProps {
   /** Module-config driven: which pipeline-entity tabs the Account detail shows. */
   showCampaigns?: boolean;
   showOpportunities?: boolean;
+  /** Current user's id — namespaces per-user UI prefs (e.g. table row counts). */
+  userId?: string;
   locale: string;
 }
 
@@ -113,6 +115,7 @@ export function CrmDetailClient({
   showAiSummary = false,
   showCampaigns = false,
   showOpportunities = false,
+  userId,
   locale,
 }: CrmDetailClientProps) {
   const router = useRouter();
@@ -541,6 +544,8 @@ export function CrmDetailClient({
               direction="owner-is-target"
               editPermission="contact.update"
               canEdit={canEdit}
+              persistKey="account-contacts"
+              storageScope={userId}
               createContext={
                 contactForm
                   ? {
@@ -566,6 +571,8 @@ export function CrmDetailClient({
               direction="owner-is-target"
               editPermission="contact.update"
               canEdit={canEdit}
+              persistKey="account-linked-contacts"
+              storageScope={userId}
             />
           </div>
         ),
