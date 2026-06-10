@@ -217,6 +217,24 @@ surface (CRM is the first module). New modules plug in with no shell changes.
   `(platform)` only — `(tenant-admin)` can adopt the same `<TitleBar/>` if a unified chrome is wanted
   (super-admin stays a separate track). `APP_VERSION` is a constant kept in sync with package.json.
 
+## Contacts tab table + Notes & Attachments
+
+- **Contacts tab → home-page table:** the Account "Contacts" / "Linked Contacts" tables now render
+  via the shared `DynamicTable` driven CLIENT-SIDE (the related contacts are in memory) — column
+  sorting, per-column value-picker filtering + facets, full-panel zebra banding (`fillHeight`), table
+  fills the panel. Client filter/sort/facet evaluators mirror the server (`query.ts`). Panel chrome
+  (Show-inactive, Add-contact picker, New-contact modal) preserved; the detail page passes the
+  contact `fields`.
+- **Notes & Attachments** (Account + Contact): notes, web-links (http(s)-validated) and file
+  attachments. **Storage: `records.data.notesAttachments`** — deliberately NOT a new table (a new
+  RLS policy/table is a standing human gate); items inherit the record's tenant isolation.
+  `/api/crm/[entityType]/[id]/notes` (GET/POST/PATCH/DELETE): read = `${slug}.read`, mutate =
+  `${slug}.update` (or ownership), cross-tenant 404. `NotesAttachmentsPanel` is a layout widget
+  (reorderable/hideable) on both entities. **Production considerations:** attachments are capped
+  (~500KB) data URLs in JSONB — production should use object storage + a dedicated `record_notes`
+  table (with RLS) and signed URLs; large/many attachments bloat the record JSONB; no virus scan /
+  content-type allow-list yet.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not
