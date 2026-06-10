@@ -1,4 +1,4 @@
-import { db, tenants } from "@adserve/database";
+import { tenants, withTenant } from "@adserve/database";
 import { eq } from "drizzle-orm";
 
 /**
@@ -100,11 +100,16 @@ export function readCrmModuleConfig(settings: unknown): CrmModuleConfig {
 export async function getCrmModuleConfig(
   tenantId: string
 ): Promise<CrmModuleConfig> {
-  const [row] = await db
-    .select({ settings: tenants.settings })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
+  // Read inside withTenant so the RLS tenant GUC is set — the `tenants` table
+  // has FORCE row-level security (tenant_isolation on id), so an unscoped read
+  // returns nothing under the non-superuser app role.
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1)
+  );
   return readCrmModuleConfig(row?.settings);
 }
 
