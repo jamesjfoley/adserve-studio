@@ -11,12 +11,24 @@ import { coerceFieldValue } from "@adserve/module-framework/client";
 import type {
   FieldDefinitionWithLabels,
   LayoutConfig,
+  LayoutItem,
+  LayoutSection,
 } from "@adserve/module-framework";
 import { cn } from "@/lib/utils";
 import { CollapsiblePanel } from "@/components/ui/collapsible-panel";
 import { FieldRenderer } from "./field-renderer";
 
 export type DynamicFormMode = "create" | "edit" | "view";
+
+/**
+ * The grid cells of a section: its explicit `items` (field + spacer cells with
+ * spans) when present, else its `fieldIds` as span-1 field cells (backward
+ * compatible with layouts saved before the items model).
+ */
+function sectionItems(section: LayoutSection): LayoutItem[] {
+  if (section.items && section.items.length > 0) return section.items;
+  return section.fieldIds.map((fieldId) => ({ fieldId }));
+}
 
 export interface DynamicFormProps {
   layoutConfig: LayoutConfig;
@@ -206,18 +218,30 @@ export function DynamicForm({
               defaultOpen
             >
               <div
-                className={cn(
-                  "mt-3 grid gap-4",
-                  section.columns === 1 && "grid-cols-1",
-                  section.columns === 2 && "grid-cols-1 sm:grid-cols-2",
-                  section.columns === 3 &&
-                    "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-                  section.columns === 4 &&
-                    "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
-                )}
+                className="mt-3 grid gap-4"
+                style={{
+                  gridTemplateColumns: `repeat(${section.columns}, minmax(0, 1fr))`,
+                }}
               >
-                {section.fieldIds.map((fieldId) => {
-                  const field = fieldsById.get(fieldId);
+                {sectionItems(section).map((item, itemIdx) => {
+                  // Column span, clamped to the section's column count.
+                  const span = Math.min(
+                    Math.max(1, item.span ?? 1),
+                    section.columns
+                  );
+                  // Spacer cell — leaves a gap / pushes following fields to a
+                  // new row. Single column to maintain the grid; spans wider
+                  // when configured.
+                  if ("spacer" in item) {
+                    return (
+                      <div
+                        key={`spacer-${itemIdx}`}
+                        aria-hidden="true"
+                        style={{ gridColumn: `span ${span}` }}
+                      />
+                    );
+                  }
+                  const field = fieldsById.get(item.fieldId);
                   if (!field) return null; // shouldn't happen — layout was validated
                   const inputId = `${formId}-${field.id}`;
                   // A field can be inactive for data-entry — statically
@@ -226,16 +250,17 @@ export function DynamicForm({
                   const fieldMode =
                     mode !== "view" && fieldInactive(field, state) ? "view" : mode;
                   return (
-                    <FieldRenderer
-                      key={field.id}
-                      field={field}
-                      value={state[field.slug]}
-                      onChange={(next) => setSlug(field.slug, next)}
-                      mode={fieldMode}
-                      error={errors[field.slug] ?? null}
-                      locale={locale}
-                      inputId={inputId}
-                    />
+                    <div key={field.id} style={{ gridColumn: `span ${span}` }}>
+                      <FieldRenderer
+                        field={field}
+                        value={state[field.slug]}
+                        onChange={(next) => setSlug(field.slug, next)}
+                        mode={fieldMode}
+                        error={errors[field.slug] ?? null}
+                        locale={locale}
+                        inputId={inputId}
+                      />
+                    </div>
                   );
                 })}
               </div>

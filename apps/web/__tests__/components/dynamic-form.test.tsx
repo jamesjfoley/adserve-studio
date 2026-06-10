@@ -117,6 +117,40 @@ describe("DynamicForm — widget + hidden sections", () => {
   });
 });
 
+describe("DynamicForm — grid items (spans + spacers)", () => {
+  test("renders field cells and an empty spacer cell from section.items", () => {
+    const a = fieldDef({ id: "f1", slug: "a", name: "Alpha", fieldType: "text" });
+    const b = fieldDef({ id: "f2", slug: "b", name: "Beta", fieldType: "text" });
+    const layout: LayoutConfig = {
+      sections: [
+        {
+          title: "Grid",
+          columns: 4,
+          fieldIds: ["f1", "f2"],
+          items: [
+            { fieldId: "f1", span: 2 },
+            { spacer: true, span: 2 },
+            { fieldId: "f2", span: 1 },
+          ],
+        },
+      ],
+    };
+    const { container } = render(
+      <DynamicForm layoutConfig={layout} fields={[a, b]} initialData={null} mode="create" />
+    );
+    // Both fields render (items path), and the field cell carries its span.
+    expect(screen.getByLabelText("Alpha")).toBeInTheDocument();
+    expect(screen.getByLabelText("Beta")).toBeInTheDocument();
+    const alphaCell = screen.getByLabelText("Alpha").closest("[style*='grid-column']");
+    expect(alphaCell).toHaveStyle({ gridColumn: "span 2" });
+    // The spacer renders an empty aria-hidden cell (proves the items path, not
+    // the fieldIds fallback).
+    expect(
+      container.querySelectorAll('[aria-hidden="true"][style*="grid-column"]').length
+    ).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("DynamicForm — collapsible sections", () => {
   test("first section is not collapsible; later sections are collapsible and open by default, and can be toggled closed", async () => {
     const user = userEvent.setup();

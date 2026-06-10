@@ -18,6 +18,7 @@ export type {
   FieldDefinitionWithLabels,
   LayoutConfig,
   LayoutSection,
+  LayoutItem,
   LocalizedLabel,
   FieldType,
   CurrencyValue,

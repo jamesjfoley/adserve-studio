@@ -23,6 +23,7 @@ export type {
   FieldDefinitionWithLabels,
   LayoutSection,
   LayoutConfig,
+  LayoutItem,
   ValidationCondition,
   ValidationAction,
   FieldType,

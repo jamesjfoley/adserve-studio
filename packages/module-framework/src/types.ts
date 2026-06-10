@@ -75,11 +75,31 @@ export type FieldDefinitionWithLabels = FieldDefinition;
  * canonical TS representation. Layout engine reads/writes through this
  * type.
  */
+/**
+ * One cell in a section's grid: either a field (occupying `span` columns) or an
+ * empty spacer (a gap, also `span` columns). Spacers let the admin leave parts
+ * of a panel empty and push following fields onto a new row. `span` defaults to
+ * 1 and is clamped to the section's column count at render.
+ */
+export type LayoutItem =
+  | { fieldId: string; span?: number }
+  | { spacer: true; span?: number };
+
 export interface LayoutSection {
   title: string;
   columns: 1 | 2 | 3 | 4;
-  /** Field definition IDs in display order within this section. */
+  /**
+   * Field definition IDs in display order — the canonical membership of the
+   * section (used for validation + the unplaced-fields calc). When `items` is
+   * absent the detail renders these row-major at span 1 (backward compatible).
+   */
   fieldIds: string[];
+  /**
+   * Optional explicit grid layout: field cells (with column `span`) + empty
+   * spacer cells, in order. When present it drives rendering; its field cells
+   * must match `fieldIds`. Absent → render `fieldIds` at span 1.
+   */
+  items?: LayoutItem[];
   /**
    * When true the section is configured but NOT rendered on the detail page
    * (show/hide, distinct from removing it — the fields/widget are retained).

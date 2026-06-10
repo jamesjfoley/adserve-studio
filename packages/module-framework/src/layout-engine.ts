@@ -460,6 +460,33 @@ export async function validateLayoutConfig(
         seenFieldIds.add(fieldId);
       }
     }
+
+    // Optional explicit grid items: validate field-cell references + spans.
+    // (Spacer cells carry no field; spans out of [1..columns] are clamped at
+    // render, so a too-large span is allowed here but a non-positive integer
+    // is rejected.)
+    if (Array.isArray(section.items)) {
+      for (const item of section.items) {
+        const span = (item as { span?: unknown }).span;
+        if (
+          span !== undefined &&
+          (typeof span !== "number" || !Number.isInteger(span) || span < 1)
+        ) {
+          errors.push({
+            code: "invalid_columns",
+            message: `Section ${i} ("${section.title}"): item span must be a positive integer (got ${String(span)}).`,
+            details: { sectionIndex: i },
+          });
+        }
+        if ("fieldId" in item && !validFieldIds.has(item.fieldId)) {
+          errors.push({
+            code: "field_not_found",
+            message: `Section ${i} ("${section.title}"): item field ${item.fieldId} does not exist for this entity type.`,
+            details: { sectionIndex: i, fieldId: item.fieldId },
+          });
+        }
+      }
+    }
   }
 
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
