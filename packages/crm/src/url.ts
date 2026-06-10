@@ -18,6 +18,7 @@ export const CRM_COLLECTION_SEGMENTS: Record<string, string> = {
   contact: "contacts",
   lead: "leads",
   opportunity: "opportunities",
+  campaign: "campaigns",
 };
 
 const SEGMENT_TO_SLUG: Record<string, string> = Object.entries(

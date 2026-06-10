@@ -86,10 +86,33 @@ export const OPPORTUNITY_HAS_PRIMARY_CONTACT: CrmRelationshipSpec = {
   description: "An opportunity may have several contacts (one marked primary)",
 };
 
+export const CAMPAIGN_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
+  name: "campaign_belongs_to_account",
+  sourceEntitySlug: "campaign",
+  targetEntitySlug: "account",
+  cardinality: "many_to_one",
+  cascadeDelete: false,
+  description: "A campaign belongs to one account (advertiser/agency)",
+};
+
+export const CAMPAIGN_HAS_PRIMARY_CONTACT: CrmRelationshipSpec = {
+  // Mirrors OPPORTUNITY_HAS_PRIMARY_CONTACT: M2M junction with the "primary"
+  // contact marked via record_relationships.metadata.isPrimary. The `.name`
+  // slug is load-bearing — resolved by name when reading/writing the link.
+  name: "campaign_has_primary_contact",
+  sourceEntitySlug: "campaign",
+  targetEntitySlug: "contact",
+  cardinality: "many_to_many",
+  cascadeDelete: false,
+  description: "A campaign may have a primary contact",
+};
+
 export const CRM_RELATIONSHIPS: CrmRelationshipSpec[] = [
   CONTACT_BELONGS_TO_ACCOUNT,
   CONTACT_RELATED_TO_ACCOUNT,
   CONTACT_REPORTS_TO_CONTACT,
   OPPORTUNITY_BELONGS_TO_ACCOUNT,
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
+  CAMPAIGN_BELONGS_TO_ACCOUNT,
+  CAMPAIGN_HAS_PRIMARY_CONTACT,
 ];

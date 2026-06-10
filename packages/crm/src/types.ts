@@ -90,6 +90,34 @@ export interface OpportunityData {
   [key: string]: unknown;
 }
 
+/** Fixed campaign stage slugs — see CAMPAIGN_STAGES in ./pipeline.ts. */
+export type CampaignStage =
+  | "brief"
+  | "planning"
+  | "booking"
+  | "live"
+  | "pca"
+  | "lost";
+
+export interface CampaignData {
+  name: string;
+  /** One of the fixed CampaignStage slugs. */
+  stage: CampaignStage;
+  /** Value / budget. */
+  value?: CurrencyValue;
+  flightStart?: string; // ISO yyyy-mm-dd
+  flightEnd?: string; // ISO yyyy-mm-dd
+  products?: string;
+  /** Set on entering the PCA (delivered) stage. */
+  pcaOutcome?: string;
+  /**
+   * Stub reference to an operational campaign (Planning/Trafficking),
+   * populated at Booking. No FK; not wired for the prototype.
+   */
+  opsCampaignId?: string | null;
+  [key: string]: unknown;
+}
+
 // ============================================================
 // Activity types — separate from records, modeled in `activities` table
 // ============================================================

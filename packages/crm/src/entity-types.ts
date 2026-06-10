@@ -50,6 +50,14 @@ export const OPPORTUNITY_ENTITY_TYPE: CrmEntityTypeSpec = {
   isSystem: true,
 };
 
+export const CAMPAIGN_ENTITY_TYPE: CrmEntityTypeSpec = {
+  slug: "campaign",
+  name: "Campaign",
+  description: "Media campaigns and delivery pipeline",
+  icon: "megaphone",
+  isSystem: true,
+};
+
 /**
  * All CRM entity types in registration order. Task 0.6's activation
  * iterates this list.
@@ -59,4 +67,5 @@ export const CRM_ENTITY_TYPES: CrmEntityTypeSpec[] = [
   CONTACT_ENTITY_TYPE,
   LEAD_ENTITY_TYPE,
   OPPORTUNITY_ENTITY_TYPE,
+  CAMPAIGN_ENTITY_TYPE,
 ];

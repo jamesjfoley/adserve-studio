@@ -79,3 +79,67 @@ export const DEFAULT_PIPELINE_STAGES: PipelineStageSpec[] = [
     isWon: false,
   },
 ];
+
+/**
+ * Campaign pipeline stages — a FIXED enum for the prototype (NOT
+ * per-tenant configurable, NOT shared with the opportunity
+ * `pipeline_stages`). The media delivery flow: Brief → Planning →
+ * Booking → Live → PCA, plus a terminal Lost outcome reachable by drag.
+ *
+ * PCA (post-campaign analysis) is the delivered/closing stage — `isWon`
+ * so it contributes to delivered value; Lost is the cancelled terminal
+ * outcome. `defaultProbability` is unused by Campaign (no probability
+ * field) but kept to satisfy the shared PipelineStageSpec shape.
+ *
+ * Per-tenant configurable campaign stages = Production Consideration.
+ */
+export const CAMPAIGN_STAGES: PipelineStageSpec[] = [
+  {
+    slug: "brief",
+    name: "Brief",
+    displayOrder: 10,
+    defaultProbability: 10,
+    isClosed: false,
+    isWon: false,
+  },
+  {
+    slug: "planning",
+    name: "Planning",
+    displayOrder: 20,
+    defaultProbability: 30,
+    isClosed: false,
+    isWon: false,
+  },
+  {
+    slug: "booking",
+    name: "Booking",
+    displayOrder: 30,
+    defaultProbability: 60,
+    isClosed: false,
+    isWon: false,
+  },
+  {
+    slug: "live",
+    name: "Live",
+    displayOrder: 40,
+    defaultProbability: 90,
+    isClosed: false,
+    isWon: false,
+  },
+  {
+    slug: "pca",
+    name: "PCA",
+    displayOrder: 50,
+    defaultProbability: 100,
+    isClosed: true,
+    isWon: true,
+  },
+  {
+    slug: "lost",
+    name: "Lost",
+    displayOrder: 60,
+    defaultProbability: 0,
+    isClosed: true,
+    isWon: false,
+  },
+];

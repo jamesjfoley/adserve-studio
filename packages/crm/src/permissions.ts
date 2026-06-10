@@ -68,6 +68,13 @@ export const CRM_PERMISSIONS: CrmPermissionSpec[] = [
     description: "Archive opportunities",
   },
 
+  // Campaigns (media pipeline). Mirrors Opportunity: full CRUD. Stage moves
+  // and Campaign↔Account link/unlink authorize source-side on campaign.update.
+  { resource: "campaign", action: "read", description: "View campaigns" },
+  { resource: "campaign", action: "create", description: "Create campaigns" },
+  { resource: "campaign", action: "update", description: "Edit campaigns" },
+  { resource: "campaign", action: "delete", description: "Archive campaigns" },
+
   // Pipeline (read = kanban access; update = move opportunities between stages)
   {
     resource: "pipeline",

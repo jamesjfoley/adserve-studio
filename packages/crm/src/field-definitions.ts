@@ -678,6 +678,122 @@ export const DEFAULT_OPPORTUNITY_FIELDS: CrmFieldDefinitionSpec[] = [
   },
 ];
 
+// ============================================================
+// Campaign fields (media-first pipeline object)
+// ============================================================
+export const DEFAULT_CAMPAIGN_FIELDS: CrmFieldDefinitionSpec[] = [
+  {
+    slug: "name",
+    name: "Name",
+    labels: { en: "Name" },
+    fieldType: "text",
+    isRequired: true,
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 10,
+    isSearchable: true,
+  },
+  {
+    // Owning Account, backed by `campaign_belongs_to_account` (M2O,
+    // record_relationships — NOT records.data). Required: a campaign always
+    // belongs to one advertiser/agency. Rendered inline via the
+    // RelationshipField account picker (mirrors contact.account).
+    slug: "account",
+    name: "Account",
+    labels: { en: "Account" },
+    fieldType: "relationship",
+    isRequired: true,
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 20,
+    options: { relationship: { targetSlug: "account", allowCreate: true } },
+  },
+  {
+    // Optional primary Contact, backed by `campaign_has_primary_contact`
+    // (M2M with metadata.isPrimary — mirrors opportunity_has_primary_contact).
+    slug: "primaryContact",
+    name: "Primary contact",
+    labels: { en: "Primary contact" },
+    fieldType: "relationship",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 30,
+    options: { relationship: { targetSlug: "contact", allowCreate: false } },
+  },
+  {
+    slug: "value",
+    name: "Value / budget",
+    labels: { en: "Value / budget" },
+    fieldType: "currency",
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 40,
+    isFilterable: true,
+  },
+  {
+    slug: "stage",
+    name: "Stage",
+    labels: { en: "Stage" },
+    fieldType: "select",
+    isRequired: true,
+    isSystem: true,
+    groupName: "General",
+    displayOrder: 50,
+    isFilterable: true,
+    // Fixed campaign enum (NOT the opportunity pipeline_stages). Choices are
+    // resolved from CAMPAIGN_STAGES at activation time — see ./activate.ts.
+    options: { choicesFrom: "campaign_stages" },
+  },
+  {
+    slug: "flightStart",
+    name: "Flight start",
+    labels: { en: "Flight start" },
+    fieldType: "date",
+    isSystem: true,
+    groupName: "Flight",
+    displayOrder: 60,
+    isFilterable: true,
+  },
+  {
+    slug: "flightEnd",
+    name: "Flight end",
+    labels: { en: "Flight end" },
+    fieldType: "date",
+    isSystem: true,
+    groupName: "Flight",
+    displayOrder: 70,
+    isFilterable: true,
+  },
+  {
+    slug: "products",
+    name: "Products / inventory",
+    labels: { en: "Products / inventory" },
+    fieldType: "long_text",
+    isSystem: true,
+    groupName: "Flight",
+    displayOrder: 80,
+  },
+  {
+    slug: "pcaOutcome",
+    name: "PCA outcome",
+    labels: { en: "PCA outcome" },
+    fieldType: "long_text",
+    groupName: "Delivery",
+    displayOrder: 90,
+  },
+  {
+    // Stub reference to an operational (Planning/Trafficking) campaign,
+    // populated at the Booking stage. No FK; NOT wired into Planning for the
+    // prototype (Production Consideration).
+    slug: "opsCampaignId",
+    name: "Ops campaign ID",
+    labels: { en: "Ops campaign ID" },
+    fieldType: "text",
+    groupName: "Delivery",
+    displayOrder: 100,
+  },
+];
+
 /**
  * Convenience map from entity type slug → default field defs.
  * Task 0.6's activation flow uses this to drive provisioning.
@@ -687,4 +803,5 @@ export const DEFAULT_FIELDS_BY_ENTITY: Record<string, CrmFieldDefinitionSpec[]> 
   contact: DEFAULT_CONTACT_FIELDS,
   lead: DEFAULT_LEAD_FIELDS,
   opportunity: DEFAULT_OPPORTUNITY_FIELDS,
+  campaign: DEFAULT_CAMPAIGN_FIELDS,
 };

@@ -80,8 +80,9 @@ describe("WS1 — cardinality reconciliation (sql/007)", () => {
     expect(OPPORTUNITY_HAS_PRIMARY_CONTACT.cardinality).toBe("many_to_many");
     expect(OPPORTUNITY_BELONGS_TO_ACCOUNT.cardinality).toBe("many_to_one");
 
-    // Permission matrix is untouched by WS1 — stays at 22.
-    expect(CRM_PERMISSIONS).toHaveLength(22);
+    // Permission matrix (22 base + 4 campaign.* added by the media-first
+    // prototype) — WS1 itself does not change it.
+    expect(CRM_PERMISSIONS).toHaveLength(26);
   });
 
   test("acceptance 3: in-place flip on a pre-existing tenant, then idempotent + activation-safe", async () => {

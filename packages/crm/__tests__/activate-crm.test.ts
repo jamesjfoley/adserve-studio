@@ -19,7 +19,7 @@ import { activateCrmForTenant, CRM_SCHEMA_VERSION } from "../src/activate";
 import { CRM_ENTITY_TYPES } from "../src/entity-types";
 import { DEFAULT_FIELDS_BY_ENTITY } from "../src/field-definitions";
 import { CRM_RELATIONSHIPS } from "../src/relationships";
-import { DEFAULT_PIPELINE_STAGES } from "../src/pipeline";
+import { DEFAULT_PIPELINE_STAGES, CAMPAIGN_STAGES } from "../src/pipeline";
 import { CRM_PERMISSIONS, CRM_PERMISSION_KEYS } from "../src/permissions";
 import { DEFAULT_CRM_ROLE_PERMISSIONS } from "../src/role-assignments";
 
@@ -28,7 +28,7 @@ afterAll(async () => {
 });
 
 describe("activateCrmForTenant", () => {
-  test("registers all 4 CRM entity types (system)", async () => {
+  test("registers all CRM entity types (system)", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant } = await setupTestContext(tx);
       const result = await activateCrmForTenant(tx, { tenantId: tenant.id });
@@ -39,6 +39,7 @@ describe("activateCrmForTenant", () => {
         .where(eq(entityTypes.tenantId, tenant.id));
       expect(rows.map((r) => r.slug).sort()).toEqual([
         "account",
+        "campaign",
         "contact",
         "lead",
         "opportunity",
@@ -46,6 +47,7 @@ describe("activateCrmForTenant", () => {
       expect(rows.every((r) => r.isSystem)).toBe(true);
       expect(Object.keys(result.entityTypeIds).sort()).toEqual([
         "account",
+        "campaign",
         "contact",
         "lead",
         "opportunity",
@@ -115,7 +117,7 @@ describe("activateCrmForTenant", () => {
         .select()
         .from(layouts)
         .where(eq(layouts.tenantId, tenant.id));
-      expect(lays).toHaveLength(4);
+      expect(lays).toHaveLength(CRM_ENTITY_TYPES.length);
       expect(lays.every((l) => l.layoutType === "detail")).toBe(true);
       expect(lays.every((l) => l.isDefault)).toBe(true);
     });
@@ -163,7 +165,7 @@ describe("activateCrmForTenant", () => {
     });
   });
 
-  test("stamps schemaVersion into every entity's settings; pipeline stages on opportunity", async () => {
+  test("stamps schemaVersion into every entity's settings; pipeline stages on opportunity + campaign", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant } = await setupTestContext(tx);
       await activateCrmForTenant(tx, { tenantId: tenant.id });
@@ -183,6 +185,8 @@ describe("activateCrmForTenant", () => {
           expect(settings.pipelineStages).toHaveLength(
             DEFAULT_PIPELINE_STAGES.length
           );
+        } else if (r.slug === "campaign") {
+          expect(settings.pipelineStages).toHaveLength(CAMPAIGN_STAGES.length);
         } else {
           expect(settings.pipelineStages).toBeUndefined();
         }
@@ -190,7 +194,7 @@ describe("activateCrmForTenant", () => {
     });
   });
 
-  test("sets nameFieldId on account + opportunity, null on contact + lead", async () => {
+  test("sets nameFieldId on account + opportunity + campaign, null on contact + lead", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant } = await setupTestContext(tx);
       const result = await activateCrmForTenant(tx, { tenantId: tenant.id });
@@ -201,8 +205,8 @@ describe("activateCrmForTenant", () => {
         .where(eq(entityTypes.tenantId, tenant.id));
       const bySlug = new Map(rows.map((r) => [r.slug, r]));
 
-      // account + opportunity point at their "name" field.
-      for (const slug of ["account", "opportunity"]) {
+      // account + opportunity + campaign point at their "name" field.
+      for (const slug of ["account", "opportunity", "campaign"]) {
         const [nameField] = await tx
           .select()
           .from(fieldDefinitions)
@@ -233,13 +237,13 @@ describe("activateCrmForTenant", () => {
         .select()
         .from(entityTypes)
         .where(eq(entityTypes.tenantId, tenant.id));
-      expect(ets).toHaveLength(4);
+      expect(ets).toHaveLength(CRM_ENTITY_TYPES.length);
 
       const lays = await tx
         .select()
         .from(layouts)
         .where(eq(layouts.tenantId, tenant.id));
-      expect(lays).toHaveLength(4);
+      expect(lays).toHaveLength(CRM_ENTITY_TYPES.length);
 
       const rels = await tx
         .select()
@@ -296,7 +300,7 @@ describe("activateCrmForTenant — permissions & grants", () => {
         .where(eq(permissions.moduleId, result.moduleId));
       const keys = new Set(rows.map((r) => `${r.resource}.${r.action}`));
 
-      expect(CRM_PERMISSIONS).toHaveLength(22);
+      expect(CRM_PERMISSIONS).toHaveLength(26);
       // Presence check (not exact count) — the shared permissions table
       // may also carry Phase-2 placeholders until 1.9a cleans them.
       for (const key of CRM_PERMISSION_KEYS) {
@@ -305,7 +309,7 @@ describe("activateCrmForTenant — permissions & grants", () => {
     });
   });
 
-  test("grants CRM perms per role — owner 22, admin 22, member 7", async () => {
+  test("grants CRM perms per role — owner/admin all, member read-set", async () => {
     await withTestTransaction(async (tx) => {
       const { tenant, role: ownerRole } = await setupTestContext(tx);
       const admin = await createTestRole(tx, tenant.id, {
@@ -321,15 +325,15 @@ describe("activateCrmForTenant — permissions & grants", () => {
 
       const owner = await grantedCrmKeys(tx, ownerRole.id, result.moduleId);
       expect(owner).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.owner));
-      expect(owner.size).toBe(22);
+      expect(owner.size).toBe(CRM_PERMISSIONS.length);
 
       const adminKeys = await grantedCrmKeys(tx, admin.id, result.moduleId);
       expect(adminKeys).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.admin));
-      expect(adminKeys.size).toBe(22);
+      expect(adminKeys.size).toBe(CRM_PERMISSIONS.length);
 
       const memberKeys = await grantedCrmKeys(tx, member.id, result.moduleId);
       expect(memberKeys).toEqual(new Set(DEFAULT_CRM_ROLE_PERMISSIONS.member));
-      expect(memberKeys.size).toBe(7);
+      expect(memberKeys.size).toBe(DEFAULT_CRM_ROLE_PERMISSIONS.member.length);
     });
   });
 

@@ -15,7 +15,7 @@ import {
 import { CRM_ENTITY_TYPES } from "./entity-types";
 import { DEFAULT_FIELDS_BY_ENTITY } from "./field-definitions";
 import { CRM_RELATIONSHIPS, type RelationshipCardinality } from "./relationships";
-import { DEFAULT_PIPELINE_STAGES } from "./pipeline";
+import { DEFAULT_PIPELINE_STAGES, CAMPAIGN_STAGES } from "./pipeline";
 import { CRM_PERMISSIONS } from "./permissions";
 import { DEFAULT_CRM_ROLE_PERMISSIONS } from "./role-assignments";
 
@@ -92,6 +92,14 @@ export async function activateCrmForTenant(
     label: s.name,
   }));
 
+  // The campaign `stage` select uses a FIXED enum (not the tenant's
+  // pipeline_stages) — its constant declares `options.choicesFrom:
+  // "campaign_stages"`, resolved here from CAMPAIGN_STAGES.
+  const campaignStageChoices = CAMPAIGN_STAGES.map((s) => ({
+    value: s.slug,
+    label: s.name,
+  }));
+
   const entityTypeIds: Record<string, string> = {};
 
   for (const entitySpec of CRM_ENTITY_TYPES) {
@@ -100,6 +108,10 @@ export async function activateCrmForTenant(
       if (entitySpec.slug === "opportunity" && f.slug === "stage") {
         // Resolve `choicesFrom: "pipeline_stages"` to concrete choices.
         return { ...f, options: { choices: stageChoices } };
+      }
+      if (entitySpec.slug === "campaign" && f.slug === "stage") {
+        // Resolve the fixed `choicesFrom: "campaign_stages"` enum.
+        return { ...f, options: { choices: campaignStageChoices } };
       }
       return f;
     });
@@ -110,11 +122,16 @@ export async function activateCrmForTenant(
     if (entitySpec.slug === "opportunity") {
       settings.pipelineStages = DEFAULT_PIPELINE_STAGES;
     }
+    if (entitySpec.slug === "campaign") {
+      settings.pipelineStages = CAMPAIGN_STAGES;
+    }
 
-    // Account + Opportunity have a single `name` field; Contact + Lead
-    // compose a display name from first/last app-side (nameFieldId null).
+    // Account + Opportunity + Campaign have a single `name` field; Contact +
+    // Lead compose a display name from first/last app-side (nameFieldId null).
     const nameFieldSlug =
-      entitySpec.slug === "account" || entitySpec.slug === "opportunity"
+      entitySpec.slug === "account" ||
+      entitySpec.slug === "opportunity" ||
+      entitySpec.slug === "campaign"
         ? "name"
         : undefined;
 
