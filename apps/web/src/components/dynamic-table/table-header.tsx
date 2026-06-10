@@ -6,9 +6,38 @@ import type {
   FieldDefinitionWithLabels,
   LocalizedLabel,
 } from "@adserve/module-framework";
-import { isSortable } from "./operators";
-import { ColumnFilter } from "./column-filter";
+import { isSortable, type FilterOperator } from "./operators";
+import { ColumnFilter, type ColumnFilterOption } from "./column-filter";
 import type { Filter, SortState } from "./types";
+
+/**
+ * Resolve a column's value-picker options + operator, or null when the column
+ * isn't filterable. Two sources:
+ *  - `select` columns are categorical by definition → always filterable from
+ *    their declared choices (operator `is`), independent of the current data.
+ *  - free-text columns are filterable only when the server supplied facet
+ *    values (a repeating, non-unique text column) → operator `equals`.
+ */
+function resolveColumnFilter(
+  field: FieldDefinitionWithLabels,
+  facetValues: string[] | undefined
+): { options: ColumnFilterOption[]; operator: FilterOperator } | null {
+  if (field.fieldType === "select") {
+    const choices = (field.options as { choices?: ColumnFilterOption[] })
+      ?.choices;
+    if (Array.isArray(choices) && choices.length >= 2) {
+      return { options: choices, operator: "is" };
+    }
+    return null;
+  }
+  if (facetValues && facetValues.length > 0) {
+    return {
+      options: facetValues.map((v) => ({ value: v, label: v })),
+      operator: "equals",
+    };
+  }
+  return null;
+}
 
 interface TableHeaderProps {
   /** Visible columns, already ordered. */
@@ -105,14 +134,13 @@ export function TableHeader({
               : active === "desc"
                 ? "descending"
                 : "none";
-          // A column gets a value-picker filter icon ONLY when the server
-          // supplied facet values for it (a repeating text column); columns
+          // A column gets a value-picker filter icon when it is categorical
+          // (a select) or a repeating text column the server faceted; columns
           // with always-unique values get no icon.
-          const facetValues = columnFacets?.[f.slug];
-          const filterable =
-            onColumnFilterChange != null &&
-            facetValues != null &&
-            facetValues.length > 0;
+          const columnFilter =
+            onColumnFilterChange != null
+              ? resolveColumnFilter(f, columnFacets?.[f.slug])
+              : null;
           return (
             <th
               key={f.id}
@@ -134,11 +162,12 @@ export function TableHeader({
                 ) : (
                   <span>{label}</span>
                 )}
-                {filterable ? (
+                {columnFilter && onColumnFilterChange ? (
                   <ColumnFilter
                     slug={f.slug}
                     label={label}
-                    values={facetValues}
+                    options={columnFilter.options}
+                    operator={columnFilter.operator}
                     active={filters.find((x) => x.fieldSlug === f.slug) ?? null}
                     onChange={(next) => onColumnFilterChange(f.slug, next)}
                   />

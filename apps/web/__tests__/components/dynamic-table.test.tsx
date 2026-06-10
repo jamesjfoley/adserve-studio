@@ -58,6 +58,20 @@ const TAGS = fieldDef({
   displayOrder: 3,
   options: { choices: [{ value: "vip", label: "VIP" }] },
 });
+const STATUS = fieldDef({
+  id: "f5",
+  slug: "status",
+  name: "Status",
+  fieldType: "select",
+  displayOrder: 4,
+  options: {
+    choices: [
+      { value: "active", label: "Active" },
+      { value: "inactive", label: "Inactive" },
+      { value: "prospect", label: "Prospect" },
+    ],
+  },
+});
 
 const RECORDS: DynamicTableRecord[] = [
   {
@@ -339,6 +353,43 @@ describe("DynamicTable — column value-picker filters", () => {
     expect(onFiltersChange).toHaveBeenCalledWith({
       filters: [],
       includeArchived: true,
+    });
+  });
+
+  // A select column is categorical, so it is ALWAYS filterable from its
+  // declared choices — no server facet, independent of the current data.
+  test("a select column is filterable from its choices (no facet needed)", async () => {
+    const user = userEvent.setup();
+    render(
+      <DynamicTable {...buildProps({ fields: [NAME, STATUS], columnFacets: {} })} />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Filter by Status" }));
+    // Choices shown as their labels, alphabetical.
+    const options = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Active", "Inactive", "Prospect"]);
+  });
+
+  test("picking a select value commits an `is` filter on the stored value", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({
+          onFiltersChange,
+          fields: [NAME, STATUS],
+          columnFacets: {},
+        })}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Filter by Status" }));
+    // Label "Active" is shown; the committed value is the stored "active".
+    await user.click(screen.getByRole("option", { name: "Active" }));
+
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      filters: [{ fieldSlug: "status", operator: "is", value: "active" }],
+      includeArchived: false,
     });
   });
 });

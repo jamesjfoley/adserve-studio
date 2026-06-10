@@ -2,14 +2,23 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { cn } from "@/lib/utils";
+import type { FilterOperator } from "./operators";
 import type { Filter } from "./types";
+
+/** One selectable value in the picker: `value` is filtered on, `label` shown. */
+export interface ColumnFilterOption {
+  value: string;
+  label: string;
+}
 
 interface ColumnFilterProps {
   slug: string;
   /** Resolved column label, used for accessible names. */
   label: string;
-  /** All distinct values present in this column (server-supplied). */
-  values: string[];
+  /** Selectable values for this column (text facet values or select choices). */
+  options: ColumnFilterOption[];
+  /** Operator to emit — `equals` for free-text columns, `is` for selects. */
+  operator: FilterOperator;
   /** The committed filter for this column, or null when none is active. */
   active: Filter | null;
   /** Commit (or, with null, clear) the filter for this column. */
@@ -35,15 +44,16 @@ function FunnelIcon({ filled }: { filled: boolean }) {
 
 /**
  * A per-column value picker, surfaced as a funnel icon in the table header.
- * Clicking opens a popover with a type-ahead box over the column's distinct
- * values (alphabetical): typing narrows the list; picking a value commits an
- * `equals` filter for this column; "All …" clears it. Only columns the server
- * deems filterable (repeating text columns) ever render this control.
+ * Clicking opens a popover with a type-ahead box over the column's values
+ * (alphabetical by label): typing narrows the list; picking a value commits a
+ * single filter for this column; "All …" clears it. The operator is supplied
+ * by the caller so free-text columns commit `equals` while selects commit `is`.
  */
 export function ColumnFilter({
   slug,
   label,
-  values,
+  options,
+  operator,
   active,
   onChange,
 }: ColumnFilterProps) {
@@ -60,16 +70,18 @@ export function ColumnFilter({
   const isActive = selected != null;
 
   const sorted = useMemo(
-    () => [...values].sort((a, b) => a.localeCompare(b)),
-    [values]
+    () => [...options].sort((a, b) => a.label.localeCompare(b.label)),
+    [options]
   );
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q === "" ? sorted : sorted.filter((v) => v.toLowerCase().includes(q));
+    return q === ""
+      ? sorted
+      : sorted.filter((o) => o.label.toLowerCase().includes(q));
   }, [sorted, query]);
 
   function select(value: string) {
-    onChange({ fieldSlug: slug, operator: "equals", value });
+    onChange({ fieldSlug: slug, operator, value });
     setOpen(false);
   }
 
@@ -81,7 +93,7 @@ export function ColumnFilter({
   // Enter selects the first visible value — a convenience for keyboard users.
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (shown.length > 0) select(shown[0]);
+    if (shown.length > 0) select(shown[0].value);
   }
 
   return (
@@ -144,20 +156,21 @@ export function ColumnFilter({
                   No matches
                 </li>
               ) : (
-                shown.map((value) => (
-                  <li key={value}>
+                shown.map((option) => (
+                  <li key={option.value}>
                     <button
                       type="button"
                       role="option"
-                      aria-selected={value === selected}
-                      onClick={() => select(value)}
+                      aria-selected={option.value === selected}
+                      onClick={() => select(option.value)}
                       className={cn(
                         "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--row-hover)]",
-                        value === selected && "font-medium text-[var(--accent)]"
+                        option.value === selected &&
+                          "font-medium text-[var(--accent)]"
                       )}
                     >
-                      <span className="truncate">{value}</span>
-                      {value === selected ? (
+                      <span className="truncate">{option.label}</span>
+                      {option.value === selected ? (
                         <span aria-hidden="true">✓</span>
                       ) : null}
                     </button>
