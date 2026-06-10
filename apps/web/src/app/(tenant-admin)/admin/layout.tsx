@@ -89,8 +89,8 @@ export default async function TenantAdminLayout({
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto bg-[var(--page-bg)]">
-        <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--page-bg)]">
+        <div className="min-h-0 flex-1 overflow-auto px-6 py-6">{children}</div>
       </main>
     </div>
   );

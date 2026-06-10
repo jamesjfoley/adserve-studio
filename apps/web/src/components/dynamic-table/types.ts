@@ -86,4 +86,20 @@ export interface DynamicTableProps {
   locale?: string;
   emptyMessage?: string;
   className?: string;
+
+  /**
+   * Stretch the table to fill its container's height: the toolbar and
+   * pagination stay fixed and the rows region scrolls internally. The host
+   * must give the table a bounded height (a flex column with `min-h-0`).
+   */
+  fillHeight?: boolean;
+
+  /**
+   * Enables a free-text search box in the toolbar that filters on this field
+   * slug via a `contains` operator. The box drafts locally and commits the
+   * merged filter on submit (Enter / clear), reusing the same `onFiltersChange`
+   * seam as the advanced filter bar.
+   */
+  searchField?: string;
+  searchPlaceholder?: string;
 }

@@ -430,3 +430,72 @@ describe("DynamicTable — long_text cell truncation (Task 1.3 live-render verif
     expect(textEl.closest(".line-clamp-2")).not.toBeNull();
   });
 });
+
+describe("DynamicTable — search box", () => {
+  test("no search box unless searchField is provided", () => {
+    render(<DynamicTable {...buildProps()} />);
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  });
+
+  test("submitting the search box commits a contains filter on the field", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({ onFiltersChange, searchField: "name" })}
+      />
+    );
+
+    const box = screen.getByRole("searchbox");
+    await user.type(box, "acme{Enter}");
+
+    expect(onFiltersChange).toHaveBeenLastCalledWith({
+      filters: [{ fieldSlug: "name", operator: "contains", value: "acme" }],
+      includeArchived: false,
+    });
+  });
+
+  test("clearing the search box removes the contains filter, preserving others", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({
+          onFiltersChange,
+          searchField: "name",
+          filterState: {
+            filters: [
+              { fieldSlug: "name", operator: "contains", value: "acme" },
+              { fieldSlug: "email", operator: "contains", value: "test" },
+            ],
+            includeArchived: false,
+          },
+        })}
+      />
+    );
+
+    const box = screen.getByRole("searchbox");
+    await user.clear(box);
+    await user.keyboard("{Enter}");
+
+    expect(onFiltersChange).toHaveBeenLastCalledWith({
+      filters: [{ fieldSlug: "email", operator: "contains", value: "test" }],
+      includeArchived: false,
+    });
+  });
+
+  test("search box is seeded from the committed contains filter", () => {
+    render(
+      <DynamicTable
+        {...buildProps({
+          searchField: "name",
+          filterState: {
+            filters: [{ fieldSlug: "name", operator: "contains", value: "globex" }],
+            includeArchived: false,
+          },
+        })}
+      />
+    );
+    expect(screen.getByRole("searchbox")).toHaveValue("globex");
+  });
+});

@@ -69,6 +69,22 @@ function choicesOf(field: FieldDefinitionWithLabels | null): Choice[] {
   return Array.isArray(opts.choices) ? opts.choices : [];
 }
 
+/**
+ * The field the home-page search box filters on (a `contains` match). Prefer
+ * the record's display name, then a person's first name, then the first
+ * free-text column — so search always targets something meaningful.
+ */
+function findSearchField(
+  fields: FieldDefinitionWithLabels[]
+): FieldDefinitionWithLabels | null {
+  return (
+    fields.find((f) => f.slug === "name") ??
+    fields.find((f) => f.slug === "firstName") ??
+    fields.find((f) => f.fieldType === "text" || f.fieldType === "long_text") ??
+    null
+  );
+}
+
 export function CrmListClient({
   collectionSegment,
   entityName,
@@ -94,6 +110,7 @@ export function CrmListClient({
 
   const statusField = findStatusField(fields);
   const statusChoices = choicesOf(statusField);
+  const searchField = findSearchField(fields);
 
   const current: ListState = {
     offset: pagination.offset,
@@ -205,7 +222,7 @@ export function CrmListClient({
   }`;
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={titleCase(collectionSegment)}
         subtitle={countLabel}
@@ -331,7 +348,10 @@ export function CrmListClient({
         </div>
       ) : null}
 
-      <Panel className="mt-6">
+      <Panel
+        className="mt-4 flex min-h-0 flex-1 flex-col"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
+      >
         <DynamicTable
           fields={fields}
           records={records}
@@ -348,6 +368,9 @@ export function CrmListClient({
           onSelectionChange={setSelectedIds}
           locale={locale}
           emptyMessage={`No ${entityName.toLowerCase()}s yet.`}
+          fillHeight
+          searchField={searchField?.slug}
+          searchPlaceholder={`Search ${entityName.toLowerCase()}s…`}
         />
       </Panel>
 

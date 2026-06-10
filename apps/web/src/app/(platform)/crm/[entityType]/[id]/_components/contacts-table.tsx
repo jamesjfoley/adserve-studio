@@ -153,9 +153,10 @@ export function ContactsTable({
     router.refresh();
   }
 
-  const cellClass = "px-3 py-2 text-sm align-top";
-  const headClass =
-    "px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]";
+  // Match the DynamicTable list pattern: tinted sticky header band,
+  // sentence-case labels, zebra rows, token hover.
+  const cellClass = "px-4 py-3 text-sm align-top";
+  const headClass = "px-4 py-3 text-left text-xs font-medium";
 
   return (
     <Panel
@@ -245,12 +246,14 @@ export function ContactsTable({
       ) : (
         <div
           className={
-            fillHeight ? "mt-3 min-h-0 flex-1 overflow-auto" : "mt-3 overflow-x-auto"
+            fillHeight
+              ? "mt-3 min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--border)]"
+              : "mt-3 overflow-x-auto rounded-lg border border-[var(--border)]"
           }
         >
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-[var(--border)]">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--table-header-bg)] text-left text-xs font-medium text-[var(--muted-foreground)]">
+              <tr>
                 <th className={headClass}>Name</th>
                 <th className={headClass}>Title</th>
                 <th className={headClass}>Account</th>
@@ -259,7 +262,7 @@ export function ContactsTable({
                 <th className={headClass}>LinkedIn</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[var(--border)]">
               {visible.map((rec) => {
                 const primary = primaryAccountById[rec.id];
                 const email = str(rec.data, "email");
@@ -268,7 +271,7 @@ export function ContactsTable({
                 return (
                   <tr
                     key={rec.id}
-                    className="border-b border-[var(--border)] last:border-0 even:bg-[color-mix(in_srgb,var(--muted)_55%,transparent)]"
+                    className="even:bg-[var(--row-alt)] hover:bg-[var(--row-hover)]"
                   >
                     <td className={cellClass}>
                       <a

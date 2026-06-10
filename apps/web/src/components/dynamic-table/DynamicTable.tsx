@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from "react";
 import { cn } from "@/lib/utils";
 import { formatFieldValue } from "../dynamic-form/format-field-value";
 import { ColumnToggle } from "./column-toggle";
@@ -39,6 +45,9 @@ export function DynamicTable({
   locale,
   emptyMessage = "No records found.",
   className,
+  fillHeight = false,
+  searchField,
+  searchPlaceholder = "Search…",
 }: DynamicTableProps) {
   // Stable column order: declared displayOrder, then insertion order.
   const orderedFields = useMemo(
@@ -96,6 +105,42 @@ export function DynamicTable({
     }
   }
 
+  // Free-text search: a `contains` filter on `searchField`, kept distinct from
+  // the advanced filter bar's filters so the two compose. The box drafts
+  // locally and commits the merged filter set on submit / clear.
+  const committedSearch = useMemo(() => {
+    if (!searchField) return "";
+    const f = filterState.filters.find(
+      (x) => x.fieldSlug === searchField && x.operator === "contains"
+    );
+    return typeof f?.value === "string" ? f.value : "";
+  }, [filterState.filters, searchField]);
+
+  const [searchDraft, setSearchDraft] = useState(committedSearch);
+  // Re-sync the box when the committed term changes out from under us
+  // (browser back/forward, external filter reset).
+  useEffect(() => setSearchDraft(committedSearch), [committedSearch]);
+
+  function commitSearch(term: string) {
+    if (!searchField) return;
+    const trimmed = term.trim();
+    const rest = filterState.filters.filter(
+      (x) => !(x.fieldSlug === searchField && x.operator === "contains")
+    );
+    onFiltersChange({
+      ...filterState,
+      filters:
+        trimmed === ""
+          ? rest
+          : [...rest, { fieldSlug: searchField, operator: "contains", value: trimmed }],
+    });
+  }
+
+  function handleSearchSubmit(e: FormEvent) {
+    e.preventDefault();
+    commitSearch(searchDraft);
+  }
+
   function handleRowClick(
     e: MouseEvent<HTMLTableRowElement>,
     record: DynamicTableRecord
@@ -108,9 +153,27 @@ export function DynamicTable({
   }
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div
+      className={cn(
+        fillHeight ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-4",
+        className
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
+        <div className="flex flex-1 items-start gap-3">
+          {searchField ? (
+            <form onSubmit={handleSearchSubmit} className="relative">
+              <input
+                type="search"
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                onBlur={() => commitSearch(searchDraft)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                className="w-64 rounded-md border border-[var(--field-border)] bg-[var(--field-bg)] px-3 py-1.5 text-sm placeholder:text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:border-[var(--accent)]"
+              />
+            </form>
+          ) : null}
           <FilterBar
             fields={orderedFields}
             filterState={filterState}
@@ -126,7 +189,12 @@ export function DynamicTable({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div
+        className={cn(
+          "rounded-lg border border-[var(--border)]",
+          fillHeight ? "min-h-0 flex-1 overflow-auto" : "overflow-x-auto"
+        )}
+      >
         <table className="w-full text-sm">
           <TableHeader
             fields={visibleFields}
