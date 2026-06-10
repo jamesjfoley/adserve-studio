@@ -162,6 +162,18 @@ when either pipeline entity is enabled.
   DB and the widget rendering is test-locked. DnD itself needs a real-browser pass (jsdom can't
   dispatch drag events).
 
+### Layout grid model (field spans + rows + widget previews)
+- `LayoutSection.items?: LayoutItem[]` — field cells `{ fieldId, span }` + spacer cells
+  `{ spacer, span }`. The detail renders `items` in a CSS grid (`repeat(columns,1fr)`, each cell
+  spanning `min(span,columns)`); spacers leave gaps / push fields to a new row. Absent → render
+  `fieldIds` at span 1 (backward compatible; old stored layouts unaffected). `validateLayoutConfig`
+  validates item field refs + positive-integer spans.
+- Layout editor: per-field width selector (1..columns, WYSIWYG grid), "Add empty cell" + "Add row
+  break" spacers, DnD/keyboard reorder over items; saves both `items` and derived `fieldIds`.
+- Widget panels (Brands / Account History) show a read-only content preview in the editor (Brand /
+  Brand Category / Brand Values; Field Name / New / Old / Changed By / Date) — their actual fields
+  live on the Brand entity / the audit log, so they're previews, not editable cells.
+
 ### Account-detail production considerations
 - **Required fields kept optional.** Account type / Required credit limit / Company registration are
   starred in the design but seeded OPTIONAL — Lead-convert and Campaign create-with-account
