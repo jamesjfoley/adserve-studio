@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 
 type LayoutItem =
-  | { fieldId: string; span?: number }
-  | { spacer: true; span?: number };
+  | { fieldId: string; span?: number; row?: number; col?: number }
+  | { spacer: true; span?: number; row?: number; col?: number };
 interface LayoutSection {
   title: string;
   columns: 1 | 2 | 3 | 4;
   fieldIds: string[];
+  rows?: number;
   items?: LayoutItem[];
   hidden?: boolean;
   widget?: string;
@@ -22,17 +23,62 @@ interface FieldRef {
   name: string;
 }
 
-// Working item: every cell carries a concrete span so the editor can render a
-// WYSIWYG grid. `spacer` cells are empty gaps; field cells reference a real id.
-type WorkItem =
-  | { fieldId: string; spacer?: false; span: number }
-  | { fieldId?: undefined; spacer: true; span: number };
-interface WorkSection extends Omit<LayoutSection, "items" | "fieldIds"> {
-  items: WorkItem[];
+/**
+ * Absolute-position grid model.
+ *
+ * Each field section is a fixed `rows × columns` matrix of cells. A cell holds
+ * one field (with a column `span`) or is empty (`null`). Fields are pinned to
+ * their exact (row, col); the ONLY way a field moves is the admin dragging it.
+ *
+ * Drag semantics — no reflow, ever:
+ *   - drop on an empty cell  → the field moves there; its old cell empties.
+ *   - drop on a filled cell  → the two fields SWAP cells. Nothing else moves.
+ *   - drop from the pool      → placed in the target cell (any occupant returns
+ *                               to the pool). No other cell changes.
+ */
+type GridCell = { fieldId: string; span: number } | null;
+interface WorkSection {
+  title: string;
+  columns: 1 | 2 | 3 | 4;
+  rows: number;
+  cells: GridCell[];
+  hidden?: boolean;
+  widget?: string;
 }
 
-function isSpacer(it: WorkItem): it is { spacer: true; span: number } {
-  return it.spacer === true;
+const idx = (r: number, c: number, cols: number) => r * cols + c;
+
+function clampSpan(span: number, max: number) {
+  return Math.min(Math.max(1, Math.floor(span)), Math.max(1, max));
+}
+
+// Largest span a field at (r,c) can take without colliding with the next
+// occupied cell in its row (or the row's end).
+function maxSpanAt(cells: GridCell[], r: number, c: number, cols: number) {
+  let next = cols;
+  for (let cc = c + 1; cc < cols; cc++) {
+    if (cells[idx(r, cc, cols)] != null) {
+      next = cc;
+      break;
+    }
+  }
+  return next - c;
+}
+
+// Clamp every field's span so it never overlaps another field — the single
+// invariant that keeps the grid non-overlapping after any move.
+function normalize(cells: GridCell[], rows: number, cols: number): GridCell[] {
+  const next = cells.slice();
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = next[idx(r, c, cols)];
+      if (cell) {
+        const span = clampSpan(cell.span, maxSpanAt(next, r, c, cols));
+        if (span !== cell.span) next[idx(r, c, cols)] = { ...cell, span };
+      }
+    }
+  }
+  return next;
 }
 
 // Preview field labels for read-only widget panels. The panel itself owns and
@@ -40,23 +86,95 @@ function isSpacer(it: WorkItem): it is { spacer: true; span: number } {
 const WIDGET_PREVIEW: Record<string, string[]> = {
   brands: ["Brand", "Brand Category", "Brand Values"],
   history: ["Field Name", "New Value", "Old Value", "Changed By", "Date & Time"],
+  notes: ["Type", "Name", "Details", "Added by", "Date"],
 };
 
-// Derive working items for a section. Widget sections never place fields, so
-// they keep an empty item list. Non-widget sections adopt existing `items` if
-// present, otherwise derive span-1 field cells from `fieldIds`.
-function toWorkItems(section: LayoutSection): WorkItem[] {
-  if (section.widget) return [];
-  if (section.items && section.items.length > 0) {
-    return section.items.map((it) => {
-      if ("spacer" in it && it.spacer) {
-        return { spacer: true, span: Math.max(1, it.span ?? 1) };
+/**
+ * Build the working matrix for a section. Coordinate `items` are placed at their
+ * exact (row, col); legacy flow `items` are converted row-major (honouring
+ * spans) as a starting grid; bare `fieldIds` become a span-1 row-major grid.
+ */
+function toWork(section: LayoutSection): WorkSection {
+  const base = {
+    title: section.title,
+    columns: section.columns,
+    hidden: section.hidden,
+    widget: section.widget,
+  };
+  if (section.widget) return { ...base, rows: 0, cells: [] };
+
+  const cols = section.columns;
+  const placements: { fieldId: string; span: number; row: number; col: number }[] =
+    [];
+
+  const items = section.items;
+  if (items && items.length > 0) {
+    const anyCoords = items.some(
+      (it) => typeof it.row === "number" && typeof it.col === "number"
+    );
+    if (anyCoords) {
+      for (const it of items) {
+        if ("spacer" in it && it.spacer) continue;
+        const fieldId = (it as { fieldId?: string }).fieldId;
+        if (!fieldId) continue;
+        const col = Math.min(Math.max(0, it.col ?? 0), cols - 1);
+        placements.push({
+          fieldId,
+          span: clampSpan(it.span ?? 1, cols - col),
+          row: Math.max(0, it.row ?? 0),
+          col,
+        });
       }
-      const fieldId = (it as { fieldId: string }).fieldId;
-      return { fieldId, span: Math.max(1, it.span ?? 1) };
+    } else {
+      // Legacy flow → assign coordinates row-major.
+      let r = 0;
+      let c = 0;
+      for (const it of items) {
+        const span = clampSpan(it.span ?? 1, cols);
+        if (c + span > cols) {
+          r++;
+          c = 0;
+        }
+        const eff = Math.min(span, cols - c);
+        if (!("spacer" in it && it.spacer)) {
+          const fieldId = (it as { fieldId?: string }).fieldId;
+          if (fieldId) placements.push({ fieldId, span: eff, row: r, col: c });
+        }
+        c += eff;
+        if (c >= cols) {
+          r++;
+          c = 0;
+        }
+      }
+    }
+  } else {
+    (section.fieldIds ?? []).forEach((fieldId, i) => {
+      placements.push({
+        fieldId,
+        span: 1,
+        row: Math.floor(i / cols),
+        col: i % cols,
+      });
     });
   }
-  return (section.fieldIds ?? []).map((fieldId) => ({ fieldId, span: 1 }));
+
+  const maxRow = placements.reduce((m, p) => Math.max(m, p.row), -1);
+  const rows = Math.max(section.rows ?? 0, maxRow + 1, 1);
+  const cells: GridCell[] = Array(rows * cols).fill(null);
+  for (const p of placements) {
+    const i = idx(p.row, p.col, cols);
+    if (i >= 0 && i < cells.length && cells[i] == null) {
+      cells[i] = { fieldId: p.fieldId, span: p.span };
+    } else {
+      // Out of range / collision → drop into the first free cell rather than
+      // lose the field.
+      const free = cells.findIndex((x) => x == null);
+      if (free >= 0) {
+        cells[free] = { fieldId: p.fieldId, span: clampSpan(p.span, cols - (free % cols)) };
+      }
+    }
+  }
+  return { ...base, rows, cells: normalize(cells, rows, cols) };
 }
 
 export function LayoutEditor({
@@ -71,44 +189,31 @@ export function LayoutEditor({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [sections, setSections] = useState<WorkSection[]>(() =>
-    (initialConfig.sections ?? []).map((s) => ({
-      title: s.title,
-      columns: s.columns,
-      hidden: s.hidden,
-      widget: s.widget,
-      items: toWorkItems(s),
-    }))
+    (initialConfig.sections ?? []).map(toWork)
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // Active drag: a cell being dragged from a section (with its index) or a field
-  // from the "unplaced" pool (from === null). Used to move cells row-major.
+  // Active drag: a field from a section grid (`from` = section index, `index` =
+  // cell index) or from the unplaced pool (`from` = null).
   const [drag, setDrag] = useState<{
-    id: string | null; // fieldId for field/pool drags; null for spacers
-    spacer: boolean;
+    fieldId: string;
     from: number | null;
     index: number | null;
   } | null>(null);
-  // The drop target currently under the cursor, for a visual indicator.
   const [dropAt, setDropAt] = useState<{ section: number; index: number } | null>(
     null
   );
 
   const nameById = new Map(fields.map((f) => [f.id, f.name]));
-  // A field is "placed" if it appears as a field cell in any non-widget section.
   const placed = new Set(
     sections
       .filter((s) => !s.widget)
-      .flatMap((s) => s.items.filter((it) => !isSpacer(it)).map((it) => it.fieldId!))
+      .flatMap((s) => s.cells.filter((c): c is NonNullable<GridCell> => c != null).map((c) => c.fieldId))
   );
   const unplaced = fields.filter((f) => !placed.has(f.id));
 
-  function clampSpan(span: number, columns: number) {
-    return Math.min(Math.max(1, Math.floor(span)), columns);
-  }
-
   function setSection(i: number, patch: Partial<WorkSection>) {
-    setSections(sections.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+    setSections(sections.map((s, idxn) => (idxn === i ? { ...s, ...patch } : s)));
   }
   function moveSection(i: number, dir: -1 | 1) {
     const t = i + dir;
@@ -117,130 +222,121 @@ export function LayoutEditor({
     [next[i], next[t]] = [next[t], next[i]];
     setSections(next);
   }
-  function moveItem(si: number, ii: number, dir: -1 | 1) {
-    const t = ii + dir;
-    const items = sections[si].items.slice();
-    if (t < 0 || t >= items.length) return;
-    [items[ii], items[t]] = [items[t], items[ii]];
-    setSection(si, { items });
-  }
-  function removeItem(si: number, ii: number) {
-    setSection(si, { items: sections[si].items.filter((_, idx) => idx !== ii) });
-  }
-  function setItemSpan(si: number, ii: number, span: number) {
-    const cols = sections[si].columns;
-    const items = sections[si].items.map((it, idx) =>
-      idx === ii ? { ...it, span: clampSpan(span, cols) } : it
-    );
-    setSection(si, { items });
-  }
+
   function setColumns(si: number, columns: 1 | 2 | 3 | 4) {
-    // Re-clamp every span to the new column count.
-    const items = sections[si].items.map((it) => ({
-      ...it,
-      span: clampSpan(it.span, columns),
-    }));
-    setSection(si, { columns, items });
-  }
-  function addField(si: number, id: string) {
-    if (!id) return;
-    setSection(si, { items: [...sections[si].items, { fieldId: id, span: 1 }] });
-  }
-  function addSpacer(si: number) {
-    setSection(si, { items: [...sections[si].items, { spacer: true, span: 1 }] });
-  }
-  function addRowBreak(si: number) {
-    const section = sections[si];
-    const cols = section.columns;
-    const used = section.items.reduce((sum, it) => sum + it.span, 0);
-    const remainder = used % cols;
-    // Remainder 0 means the last row is full (or empty) — a full-width spacer
-    // starts a fresh empty row. Otherwise fill the rest of the current row.
-    const span = remainder === 0 ? cols : cols - remainder;
-    setSection(si, { items: [...section.items, { spacer: true, span }] });
+    const s = sections[si];
+    const cells: GridCell[] = Array(s.rows * columns).fill(null);
+    for (let r = 0; r < s.rows; r++) {
+      for (let c = 0; c < s.columns; c++) {
+        const cell = s.cells[idx(r, c, s.columns)];
+        if (cell && c < columns) {
+          cells[idx(r, c, columns)] = { ...cell, span: clampSpan(cell.span, columns - c) };
+        }
+        // Fields beyond the new width are unplaced (return to the pool).
+      }
+    }
+    setSection(si, { columns, cells: normalize(cells, s.rows, columns) });
   }
 
-  // Core of drag-and-drop: move a cell to `targetSection` at `targetIndex`,
-  // removing it from its source section first. `fromSection === null` means a
-  // field dragged from the unplaced pool (nothing to remove). Index null appends.
-  function moveItemTo(
-    payload: { id: string | null; spacer: boolean },
-    fromSection: number | null,
-    fromIndex: number | null,
-    targetSection: number,
-    targetIndex: number | null
-  ) {
-    setSections((prev) => {
-      const next = prev.map((s) => ({ ...s, items: s.items.slice() }));
-      let moved: WorkItem | null = null;
-      let removedBefore = false;
-      if (fromSection !== null && fromIndex !== null) {
-        const src = next[fromSection].items;
-        if (fromIndex >= 0 && fromIndex < src.length) {
-          moved = src[fromIndex];
-          src.splice(fromIndex, 1);
-          if (
-            fromSection === targetSection &&
-            targetIndex !== null &&
-            fromIndex < targetIndex
-          ) {
-            removedBefore = true;
-          }
-        }
-      }
-      // From the pool: build a fresh field cell.
-      if (!moved) {
-        moved = payload.spacer
-          ? { spacer: true, span: 1 }
-          : { fieldId: payload.id!, span: 1 };
-      }
-      const dst = next[targetSection].items;
-      // Guard: don't duplicate a field that's already placed elsewhere when it
-      // came from the pool.
-      if (
-        !payload.spacer &&
-        fromSection === null &&
-        dst.some((it) => !isSpacer(it) && it.fieldId === payload.id)
-      ) {
-        return next;
-      }
-      // Re-clamp the moved cell's span to the destination's columns.
-      moved = { ...moved, span: clampSpan(moved.span, next[targetSection].columns) };
-      const insertAt =
-        targetIndex === null
-          ? dst.length
-          : Math.max(0, targetIndex - (removedBefore ? 1 : 0));
-      dst.splice(insertAt, 0, moved);
-      return next;
+  function addRow(si: number) {
+    const s = sections[si];
+    setSection(si, {
+      rows: s.rows + 1,
+      cells: [...s.cells, ...Array(s.columns).fill(null)],
     });
   }
+  function removeLastRow(si: number) {
+    const s = sections[si];
+    if (s.rows <= 1) return;
+    const lastRowStart = (s.rows - 1) * s.columns;
+    const lastRowEmpty = s.cells.slice(lastRowStart).every((c) => c == null);
+    if (!lastRowEmpty) return;
+    setSection(si, { rows: s.rows - 1, cells: s.cells.slice(0, lastRowStart) });
+  }
 
-  function onCellDrop(targetSection: number, targetIndex: number | null) {
-    if (drag) {
-      moveItemTo(
-        { id: drag.id, spacer: drag.spacer },
-        drag.from,
-        drag.index,
-        targetSection,
-        targetIndex
-      );
-    }
+  function removeFieldAt(si: number, i: number) {
+    const cells = sections[si].cells.slice();
+    cells[i] = null;
+    setSection(si, { cells });
+  }
+  function setSpanAt(si: number, i: number, span: number) {
+    const s = sections[si];
+    const cell = s.cells[i];
+    if (!cell) return;
+    const r = Math.floor(i / s.columns);
+    const c = i % s.columns;
+    const cells = s.cells.slice();
+    cells[i] = { ...cell, span: clampSpan(span, maxSpanAt(cells, r, c, s.columns)) };
+    setSection(si, { cells });
+  }
+  function addFieldToFirstFree(si: number, fieldId: string) {
+    if (!fieldId) return;
+    setSections((prev) =>
+      prev.map((s, k) => {
+        if (k !== si) return s;
+        let cells = s.cells.slice();
+        let rows = s.rows;
+        let free = cells.findIndex((c) => c == null);
+        if (free < 0) {
+          // No free cell → grow by a row.
+          cells = [...cells, ...Array(s.columns).fill(null)];
+          rows += 1;
+          free = (rows - 1) * s.columns;
+        }
+        cells[free] = { fieldId, span: 1 };
+        return { ...s, rows, cells: normalize(cells, rows, s.columns) };
+      })
+    );
+  }
+
+  // The one move primitive: drop the active drag onto (targetSi, targetIdx).
+  function dropOnCell(targetSi: number, targetIdx: number) {
+    if (!drag) return;
+    setSections((prev) => {
+      const next = prev.map((s) => ({ ...s, cells: s.cells.slice() }));
+
+      if (drag.from === null) {
+        // From the pool: place into the target. Any occupant is displaced back
+        // to the pool (simply overwritten). Nothing else moves.
+        next[targetSi].cells[targetIdx] = { fieldId: drag.fieldId, span: 1 };
+      } else {
+        // Grid → grid: swap the two cells' contents (move-to-empty is a swap
+        // with an empty cell). No other cell is touched.
+        const srcCells = next[drag.from].cells;
+        const dstCells = next[targetSi].cells;
+        const srcContent = srcCells[drag.index!];
+        const dstContent = dstCells[targetIdx];
+        dstCells[targetIdx] = srcContent;
+        srcCells[drag.index!] = dstContent;
+      }
+
+      // Re-clamp spans in the affected sections (positions may have changed).
+      for (const si of new Set([targetSi, drag.from].filter((x) => x != null))) {
+        const s = next[si as number];
+        next[si as number] = {
+          ...s,
+          cells: normalize(s.cells, s.rows, s.columns),
+        };
+      }
+      return next;
+    });
     setDrag(null);
     setDropAt(null);
   }
+
   function addSection() {
     setSections([
       ...sections,
-      { title: "New section", columns: 2, items: [] },
+      { title: "New section", columns: 2, rows: 2, cells: Array(4).fill(null) },
     ]);
   }
   function removeSection(i: number) {
-    setSections(sections.filter((_, idx) => idx !== i));
+    setSections(sections.filter((_, idxn) => idxn !== i));
   }
 
-  // Serialise working sections back to the save contract: non-widget sections
-  // emit BOTH `items` (arranged cells) and `fieldIds` (field cells in order);
-  // widget sections save their original shape (no items, empty fieldIds).
+  // Serialise to the save contract: field sections emit absolute-positioned
+  // `items` (+ row-major `fieldIds` + explicit `rows`); widget sections keep
+  // their shape.
   function serialise(): LayoutSection[] {
     return sections.map((s) => {
       if (s.widget) {
@@ -252,17 +348,20 @@ export function LayoutEditor({
           widget: s.widget,
         };
       }
-      const items: LayoutItem[] = s.items.map((it) =>
-        isSpacer(it)
-          ? { spacer: true, span: it.span }
-          : { fieldId: it.fieldId!, span: it.span }
-      );
-      const fieldIds = s.items
-        .filter((it) => !isSpacer(it))
-        .map((it) => it.fieldId!);
+      const items: LayoutItem[] = [];
+      const fieldIds: string[] = [];
+      for (let r = 0; r < s.rows; r++) {
+        for (let c = 0; c < s.columns; c++) {
+          const cell = s.cells[idx(r, c, s.columns)];
+          if (!cell) continue;
+          items.push({ fieldId: cell.fieldId, span: cell.span, row: r, col: c });
+          fieldIds.push(cell.fieldId);
+        }
+      }
       return {
         title: s.title,
         columns: s.columns,
+        rows: s.rows,
         fieldIds,
         items,
         ...(s.hidden ? { hidden: true } : {}),
@@ -306,7 +405,7 @@ export function LayoutEditor({
       {unplaced.length > 0 && (
         <div className="mb-3">
           <p className="text-xs text-[var(--muted-foreground)]">
-            Unplaced fields: drag one into a section below, or use “+ Add field”.
+            Unplaced fields: drag one onto a cell below, or use “+ Add field”.
           </p>
           <div className="mt-1 flex flex-wrap gap-1">
             {unplaced.map((f) => (
@@ -314,7 +413,7 @@ export function LayoutEditor({
                 key={f.id}
                 draggable
                 onDragStart={() =>
-                  setDrag({ id: f.id, spacer: false, from: null, index: null })
+                  setDrag({ fieldId: f.id, from: null, index: null })
                 }
                 onDragEnd={() => {
                   setDrag(null);
@@ -335,6 +434,22 @@ export function LayoutEditor({
           const previewFields = isWidget
             ? WIDGET_PREVIEW[section.widget!] ?? []
             : [];
+          const cols = section.columns;
+          // Cells covered by a wider field to their left — not rendered as their
+          // own droppable cell (they live "inside" the spanning field).
+          const covered = new Set<number>();
+          if (!isWidget) {
+            for (let r = 0; r < section.rows; r++) {
+              for (let c = 0; c < cols; c++) {
+                const cell = section.cells[idx(r, c, cols)];
+                if (cell) {
+                  for (let cc = c + 1; cc < c + cell.span && cc < cols; cc++) {
+                    covered.add(idx(r, cc, cols));
+                  }
+                }
+              }
+            }
+          }
           return (
             <div
               key={si}
@@ -395,9 +510,7 @@ export function LayoutEditor({
                   <input
                     type="checkbox"
                     checked={Boolean(section.hidden)}
-                    onChange={(e) =>
-                      setSection(si, { hidden: e.target.checked })
-                    }
+                    onChange={(e) => setSection(si, { hidden: e.target.checked })}
                     aria-label="Hidden"
                   />
                   Hidden
@@ -430,108 +543,111 @@ export function LayoutEditor({
 
               {!isWidget && (
                 <>
-                  {/* WYSIWYG grid: cells are laid out row-major in the section's
-                      column count, each spanning `span` columns, exactly as the
-                      detail page renders `items`. Drag a cell to reorder / move
-                      it between sections. Spacers render as dashed gaps. */}
+                  {/* WYSIWYG absolute grid: every (row, col) is a cell. Fields are
+                      pinned to their position; drag onto an empty cell to move
+                      (nothing else shifts) or onto a field to swap the two. */}
                   <div
                     data-testid={`grid-${si}`}
-                    data-columns={section.columns}
+                    data-columns={cols}
+                    data-rows={section.rows}
                     className="mt-3 grid gap-2"
                     style={{
-                      gridTemplateColumns: `repeat(${section.columns}, minmax(0, 1fr))`,
-                    }}
-                    onDragOver={(e) => {
-                      if (!drag) return;
-                      e.preventDefault();
-                      // Dropping on empty grid area appends to the end.
-                      setDropAt({ section: si, index: section.items.length });
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      onCellDrop(si, null);
+                      gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                      gridTemplateRows: `repeat(${section.rows}, minmax(2.5rem, auto))`,
                     }}
                   >
-                    {section.items.map((it, ii) => {
+                    {Array.from({ length: section.rows * cols }, (_, i) => {
+                      if (covered.has(i)) return null;
+                      const r = Math.floor(i / cols);
+                      const c = i % cols;
+                      const cell = section.cells[i];
                       const isDropTarget =
-                        dropAt?.section === si && dropAt.index === ii;
+                        dropAt?.section === si && dropAt.index === i;
                       const isDragging =
-                        drag?.from === si && drag.index === ii;
-                      const span = clampSpan(it.span, section.columns);
-                      const spacer = isSpacer(it);
-                      const cellLabel = spacer
-                        ? "Empty cell"
-                        : `Field ${nameById.get(it.fieldId!) ?? it.fieldId}`;
+                        drag?.from === si && drag.index === i;
+                      const span = cell ? clampSpan(cell.span, cols - c) : 1;
+                      const cellStyle: CSSProperties = {
+                        gridColumn: `${c + 1} / span ${span}`,
+                        gridRowStart: r + 1,
+                      };
+                      const dropHandlers = {
+                        onDragOver: (e: React.DragEvent) => {
+                          if (!drag) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDropAt({ section: si, index: i });
+                        },
+                        onDrop: (e: React.DragEvent) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          dropOnCell(si, i);
+                        },
+                      };
+
+                      if (!cell) {
+                        // Empty cell — a precise drop target.
+                        return (
+                          <div
+                            key={i}
+                            {...dropHandlers}
+                            style={cellStyle}
+                            aria-label={`Empty cell row ${r + 1} column ${c + 1}`}
+                            className={`flex items-center justify-center rounded-md border border-dashed text-xs text-[var(--muted-foreground)] ${
+                              isDropTarget
+                                ? "border-[var(--accent)] bg-[var(--accent)]/10 ring-2 ring-[var(--accent)]"
+                                : "border-[var(--border)]"
+                            }`}
+                          >
+                            <span className="italic opacity-70">empty</span>
+                          </div>
+                        );
+                      }
+
+                      const name = nameById.get(cell.fieldId);
+                      const cellLabel = `Field ${name ?? cell.fieldId}`;
                       return (
                         <div
-                          key={ii}
+                          key={i}
                           draggable
                           onDragStart={(e) => {
                             e.stopPropagation();
-                            setDrag({
-                              id: spacer ? null : it.fieldId!,
-                              spacer,
-                              from: si,
-                              index: ii,
-                            });
+                            setDrag({ fieldId: cell.fieldId, from: si, index: i });
                           }}
                           onDragEnd={() => {
                             setDrag(null);
                             setDropAt(null);
                           }}
-                          onDragOver={(e) => {
-                            if (!drag) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                            // Dropping onto a cell inserts before it.
-                            setDropAt({ section: si, index: ii });
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onCellDrop(si, ii);
-                          }}
-                          style={{ gridColumn: `span ${span}` }}
-                          className={`flex cursor-grab items-center gap-2 rounded-md border px-2 py-1 text-sm ${
-                            spacer
-                              ? "border-dashed bg-[var(--muted)] text-[var(--muted-foreground)]"
-                              : "bg-[var(--background)]"
-                          } ${
+                          {...dropHandlers}
+                          style={cellStyle}
+                          className={`flex cursor-grab items-center gap-2 rounded-md border bg-[var(--background)] px-2 py-1 text-sm ${
                             isDropTarget
                               ? "border-[var(--accent)] ring-2 ring-[var(--accent)]"
                               : "border-[var(--border)]"
                           } ${isDragging ? "opacity-40" : ""}`}
                           aria-label={cellLabel}
                         >
-                          <span
-                            aria-hidden
-                            className="text-[var(--muted-foreground)]"
-                          >
+                          <span aria-hidden className="text-[var(--muted-foreground)]">
                             ⠿
                           </span>
                           <span className="flex-1 truncate">
-                            {spacer ? (
-                              <span className="italic">empty</span>
-                            ) : (
-                              nameById.get(it.fieldId!) ?? (
-                                <span className="text-red-600">unknown field</span>
-                              )
+                            {name ?? (
+                              <span className="text-red-600">unknown field</span>
                             )}
                           </span>
-                          {/* Span control: width in columns, clamped to the
-                              section's column count. */}
+                          {/* Width in columns, capped so it can't overlap the
+                              next field in the row. */}
                           <label className="flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
                             <span aria-hidden>w</span>
                             <select
                               className="rounded border border-[var(--border)] bg-[var(--background)] px-1 text-xs"
                               value={span}
                               onChange={(e) =>
-                                setItemSpan(si, ii, Number(e.target.value))
+                                setSpanAt(si, i, Number(e.target.value))
                               }
                               aria-label={`Width for ${cellLabel}`}
                             >
                               {Array.from(
-                                { length: section.columns },
+                                { length: maxSpanAt(section.cells, r, c, cols) },
                                 (_, n) => n + 1
                               ).map((n) => (
                                 <option key={n} value={n}>
@@ -540,38 +656,16 @@ export function LayoutEditor({
                               ))}
                             </select>
                           </label>
-                          {/* Keyboard/click fallback: reorder + remove without a mouse. */}
                           <button
-                            onClick={() => moveItem(si, ii, -1)}
-                            disabled={ii === 0}
-                            className="rounded border border-[var(--border)] px-1 text-xs disabled:opacity-30"
-                            aria-label="Move up"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            onClick={() => moveItem(si, ii, 1)}
-                            disabled={ii === section.items.length - 1}
-                            className="rounded border border-[var(--border)] px-1 text-xs disabled:opacity-30"
-                            aria-label="Move down"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            onClick={() => removeItem(si, ii)}
+                            onClick={() => removeFieldAt(si, i)}
                             className="text-xs text-[var(--muted-foreground)] hover:text-red-600"
-                            aria-label="Remove cell"
+                            aria-label={`Remove ${cellLabel} from layout`}
                           >
                             remove
                           </button>
                         </div>
                       );
                     })}
-                    {section.items.length === 0 && (
-                      <p className="col-span-full rounded-md border border-dashed border-[var(--border)] px-2 py-3 text-center text-xs text-[var(--muted-foreground)]">
-                        Drop a field here, or use “+ Add field” below.
-                      </p>
-                    )}
                   </div>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -579,7 +673,7 @@ export function LayoutEditor({
                       <select
                         className={input}
                         value=""
-                        onChange={(e) => addField(si, e.target.value)}
+                        onChange={(e) => addFieldToFirstFree(si, e.target.value)}
                       >
                         <option value="">+ Add field…</option>
                         {unplaced.map((f) => (
@@ -590,16 +684,22 @@ export function LayoutEditor({
                       </select>
                     )}
                     <button
-                      onClick={() => addSpacer(si)}
+                      onClick={() => addRow(si)}
                       className="rounded-md border border-[var(--border)] px-2 py-1 text-xs"
                     >
-                      Add empty cell
+                      Add row
                     </button>
                     <button
-                      onClick={() => addRowBreak(si)}
-                      className="rounded-md border border-[var(--border)] px-2 py-1 text-xs"
+                      onClick={() => removeLastRow(si)}
+                      disabled={
+                        section.rows <= 1 ||
+                        section.cells
+                          .slice((section.rows - 1) * cols)
+                          .some((c) => c != null)
+                      }
+                      className="rounded-md border border-[var(--border)] px-2 py-1 text-xs disabled:opacity-40"
                     >
-                      Add row break
+                      Remove last row
                     </button>
                   </div>
                 </>

@@ -2,7 +2,13 @@
 import "../setup/jest-dom";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  within,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LayoutEditor } from "@/app/(tenant-admin)/admin/crm/layouts/_components/layout-editor";
 
@@ -23,9 +29,23 @@ afterEach(() => {
 
 function sectionPanels() {
   // Each section's title <input> is the simplest stable handle on the panel.
-  return screen
-    .getAllByRole("textbox")
-    .map((el) => el as HTMLInputElement);
+  return screen.getAllByRole("textbox").map((el) => el as HTMLInputElement);
+}
+
+/** Parse the section list out of the last fetch save call. */
+function savedSections(fetchMock: ReturnType<typeof vi.spyOn>) {
+  const body = JSON.parse(
+    (fetchMock.mock.calls[0][1] as RequestInit).body as string
+  ) as { config: { sections: Array<Record<string, unknown>> } };
+  return body.config.sections;
+}
+
+function mockSave() {
+  return vi
+    .spyOn(global, "fetch")
+    .mockResolvedValue(
+      new Response(JSON.stringify({}), { status: 200 }) as Response
+    );
 }
 
 describe("LayoutEditor", () => {
@@ -47,7 +67,6 @@ describe("LayoutEditor", () => {
     let titles = sectionPanels().map((i) => i.value);
     expect(titles).toEqual(["Alpha", "Beta"]);
 
-    // Move the first section ("Alpha") down.
     const downButtons = screen.getAllByLabelText("Move section down");
     await user.click(downButtons[0]);
 
@@ -71,10 +90,10 @@ describe("LayoutEditor", () => {
 
     const ups = screen.getAllByLabelText("Move section up");
     const downs = screen.getAllByLabelText("Move section down");
-    expect(ups[0]).toBeDisabled(); // first can't move up
+    expect(ups[0]).toBeDisabled();
     expect(ups[1]).not.toBeDisabled();
     expect(downs[0]).not.toBeDisabled();
-    expect(downs[1]).toBeDisabled(); // last can't move down
+    expect(downs[1]).toBeDisabled();
   });
 
   test("hidden checkbox toggles the section and shows a Hidden badge", async () => {
@@ -90,12 +109,8 @@ describe("LayoutEditor", () => {
     );
 
     expect(screen.queryByText("Hidden", { selector: "span" })).toBeNull();
-
-    const checkbox = screen.getByLabelText("Hidden");
-    await user.click(checkbox);
-
-    expect(checkbox).toBeChecked();
-    // A visible "Hidden" badge appears (span), distinct from the label text.
+    await user.click(screen.getByLabelText("Hidden"));
+    expect(screen.getByLabelText("Hidden")).toBeChecked();
     expect(
       screen.getByText("Hidden", { selector: "span" })
     ).toBeInTheDocument();
@@ -114,13 +129,9 @@ describe("LayoutEditor", () => {
       />
     );
 
-    // No columns selector for a widget panel.
     expect(screen.queryByText("Columns")).toBeNull();
-    // No "Add field" picker (combobox) for a widget panel.
     expect(screen.queryByRole("combobox")).toBeNull();
-    // Panel label present.
     expect(screen.getByText(/Brands — panel \(brands\)/)).toBeInTheDocument();
-    // Title editable, hidden checkbox + remove still present.
     expect(screen.getByDisplayValue("Brands")).toBeInTheDocument();
     expect(screen.getByLabelText("Hidden")).toBeInTheDocument();
     expect(screen.getByText("Remove section")).toBeInTheDocument();
@@ -133,7 +144,6 @@ describe("LayoutEditor", () => {
         fields={fields}
         initialConfig={{
           sections: [
-            // A (buggy) widget section carrying ids must not hide them from unplaced.
             { title: "Hist", columns: 2, fieldIds: ["f1"], widget: "history" },
             { title: "Details", columns: 2, fieldIds: [] },
           ],
@@ -141,42 +151,40 @@ describe("LayoutEditor", () => {
       />
     );
 
-    // Both fields remain unplaced (rendered as draggable chips in the unplaced
-    // area) because the only fieldIds live on a widget section.
     expect(screen.getByText(/Unplaced fields:/)).toBeInTheDocument();
-    // Names appear as draggable chips (spans) in the unplaced area.
-    expect(screen.getByText("First name", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByText("Last name", { selector: "span" })).toBeInTheDocument();
+    expect(
+      screen.getByText("First name", { selector: "span" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Last name", { selector: "span" })
+    ).toBeInTheDocument();
   });
 
-  test("field grid uses the section's column count and re-renders on change", async () => {
+  test("field grid mirrors the section's column count and reshapes on change", async () => {
     const user = userEvent.setup();
     render(
       <LayoutEditor
         layoutId="l1"
         fields={fields}
         initialConfig={{
-          sections: [
-            { title: "Alpha", columns: 2, fieldIds: ["f1", "f2"] },
-          ],
+          sections: [{ title: "Alpha", columns: 2, fieldIds: ["f1", "f2"] }],
         }}
       />
     );
 
     const grid = screen.getByTestId("grid-0");
-    // The WYSIWYG grid mirrors the panel's column count (row-major placement).
     expect(grid.getAttribute("data-columns")).toBe("2");
     expect(grid.style.gridTemplateColumns).toContain("repeat(2");
-    // Both placed fields are rendered as draggable chips.
     expect(within(grid).getByText("First name")).toBeInTheDocument();
     expect(within(grid).getByText("Last name")).toBeInTheDocument();
 
-    // Changing the Columns select re-renders the same fields in the new count.
     const columnsLabel = screen.getByText("Columns").closest("label")!;
-    const select = within(columnsLabel).getByRole("combobox");
-    await user.selectOptions(select, "3");
+    await user.selectOptions(within(columnsLabel).getByRole("combobox"), "3");
     expect(grid.getAttribute("data-columns")).toBe("3");
     expect(grid.style.gridTemplateColumns).toContain("repeat(3");
+    // Both fields survive the reshape (kept at their columns 0 and 1).
+    expect(within(grid).getByText("First name")).toBeInTheDocument();
+    expect(within(grid).getByText("Last name")).toBeInTheDocument();
   });
 
   test("columns selector offers 1 through 4 for normal sections", () => {
@@ -190,23 +198,76 @@ describe("LayoutEditor", () => {
       />
     );
 
-    // The Columns <select> is the combobox inside the "Columns" label.
     const columnsLabel = screen.getByText("Columns").closest("label")!;
     const select = within(columnsLabel).getByRole(
       "combobox"
     ) as HTMLSelectElement;
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual(["1", "2", "3", "4"]);
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+    ]);
     expect(select.value).toBe("4");
   });
 
-  test("changing a field cell's width span is sent in the saved items", async () => {
-    const fetchMock = vi
-      .spyOn(global, "fetch")
-      .mockResolvedValue(
-        new Response(JSON.stringify({}), { status: 200 }) as Response
-      );
+  test("saves absolute-positioned items with row/col, fieldIds and rows", async () => {
+    const fetchMock = mockSave();
     const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          sections: [{ title: "Alpha", columns: 2, fieldIds: ["f1", "f2"] }],
+        }}
+      />
+    );
+
+    await user.click(screen.getByText("Save layout"));
+    const section = savedSections(fetchMock)[0];
+    expect(section.items).toEqual([
+      { fieldId: "f1", span: 1, row: 0, col: 0 },
+      { fieldId: "f2", span: 1, row: 0, col: 1 },
+    ]);
+    expect(section.fieldIds).toEqual(["f1", "f2"]);
+    expect(section.rows).toBe(1);
+    fetchMock.mockRestore();
+  });
+
+  test("field width is capped so it cannot overlap the next field, and persists", async () => {
+    const fetchMock = mockSave();
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          // Only f1 placed in a 3-col section → it can span the full width.
+          sections: [{ title: "Alpha", columns: 3, fieldIds: ["f1"] }],
+        }}
+      />
+    );
+
+    const widthSelect = screen.getByLabelText(
+      "Width for Field First name"
+    ) as HTMLSelectElement;
+    expect(Array.from(widthSelect.options).map((o) => o.value)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+    await user.selectOptions(widthSelect, "3");
+    await user.click(screen.getByText("Save layout"));
+
+    const section = savedSections(fetchMock)[0];
+    expect(section.items).toEqual([
+      { fieldId: "f1", span: 3, row: 0, col: 0 },
+    ]);
+    fetchMock.mockRestore();
+  });
+
+  test("a field next to another caps width at 1 (no overlap option)", () => {
     render(
       <LayoutEditor
         layoutId="l1"
@@ -216,69 +277,98 @@ describe("LayoutEditor", () => {
         }}
       />
     );
-
-    // The first field cell's width <select>.
+    // f1 at col 0, f2 at col 1 → f1 can only be width 1 (f2 blocks col 1).
     const widthSelect = screen.getByLabelText(
       "Width for Field First name"
     ) as HTMLSelectElement;
-    // 1..columns offered.
-    expect(Array.from(widthSelect.options).map((o) => o.value)).toEqual([
-      "1",
-      "2",
-      "3",
-    ]);
-    await user.selectOptions(widthSelect, "3");
-
-    await user.click(screen.getByText("Save layout"));
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(
-      (fetchMock.mock.calls[0][1] as RequestInit).body as string
-    ) as { config: { sections: Array<Record<string, unknown>> } };
-    const section = body.config.sections[0];
-    // items carries the field cell with the new span; fieldIds preserved in order.
-    expect(section.items).toEqual([
-      { fieldId: "f1", span: 3 },
-      { fieldId: "f2", span: 1 },
-    ]);
-    expect(section.fieldIds).toEqual(["f1", "f2"]);
-    fetchMock.mockRestore();
+    expect(Array.from(widthSelect.options).map((o) => o.value)).toEqual(["1"]);
   });
 
-  test("Add empty cell and Add row break append spacer cells", async () => {
-    const fetchMock = vi
-      .spyOn(global, "fetch")
-      .mockResolvedValue(
-        new Response(JSON.stringify({}), { status: 200 }) as Response
-      );
+  test("dragging a field onto an EMPTY cell moves it there; nothing else moves", async () => {
+    const fetchMock = mockSave();
     const user = userEvent.setup();
     render(
       <LayoutEditor
         layoutId="l1"
         fields={fields}
         initialConfig={{
-          // One field at span 1 in a 2-col section: row has 1 column remaining.
+          // f1 at (0,0); (0,1) empty.
           sections: [{ title: "Alpha", columns: 2, fieldIds: ["f1"] }],
         }}
       />
     );
 
-    await user.click(screen.getByText("Add empty cell"));
-    await user.click(screen.getByText("Add row break"));
-    await user.click(screen.getByText("Save layout"));
+    const source = screen.getByLabelText("Field First name");
+    const target = screen.getByLabelText("Empty cell row 1 column 2");
+    fireEvent.dragStart(source);
+    fireEvent.drop(target);
 
-    const body = JSON.parse(
-      (fetchMock.mock.calls[0][1] as RequestInit).body as string
-    ) as { config: { sections: Array<Record<string, unknown>> } };
-    const section = body.config.sections[0];
-    // field(1) + empty(1) = 2 used (row full) -> row break is a full-width 2 spacer.
+    await user.click(screen.getByText("Save layout"));
+    const section = savedSections(fetchMock)[0];
+    // f1 now lives at col 1; no other cell created or moved.
     expect(section.items).toEqual([
-      { fieldId: "f1", span: 1 },
-      { spacer: true, span: 1 },
-      { spacer: true, span: 2 },
+      { fieldId: "f1", span: 1, row: 0, col: 1 },
     ]);
-    // fieldIds excludes spacers.
-    expect(section.fieldIds).toEqual(["f1"]);
+    fetchMock.mockRestore();
+  });
+
+  test("dragging a field onto a FILLED cell swaps the two; nothing else moves", async () => {
+    const fetchMock = mockSave();
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          // f1 at (0,0), f2 at (0,1).
+          sections: [{ title: "Alpha", columns: 2, fieldIds: ["f1", "f2"] }],
+        }}
+      />
+    );
+
+    fireEvent.dragStart(screen.getByLabelText("Field First name"));
+    fireEvent.drop(screen.getByLabelText("Field Last name"));
+
+    await user.click(screen.getByText("Save layout"));
+    const section = savedSections(fetchMock)[0];
+    // f1 and f2 swapped positions; both still present, exactly two cells.
+    expect(section.items).toEqual([
+      { fieldId: "f2", span: 1, row: 0, col: 0 },
+      { fieldId: "f1", span: 1, row: 0, col: 1 },
+    ]);
+    expect(section.fieldIds).toEqual(["f2", "f1"]);
+    fetchMock.mockRestore();
+  });
+
+  test("Add row grows the grid (persisted), Remove last row trims an empty trailing row", async () => {
+    const fetchMock = mockSave();
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          sections: [{ title: "Alpha", columns: 2, fieldIds: ["f1"] }],
+        }}
+      />
+    );
+
+    const grid = screen.getByTestId("grid-0");
+    expect(grid.getAttribute("data-rows")).toBe("1");
+
+    // Remove last row is disabled while the only row holds a field.
+    expect(screen.getByText("Remove last row")).toBeDisabled();
+
+    await user.click(screen.getByText("Add row"));
+    expect(grid.getAttribute("data-rows")).toBe("2");
+    // The new empty trailing row makes Remove last row available again.
+    expect(screen.getByText("Remove last row")).not.toBeDisabled();
+
+    await user.click(screen.getByText("Save layout"));
+    expect(savedSections(fetchMock)[0].rows).toBe(2);
+
+    await user.click(screen.getByText("Remove last row"));
+    expect(grid.getAttribute("data-rows")).toBe("1");
     fetchMock.mockRestore();
   });
 

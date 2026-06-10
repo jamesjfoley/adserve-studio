@@ -4,6 +4,7 @@ import {
   useId,
   useMemo,
   useState,
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -224,20 +225,37 @@ export function DynamicForm({
                 }}
               >
                 {sectionItems(section).map((item, itemIdx) => {
-                  // Column span, clamped to the section's column count.
+                  // Absolute placement: the cell carries a zero-based row/col, so
+                  // it's pinned to that exact grid position (no flow). Otherwise
+                  // the cell flows row-major (legacy layouts).
+                  const hasCoords =
+                    typeof item.col === "number" && typeof item.row === "number";
+                  const col = hasCoords
+                    ? Math.min(Math.max(0, item.col!), section.columns - 1)
+                    : null;
+                  // Column span, clamped so it never overflows the grid (from its
+                  // start column when positioned absolutely).
                   const span = Math.min(
                     Math.max(1, item.span ?? 1),
-                    section.columns
+                    col != null ? section.columns - col : section.columns
                   );
+                  const cellStyle: CSSProperties =
+                    col != null
+                      ? {
+                          gridColumn: `${col + 1} / span ${span}`,
+                          gridRowStart: (item.row ?? 0) + 1,
+                        }
+                      : { gridColumn: `span ${span}` };
                   // Spacer cell — leaves a gap / pushes following fields to a
-                  // new row. Single column to maintain the grid; spans wider
-                  // when configured.
+                  // new row. Skipped entirely when absolutely positioned (an
+                  // empty position is simply unoccupied).
                   if ("spacer" in item) {
+                    if (col != null) return null;
                     return (
                       <div
                         key={`spacer-${itemIdx}`}
                         aria-hidden="true"
-                        style={{ gridColumn: `span ${span}` }}
+                        style={cellStyle}
                       />
                     );
                   }
@@ -250,7 +268,7 @@ export function DynamicForm({
                   const fieldMode =
                     mode !== "view" && fieldInactive(field, state) ? "view" : mode;
                   return (
-                    <div key={field.id} style={{ gridColumn: `span ${span}` }}>
+                    <div key={field.id} style={cellStyle}>
                       <FieldRenderer
                         field={field}
                         value={state[field.slug]}

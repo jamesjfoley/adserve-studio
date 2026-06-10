@@ -80,10 +80,15 @@ export type FieldDefinitionWithLabels = FieldDefinition;
  * empty spacer (a gap, also `span` columns). Spacers let the admin leave parts
  * of a panel empty and push following fields onto a new row. `span` defaults to
  * 1 and is clamped to the section's column count at render.
+ *
+ * `row`/`col` are the cell's ABSOLUTE zero-based grid position. When present
+ * the cell is placed at that exact position (no flow/reflow), which is how the
+ * layout editor pins fields to precise positions and swaps two cells without
+ * moving anything else. When absent the cells flow row-major (legacy layouts).
  */
 export type LayoutItem =
-  | { fieldId: string; span?: number }
-  | { spacer: true; span?: number };
+  | { fieldId: string; span?: number; row?: number; col?: number }
+  | { spacer: true; span?: number; row?: number; col?: number };
 
 export interface LayoutSection {
   title: string;
@@ -95,9 +100,16 @@ export interface LayoutSection {
    */
   fieldIds: string[];
   /**
+   * Explicit grid height (number of rows). Set alongside absolute-positioned
+   * `items` so intentionally-empty trailing rows are preserved. Absent → the
+   * row count is derived from the items' positions / flow.
+   */
+  rows?: number;
+  /**
    * Optional explicit grid layout: field cells (with column `span`) + empty
-   * spacer cells, in order. When present it drives rendering; its field cells
-   * must match `fieldIds`. Absent → render `fieldIds` at span 1.
+   * spacer cells. When the cells carry `row`/`col` they are placed at those
+   * absolute positions; otherwise they flow row-major. Its field cells must
+   * match `fieldIds`. Absent → render `fieldIds` at span 1.
    */
   items?: LayoutItem[];
   /**

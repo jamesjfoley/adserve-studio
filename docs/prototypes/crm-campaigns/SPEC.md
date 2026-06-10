@@ -272,6 +272,30 @@ contacts):
   account across devices belongs in a server-side user-settings store (deferred; a new table / RLS
   policy is a standing human gate).
 
+## CRM Layouts — absolute-position grid (no auto-reflow)
+
+The layout editor moved from a flow/reorder model (which shifted other fields on every change) to an
+**absolute-position grid**, so the admin pins fields to exact positions:
+
+- **Model.** `LayoutItem` gained optional `row`/`col` (zero-based absolute position); `LayoutSection`
+  gained `rows` (explicit grid height, so intentionally-empty trailing rows persist). Each field
+  section is a fixed `rows × columns` matrix; a cell holds one field (with a column `span`) or is
+  empty.
+- **Drag semantics — no reflow, ever.** Drop on an **empty cell** → the field moves there and its old
+  cell empties (nothing else moves). Drop on a **filled cell** → the two fields **swap** (nothing else
+  moves). Drop from the **unplaced pool** → placed in the target cell; any occupant returns to the
+  pool. There is no automatic linkage between fields.
+- **Width without overlap.** A field's width (`span`) is capped at the distance to the next occupied
+  cell in its row, so widening never overlaps or displaces another field. A `normalize` pass keeps the
+  non-overlap invariant after every move/column change. Cells covered by a wider neighbour aren't
+  rendered as separate drop targets.
+- **Rows.** "Add row" / "Remove last row" (the latter only when the trailing row is empty) let the
+  admin size the grid; the row count is saved.
+- **Rendering.** `DynamicForm` places coordinate items via `grid-column: col+1 / span n` +
+  `grid-row-start: row+1`. Legacy layouts (bare `fieldIds`, or flow `items` without coordinates) still
+  render row-major (backward compatible); the editor migrates them to coordinates on first load, and
+  they become absolute once re-saved.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not
