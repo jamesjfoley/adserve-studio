@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CollapsiblePanel } from "@/components/ui/collapsible-panel";
+
+/** Rows visible before the table scrolls (infinite scroll within the panel). */
+const ROWS_VISIBLE = 15;
+/** Fallback dense-row height (px) until a real row is measured. */
+const EST_ROW_HEIGHT = 26;
 
 /**
  * Per-record History panel. Fetches the read-only audit trail for a CRM record
@@ -212,6 +217,19 @@ export function RecordHistoryPanel({
   const rows =
     entries == null ? [] : entries.flatMap((e) => rowsForEntry(e));
 
+  // Cap the visible height to ROWS_VISIBLE rows (+ header) and scroll the rest;
+  // measured from the rendered header/first row, with an estimate fallback.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const headH = el.querySelector("thead")?.clientHeight ?? 0;
+    const rowH =
+      el.querySelector("tbody tr")?.clientHeight || EST_ROW_HEIGHT;
+    setMaxHeight(headH + rowH * ROWS_VISIBLE);
+  }, [rows.length]);
+
   return (
     <CollapsiblePanel as="section" aria-label={title} title={title} collapsible defaultOpen>
       {error ? (
@@ -225,7 +243,11 @@ export function RecordHistoryPanel({
           No history yet.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--border)]">
+        <div
+          ref={scrollRef}
+          className="mt-3 overflow-auto rounded-lg border border-[var(--border)]"
+          style={{ maxHeight }}
+        >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--table-header-bg)] text-left text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
               <tr>

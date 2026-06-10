@@ -421,6 +421,14 @@ test: an account in view mode shows the panel + "+ Add Note", and an added note 
 entering edit mode. (Persistence and the account-save merge were already correct — the account PATCH
 merges `records.data`, preserving `notesAttachments`.)
 
+## Audit History — 15-row cap + scroll
+
+The Audit History panel previously grew to fit every row. It now caps the table's scroll area to
+**15 rows** (`ROWS_VISIBLE`) plus the sticky header and scrolls the rest within the panel (vertical
+infinite scroll); fewer than 15 rows show without scroll. The cap height is measured from the rendered
+header + first row (estimate fallback ~26px/row when unmeasured), and the sticky header stays pinned
+while scrolling.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not
