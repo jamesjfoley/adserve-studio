@@ -1283,6 +1283,16 @@ for (const list of [
   }
 }
 
+// Account address fields are shown value-only in VIEW mode (no field-name
+// labels) so the Addresses panel stays compact; labels still show while
+// creating/editing. The "Billing same as site" checkbox (boolean) keeps its
+// label — only the text address fields are flagged.
+for (const f of DEFAULT_ACCOUNT_FIELDS) {
+  if (f.groupName === "Addresses" && f.fieldType === "text") {
+    f.options = { ...(f.options ?? {}), hideLabelInView: true };
+  }
+}
+
 /**
  * Convenience map from entity type slug → default field defs.
  * Task 0.6's activation flow uses this to drive provisioning.

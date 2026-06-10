@@ -363,6 +363,16 @@ checkbox:
 - Seed (`field-definitions.ts`) carries `mirrorFrom` for fresh tenants; existing local-dev billing
   fields were updated in place (provisioning skips existing fields).
 
+## Addresses panel — value-only in view mode (`hideLabelInView`)
+
+In display/view mode the per-field labels ("Site address – City", …) made the Addresses panel tall.
+New generic field option **`hideLabelInView: true`**: `DynamicForm` renders such a field as the value
+only (via the shared `formatFieldValue`, any field type) when `mode === "view"` — no label — so the
+panel is compact. Create/edit still show the labels + inputs. Applied to the 12 account site/billing
+**text** address fields (the "Billing same as site" checkbox keeps its label). Seeded for new tenants
+(`field-definitions.ts`, scoped to `groupName === "Addresses"` + text); existing local-dev fields
+updated in place (24 rows). Reusable for any other label-noisy view-mode field.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

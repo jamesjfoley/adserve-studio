@@ -697,3 +697,39 @@ describe("DynamicForm — mirrorFrom (billing same as site)", () => {
     expect(data.billingAddressLine1).toBe("10 High St");
   });
 });
+
+describe("DynamicForm — hideLabelInView (compact view-mode addresses)", () => {
+  const F = fieldDef({
+    id: "hv",
+    slug: "city",
+    name: "Site City",
+    fieldType: "text",
+    options: { hideLabelInView: true },
+  });
+  const layout = sectionConfig({ title: "Addresses", fieldIds: ["hv"] });
+
+  test("view mode shows the value WITHOUT the field-name label", () => {
+    render(
+      <DynamicForm
+        layoutConfig={layout}
+        fields={[F]}
+        initialData={{ city: "Kingston" }}
+        mode="view"
+      />
+    );
+    expect(screen.getByText("Kingston")).toBeInTheDocument();
+    expect(screen.queryByText("Site City")).not.toBeInTheDocument();
+  });
+
+  test("edit mode still shows the label + input", () => {
+    render(
+      <DynamicForm
+        layoutConfig={layout}
+        fields={[F]}
+        initialData={{ city: "Kingston" }}
+        mode="edit"
+      />
+    );
+    expect(screen.getByLabelText("Site City")).toBeInTheDocument();
+  });
+});

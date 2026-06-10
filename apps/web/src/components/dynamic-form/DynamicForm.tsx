@@ -18,6 +18,7 @@ import type {
 import { cn } from "@/lib/utils";
 import { CollapsiblePanel } from "@/components/ui/collapsible-panel";
 import { FieldRenderer } from "./field-renderer";
+import { formatFieldValue } from "./format-field-value";
 
 export type DynamicFormMode = "create" | "edit" | "view";
 
@@ -292,17 +293,34 @@ export function DynamicForm({
                   // e.g. site-address fields while "Same as account" is ticked).
                   const fieldMode =
                     mode !== "view" && fieldInactive(field, state) ? "view" : mode;
+                  // `hideLabelInView`: in display mode show ONLY the value (no
+                  // field-name label) — e.g. the address fields, so the panel
+                  // is compact. Labels still show while creating/editing.
+                  const opts =
+                    (field.options as Record<string, unknown> | null) ?? {};
+                  const hideLabel =
+                    mode === "view" && opts.hideLabelInView === true;
                   return (
                     <div key={field.id} style={cellStyle}>
-                      <FieldRenderer
-                        field={field}
-                        value={effectiveValue(field, state)}
-                        onChange={(next) => setSlug(field.slug, next)}
-                        mode={fieldMode}
-                        error={errors[field.slug] ?? null}
-                        locale={locale}
-                        inputId={inputId}
-                      />
+                      {hideLabel ? (
+                        <div className="text-sm text-[var(--foreground)]">
+                          {formatFieldValue(
+                            field,
+                            effectiveValue(field, state),
+                            locale
+                          )}
+                        </div>
+                      ) : (
+                        <FieldRenderer
+                          field={field}
+                          value={effectiveValue(field, state)}
+                          onChange={(next) => setSlug(field.slug, next)}
+                          mode={fieldMode}
+                          error={errors[field.slug] ?? null}
+                          locale={locale}
+                          inputId={inputId}
+                        />
+                      )}
                     </div>
                   );
                 })}
