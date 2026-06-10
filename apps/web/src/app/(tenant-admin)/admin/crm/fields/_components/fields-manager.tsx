@@ -156,6 +156,9 @@ export function FieldsManager({
   );
   const [editOptionsText, setEditOptionsText] = useState("");
   const [editSortAlpha, setEditSortAlpha] = useState(false);
+  // Inline rename (display name/label) — available for ANY field, system or not.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   function refresh() {
     startTransition(() => router.refresh());
@@ -253,6 +256,34 @@ export function FieldsManager({
 
   async function deleteField(id: string) {
     if (await call(`/api/admin/crm/fields/${id}`, "DELETE")) refresh();
+  }
+
+  function startRename(f: FieldRow) {
+    setRenamingId(f.id);
+    setRenameDraft(f.name);
+    setError(null);
+  }
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameDraft("");
+  }
+  async function saveRename(id: string) {
+    const name = renameDraft.trim();
+    if (name === "") {
+      setError("Field name cannot be empty.");
+      return;
+    }
+    // Send both `name` and `labels.en` so the visible label updates everywhere
+    // (forms, tables) — the slug (data key) is intentionally NOT changed.
+    if (
+      await call(`/api/admin/crm/fields/${id}`, "PATCH", {
+        name,
+        labels: { en: name },
+      })
+    ) {
+      cancelRename();
+      refresh();
+    }
   }
 
   // Display copy sorted by Name (case-insensitive, A→Z). We sort a copy so the
@@ -430,11 +461,44 @@ export function FieldsManager({
                   </div>
                 </td>
                 <td className="px-3 py-2 font-medium">
-                  {f.name}
-                  {f.isSystem && (
-                    <span className="ml-2 rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
-                      system
+                  {renamingId === f.id ? (
+                    <span className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        aria-label={`Rename ${f.name}`}
+                        className={`${input} w-44`}
+                        value={renameDraft}
+                        disabled={busy}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void saveRename(f.id);
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                      />
+                      <button
+                        onClick={() => saveRename(f.id)}
+                        disabled={busy}
+                        className="text-xs text-[var(--accent)] hover:underline disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={cancelRename}
+                        disabled={busy}
+                        className="text-xs text-[var(--muted-foreground)] hover:underline disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
                     </span>
+                  ) : (
+                    <>
+                      {f.name}
+                      {f.isSystem && (
+                        <span className="ml-2 rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
+                          system
+                        </span>
+                      )}
+                    </>
                   )}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs text-[var(--muted-foreground)]">
@@ -465,6 +529,15 @@ export function FieldsManager({
                 </td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex items-center justify-end gap-3">
+                    {renamingId !== f.id && (
+                      <button
+                        onClick={() => startRename(f)}
+                        disabled={busy}
+                        className="text-xs text-[var(--accent)] hover:underline disabled:opacity-50"
+                      >
+                        Rename
+                      </button>
+                    )}
                     {SELECT_TYPES.has(f.fieldType) && (
                       <button
                         onClick={() =>

@@ -104,6 +104,44 @@ describe("FieldsManager — select options (single field, sortable)", () => {
     fetchMock.mockRestore();
   });
 
+  test("any field can be renamed — including a system field — via name + labels.en", async () => {
+    const fetchMock = mockOk();
+    const user = userEvent.setup();
+    render(
+      <FieldsManager
+        entityType="account"
+        fields={[
+          {
+            id: "fsys",
+            name: "Account status",
+            slug: "status",
+            fieldType: "select",
+            isRequired: false,
+            isFilterable: true,
+            isSystem: true, // system field — rename must still be offered
+            description: "",
+            options: { choices: [{ value: "Active", label: "Active" }] },
+          },
+        ]}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    const inputEl = screen.getByLabelText("Rename Account status");
+    await user.clear(inputEl);
+    await user.type(inputEl, "Lifecycle stage");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const call = fetchMock.mock.calls.at(-1)!;
+    expect(call[0]).toBe("/api/admin/crm/fields/fsys");
+    expect((call[1] as RequestInit).method).toBe("PATCH");
+    const body = JSON.parse((call[1] as RequestInit).body as string);
+    // Slug is untouched; name + display label both update.
+    expect(body).toEqual({ name: "Lifecycle stage", labels: { en: "Lifecycle stage" } });
+    expect(body.slug).toBeUndefined();
+    fetchMock.mockRestore();
+  });
+
   test("editing an existing select pre-fills the textarea and sort flag", async () => {
     const fetchMock = mockOk();
     const user = userEvent.setup();

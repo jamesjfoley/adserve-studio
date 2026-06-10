@@ -336,6 +336,15 @@ value IS the display label (the "Pretty: all + update code" option):
   production rebuild may prefer stable slug keys + a separate display label; if so, that's a schema
   decision to make there. The prod data migration must mirror this script against RDS (gated).
 
+## CRM Fields — rename any field (system or custom)
+
+- The Fields table now has an inline **Rename** action on **every** row (system fields included). It
+  edits the display **name** and **labels.en** together (so the label updates across forms/tables);
+  the **slug is intentionally immutable** (it's the `records.data` key and is referenced by code).
+- Backend already supported this — the PATCH route accepts `name`/`labels` and
+  `updateFieldDefinition` applies them with no system guard (only `fieldType` change + delete are
+  blocked for system fields). This was a UI-only addition.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not
