@@ -7,7 +7,7 @@ import type {
   LayoutConfig,
 } from "@adserve/module-framework";
 import { cn } from "@/lib/utils";
-import { Panel } from "@/components/ui/panel";
+import { CollapsiblePanel } from "@/components/ui/collapsible-panel";
 import { FieldRenderer } from "./field-renderer";
 
 export type DynamicFormMode = "create" | "edit" | "view";
@@ -168,11 +168,15 @@ export function DynamicForm({
       {layoutConfig.sections.map((section, sIdx) => (
         // Each section is a shaded Panel — distinguishing panel surface from the
         // page background, with the inputs (--background) sitting on the panel.
-        <Panel
+        // The first section is always open and not collapsible; every later
+        // section is collapsible (open by default, user can close it).
+        <CollapsiblePanel
           key={`${section.title}-${sIdx}`}
           as="section"
           title={section.title}
           aria-label={section.title}
+          collapsible={sIdx >= 1}
+          defaultOpen
         >
           <div
             className={cn(
@@ -206,7 +210,7 @@ export function DynamicForm({
               );
             })}
           </div>
-        </Panel>
+        </CollapsiblePanel>
       ))}
 
       {submitError ? (

@@ -39,6 +39,7 @@ describe("activateCrmForTenant", () => {
         .where(eq(entityTypes.tenantId, tenant.id));
       expect(rows.map((r) => r.slug).sort()).toEqual([
         "account",
+        "brand",
         "campaign",
         "contact",
         "lead",
@@ -47,6 +48,7 @@ describe("activateCrmForTenant", () => {
       expect(rows.every((r) => r.isSystem)).toBe(true);
       expect(Object.keys(result.entityTypeIds).sort()).toEqual([
         "account",
+        "brand",
         "campaign",
         "contact",
         "lead",
@@ -300,7 +302,7 @@ describe("activateCrmForTenant — permissions & grants", () => {
         .where(eq(permissions.moduleId, result.moduleId));
       const keys = new Set(rows.map((r) => `${r.resource}.${r.action}`));
 
-      expect(CRM_PERMISSIONS).toHaveLength(26);
+      expect(CRM_PERMISSIONS).toHaveLength(30);
       // Presence check (not exact count) — the shared permissions table
       // may also carry Phase-2 placeholders until 1.9a cleans them.
       for (const key of CRM_PERMISSION_KEYS) {

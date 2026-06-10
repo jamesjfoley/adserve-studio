@@ -75,6 +75,12 @@ export const CRM_PERMISSIONS: CrmPermissionSpec[] = [
   { resource: "campaign", action: "update", description: "Edit campaigns" },
   { resource: "campaign", action: "delete", description: "Archive campaigns" },
 
+  // Brands (child of Account — managed via the Account "Brands" panel).
+  { resource: "brand", action: "read", description: "View brands" },
+  { resource: "brand", action: "create", description: "Create brands" },
+  { resource: "brand", action: "update", description: "Edit brands" },
+  { resource: "brand", action: "delete", description: "Archive brands" },
+
   // Pipeline (read = kanban access; update = move opportunities between stages)
   {
     resource: "pipeline",

@@ -90,6 +90,43 @@ describe("DynamicForm — structure", () => {
   });
 });
 
+describe("DynamicForm — collapsible sections", () => {
+  test("first section is not collapsible; later sections are collapsible and open by default, and can be toggled closed", async () => {
+    const user = userEvent.setup();
+    const a = fieldDef({ id: "f1", slug: "a", name: "Alpha", fieldType: "text" });
+    const b = fieldDef({ id: "f2", slug: "b", name: "Beta", fieldType: "text" });
+
+    render(
+      <DynamicForm
+        layoutConfig={sectionConfig(
+          { title: "First", fieldIds: ["f1"] },
+          { title: "Second", fieldIds: ["f2"] }
+        )}
+        fields={[a, b]}
+        initialData={null}
+        mode="create"
+      />
+    );
+
+    // First section: heading exists but no toggle button for it.
+    expect(screen.getByRole("heading", { name: "First" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /first/i })
+    ).not.toBeInTheDocument();
+
+    // Second section: a toggle button, open by default.
+    const toggle = screen.getByRole("button", { name: /second/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Beta")).toBeInTheDocument();
+
+    // Closing the second section hides its field; the first stays visible.
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Beta")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Alpha")).toBeInTheDocument();
+  });
+});
+
 describe("DynamicForm — smoke across all field types", () => {
   test("every supported field type renders without crashing", () => {
     const types: Array<{ id: string; slug: string; name: string; fieldType: FieldType; options?: Record<string, unknown> }> = [

@@ -31,6 +31,7 @@ export const DEFAULT_CRM_ROLE_PERMISSIONS: Record<SystemRoleSlug, string[]> = {
     "lead.read",
     "opportunity.read",
     "campaign.read",
+    "brand.read",
     "pipeline.read",
     "activity.read",
     "activity.create",

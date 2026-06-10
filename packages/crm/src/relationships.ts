@@ -107,6 +107,15 @@ export const CAMPAIGN_HAS_PRIMARY_CONTACT: CrmRelationshipSpec = {
   description: "A campaign may have a primary contact",
 };
 
+export const BRAND_BELONGS_TO_ACCOUNT: CrmRelationshipSpec = {
+  name: "brand_belongs_to_account",
+  sourceEntitySlug: "brand",
+  targetEntitySlug: "account",
+  cardinality: "many_to_one",
+  cascadeDelete: false,
+  description: "A brand belongs to one account",
+};
+
 export const CRM_RELATIONSHIPS: CrmRelationshipSpec[] = [
   CONTACT_BELONGS_TO_ACCOUNT,
   CONTACT_RELATED_TO_ACCOUNT,
@@ -115,4 +124,5 @@ export const CRM_RELATIONSHIPS: CrmRelationshipSpec[] = [
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
   CAMPAIGN_BELONGS_TO_ACCOUNT,
   CAMPAIGN_HAS_PRIMARY_CONTACT,
+  BRAND_BELONGS_TO_ACCOUNT,
 ];

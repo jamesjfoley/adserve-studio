@@ -82,7 +82,7 @@ describe("WS1 — cardinality reconciliation (sql/007)", () => {
 
     // Permission matrix (22 base + 4 campaign.* added by the media-first
     // prototype) — WS1 itself does not change it.
-    expect(CRM_PERMISSIONS).toHaveLength(26);
+    expect(CRM_PERMISSIONS).toHaveLength(30);
   });
 
   test("acceptance 3: in-place flip on a pre-existing tenant, then idempotent + activation-safe", async () => {

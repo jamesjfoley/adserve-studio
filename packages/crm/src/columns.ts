@@ -15,4 +15,5 @@ export const DEFAULT_LIST_COLUMNS: Record<string, string[]> = {
   lead: ["firstName", "lastName", "company", "source", "status", "estimatedValue"],
   opportunity: ["name", "stage", "amount", "closeDate", "probability"],
   campaign: ["name", "stage", "value", "flightStart", "flightEnd"],
+  brand: ["name", "category", "values"],
 };

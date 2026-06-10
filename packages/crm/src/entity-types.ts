@@ -58,6 +58,16 @@ export const CAMPAIGN_ENTITY_TYPE: CrmEntityTypeSpec = {
   isSystem: true,
 };
 
+export const BRAND_ENTITY_TYPE: CrmEntityTypeSpec = {
+  slug: "brand",
+  name: "Brand",
+  // A child of Account (no standalone nav/list) — surfaced + managed via the
+  // Account detail "Brands" panel. Linked by brand_belongs_to_account (M2O).
+  description: "Advertiser brands belonging to an account",
+  icon: "tag",
+  isSystem: true,
+};
+
 /**
  * All CRM entity types in registration order. Task 0.6's activation
  * iterates this list.
@@ -68,4 +78,5 @@ export const CRM_ENTITY_TYPES: CrmEntityTypeSpec[] = [
   LEAD_ENTITY_TYPE,
   OPPORTUNITY_ENTITY_TYPE,
   CAMPAIGN_ENTITY_TYPE,
+  BRAND_ENTITY_TYPE,
 ];

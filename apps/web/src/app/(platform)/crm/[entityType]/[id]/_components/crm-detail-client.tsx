@@ -29,6 +29,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
 import { RelatedRecordsPanel } from "./related-records-panel";
 import { ContactsTable } from "./contacts-table";
+import { BrandsPanel } from "./brands-panel";
+import { RecordHistoryPanel } from "./record-history-panel";
 
 interface CrmDetailClientProps {
   entitySlug: string;
@@ -472,8 +474,26 @@ export function CrmDetailClient({
 
   let tabs: DetailTab[] = [];
   if (isAccount) {
+    // The Details tab stacks the field panels (DynamicForm — first panel open,
+    // the rest collapsible accordions) followed by the Brands child-record
+    // panel and the Account History (audit) panel, both collapsible.
+    const accountDetails: ReactNode = (
+      <div className="space-y-6">
+        {formNode}
+        <BrandsPanel
+          accountId={recordId}
+          items={relationships.brand ?? []}
+          canEdit={canEdit}
+        />
+        <RecordHistoryPanel
+          entitySegment={collectionSegment}
+          recordId={recordId}
+          title="Account History"
+        />
+      </div>
+    );
     tabs = [
-      { id: "details", label: "Details", content: formNode },
+      { id: "details", label: "Details", content: accountDetails },
       ...(activityNode
         ? [{ id: "activity", label: "Activity", content: activityNode }]
         : []),

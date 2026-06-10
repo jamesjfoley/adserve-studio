@@ -118,6 +118,13 @@ export interface CampaignData {
   [key: string]: unknown;
 }
 
+export interface BrandData {
+  name: string;
+  category?: string;
+  values?: string;
+  [key: string]: unknown;
+}
+
 // ============================================================
 // Activity types — separate from records, modeled in `activities` table
 // ============================================================

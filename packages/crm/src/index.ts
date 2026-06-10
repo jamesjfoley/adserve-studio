@@ -13,6 +13,7 @@ export type {
   OpportunityData,
   CampaignData,
   CampaignStage,
+  BrandData,
   CrmActivityType,
   CrmActivityBody,
 } from "./types";
@@ -26,6 +27,7 @@ export {
   LEAD_ENTITY_TYPE,
   OPPORTUNITY_ENTITY_TYPE,
   CAMPAIGN_ENTITY_TYPE,
+  BRAND_ENTITY_TYPE,
   CRM_ENTITY_TYPES,
   type CrmEntityTypeSpec,
 } from "./entity-types";
@@ -39,6 +41,7 @@ export {
   DEFAULT_LEAD_FIELDS,
   DEFAULT_OPPORTUNITY_FIELDS,
   DEFAULT_CAMPAIGN_FIELDS,
+  DEFAULT_BRAND_FIELDS,
   DEFAULT_FIELDS_BY_ENTITY,
   type CrmFieldDefinitionSpec,
 } from "./field-definitions";
@@ -54,6 +57,7 @@ export {
   OPPORTUNITY_HAS_PRIMARY_CONTACT,
   CAMPAIGN_BELONGS_TO_ACCOUNT,
   CAMPAIGN_HAS_PRIMARY_CONTACT,
+  BRAND_BELONGS_TO_ACCOUNT,
   CRM_RELATIONSHIPS,
   type CrmRelationshipSpec,
   type RelationshipCardinality,

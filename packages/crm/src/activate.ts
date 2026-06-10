@@ -126,12 +126,13 @@ export async function activateCrmForTenant(
       settings.pipelineStages = CAMPAIGN_STAGES;
     }
 
-    // Account + Opportunity + Campaign have a single `name` field; Contact +
-    // Lead compose a display name from first/last app-side (nameFieldId null).
+    // Account + Opportunity + Campaign + Brand have a single `name` field;
+    // Contact + Lead compose a display name from first/last app-side.
     const nameFieldSlug =
       entitySpec.slug === "account" ||
       entitySpec.slug === "opportunity" ||
-      entitySpec.slug === "campaign"
+      entitySpec.slug === "campaign" ||
+      entitySpec.slug === "brand"
         ? "name"
         : undefined;
 
