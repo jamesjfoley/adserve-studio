@@ -1,4 +1,6 @@
-import { requirePermission } from "@/lib/permissions";
+import { notFound } from "next/navigation";
+import { requirePermission, getTenantContextOrNull } from "@/lib/permissions";
+import { readCrmModuleConfig } from "@/lib/crm/module-config";
 import { type PipelineFilters } from "@/lib/crm/pipeline";
 import { loadPipelineData } from "@/lib/crm/load-pipeline-data";
 import { PipelineBoard } from "./_components/pipeline-board";
@@ -16,6 +18,11 @@ export default async function PipelinePage({
 }: {
   searchParams: SearchParams;
 }) {
+  // Module guard before permission: Pipeline 404s when neither pipeline entity
+  // is enabled, regardless of permissions.
+  const pre = await getTenantContextOrNull();
+  if (pre && !readCrmModuleConfig(pre.tenant.settings).showPipeline) notFound();
+
   const ctx = await requirePermission("pipeline.read");
   const canMove = ctx.permissions.has("pipeline.update");
 

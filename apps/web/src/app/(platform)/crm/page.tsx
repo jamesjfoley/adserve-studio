@@ -1,8 +1,9 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { crmCollectionSegment } from "@adserve/crm";
 import { getTenantContextOrNull } from "@/lib/permissions";
+import { readCrmModuleConfig } from "@/lib/crm/module-config";
 import { formatCurrency } from "@/lib/crm/dashboard";
 import { loadCrmDashboardData } from "@/lib/crm/load-dashboard-data";
 import { Panel } from "@/components/ui/panel";
@@ -19,6 +20,10 @@ export default async function CrmDashboardPage() {
   const ctx = await getTenantContextOrNull();
   if (!ctx) redirect("/dashboard");
   const { tenant, permissions } = ctx;
+
+  // The CRM dashboard appears only when a pipeline entity is enabled
+  // (showPipeline). Disabled → 404, consistent with the nav + Pipeline route.
+  if (!readCrmModuleConfig(tenant.settings).showPipeline) notFound();
 
   const readableSlugs = CRM_ENTITY_SLUGS.filter((s) =>
     permissions.has(`${s}.read`)

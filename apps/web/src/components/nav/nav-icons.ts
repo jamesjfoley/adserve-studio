@@ -5,6 +5,7 @@ import {
   UserPlus,
   TrendingUp,
   KanbanSquare,
+  Megaphone,
   Shield,
   type LucideIcon,
 } from "lucide-react";
@@ -23,6 +24,7 @@ export type NavIconName =
   | "contacts"
   | "leads"
   | "opportunities"
+  | "campaigns"
   | "pipeline"
   | "shield";
 
@@ -32,6 +34,7 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   contacts: Users,
   leads: UserPlus,
   opportunities: TrendingUp,
+  campaigns: Megaphone,
   pipeline: KanbanSquare,
   shield: Shield,
 };

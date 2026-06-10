@@ -5,7 +5,11 @@ import {
   crmCollectionSegment,
   resolveCrmEntitySlug,
 } from "@adserve/crm";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, getTenantContextOrNull } from "@/lib/permissions";
+import {
+  readCrmModuleConfig,
+  isCrmEntityEnabled,
+} from "@/lib/crm/module-config";
 import { parseListParams } from "@/lib/crm/query";
 import { serializeRecord } from "@/lib/crm/serialize";
 import { loadCrmListData } from "@/lib/crm/load-list-data";
@@ -20,6 +24,14 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
   const { entityType: segment } = await params;
   const slug = resolveCrmEntitySlug(segment);
   if (!slug) notFound();
+
+  // Module-visibility guard runs BEFORE the permission check: a disabled module
+  // 404s for everyone, even a fully-permitted user (a hidden module must look
+  // like it doesn't exist, not like a permission wall).
+  const ctx = await getTenantContextOrNull();
+  if (ctx && !isCrmEntityEnabled(readCrmModuleConfig(ctx.tenant.settings), slug)) {
+    notFound();
+  }
 
   // Redirects to /dashboard if the user lacks `<entity>.read`.
   const { tenant, user } = await requirePermission(`${slug}.read`);

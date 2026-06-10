@@ -3,15 +3,7 @@ import { getSuperAdminOrNull } from "@/lib/super-admin";
 import { getTenantContextOrNull } from "@/lib/permissions";
 import { PrimaryNav, type NavItem } from "@/components/nav/primary-nav";
 import { readTenantPalette } from "@/lib/theme/palettes";
-
-const navigation: NavItem[] = [
-  { name: "Dashboard", href: "/dashboard", iconName: "dashboard" },
-  { name: "Accounts", href: "/crm/accounts", iconName: "accounts" },
-  { name: "Contacts", href: "/crm/contacts", iconName: "contacts" },
-  { name: "Leads", href: "/crm/leads", iconName: "leads" },
-  { name: "Opportunities", href: "/crm/opportunities", iconName: "opportunities" },
-  { name: "Pipeline", href: "/crm/pipeline", iconName: "pipeline" },
-];
+import { readCrmModuleConfig } from "@/lib/crm/module-config";
 
 export default async function PlatformLayout({
   children,
@@ -30,6 +22,37 @@ export default async function PlatformLayout({
   // (Condition 6 — getTenantContextOrNull is keyed to the request's Clerk org
   // and is not memoised, so no tenant's palette can leak into another's).
   const palette = readTenantPalette(tenantCtx?.tenant.settings);
+
+  // Media-first module visibility, resolved per request from the SAME tenant
+  // context (no caching, mirrors the palette). Filtering the nav here — in the
+  // server layout, before render — means disabled modules never flash.
+  const crm = readCrmModuleConfig(tenantCtx?.tenant.settings);
+  const navigation: NavItem[] = [
+    { name: "Dashboard", href: "/dashboard", iconName: "dashboard" },
+    { name: "Accounts", href: "/crm/accounts", iconName: "accounts" },
+    { name: "Contacts", href: "/crm/contacts", iconName: "contacts" },
+    ...(crm.leads
+      ? [{ name: "Leads", href: "/crm/leads", iconName: "leads" } as NavItem]
+      : []),
+    ...(crm.campaigns
+      ? [{ name: "Campaigns", href: "/crm/campaigns", iconName: "campaigns" } as NavItem]
+      : []),
+    ...(crm.opportunities
+      ? [
+          {
+            name: "Opportunities",
+            href: "/crm/opportunities",
+            iconName: "opportunities",
+          } as NavItem,
+        ]
+      : []),
+    ...(crm.showPipeline
+      ? [
+          { name: "Pipeline", href: "/crm/pipeline", iconName: "pipeline" } as NavItem,
+          { name: "CRM Dashboard", href: "/crm", iconName: "dashboard" } as NavItem,
+        ]
+      : []),
+  ];
 
   // Accent shortcut links — mutually exclusive (role separation guarantees at
   // most one of these is shown).
