@@ -148,6 +148,20 @@ when either pipeline entity is enabled.
   up/down), and read-only handling of widget panels. So the admin can reorder/hide/columns every
   Account panel — field panels and the Brands/History widget panels alike.
 
+### Admin editor enhancements
+- **Layout editor is WYSIWYG drag-and-drop:** each field panel renders its fields in a grid matching
+  its column count (1–4), filled row-major to mirror the detail page; native HTML5 DnD lets the admin
+  drag fields to any row/column, between panels, and from the unplaced pool (move-up/down + Add-field
+  kept as fallbacks). Widget panels (Brands / Account History) stay read-only + reorderable/hideable.
+- **Fields page:** existing fields listed alphabetically by Name; Select / multi_select create + edit
+  has an options editor (Label + Value rows, value auto-slugified, ≥1 required) persisted as
+  `options.choices`. The fields admin page passes `options` through so editing a select pre-fills its
+  choices.
+- **Note:** the "blank Brands/Account History panels" report was a stale stored layout viewed before
+  the widget sections were reprovisioned — the 47 Account fields + 6-panel layout are present in the
+  DB and the widget rendering is test-locked. DnD itself needs a real-browser pass (jsdom can't
+  dispatch drag events).
+
 ### Account-detail production considerations
 - **Required fields kept optional.** Account type / Required credit limit / Company registration are
   starred in the design but seeded OPTIONAL — Lead-convert and Campaign create-with-account
