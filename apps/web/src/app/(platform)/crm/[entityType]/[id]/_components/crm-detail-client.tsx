@@ -59,6 +59,9 @@ interface CrmDetailClientProps {
   canViewActivities: boolean;
   /** Task 1.7c — show the "Summarize recent activity" AI affordance (accounts). */
   showAiSummary?: boolean;
+  /** Module-config driven: which pipeline-entity tabs the Account detail shows. */
+  showCampaigns?: boolean;
+  showOpportunities?: boolean;
   locale: string;
 }
 
@@ -105,6 +108,8 @@ export function CrmDetailClient({
   canLogActivity,
   canViewActivities,
   showAiSummary = false,
+  showCampaigns = false,
+  showOpportunities = false,
   locale,
 }: CrmDetailClientProps) {
   const router = useRouter();
@@ -524,27 +529,54 @@ export function CrmDetailClient({
           </div>
         ),
       },
-      {
-        id: "opportunities",
-        label: "Opportunities",
-        content: (
-          // Account is the TARGET of opportunity_belongs_to_account (opportunity
-          // is the source). Same source-scoped WS2 contract as above: gate on
-          // `opportunity.update`, NOT `account.update`. See the Contacts tab note.
-          <RelatedRecordsPanel
-            relatedSlug="opportunity"
-            relatedPluralLabel="opportunities"
-            owningSegment={collectionSegment}
-            owningId={recordId}
-            relationshipName={OPPORTUNITY_BELONGS_TO_ACCOUNT.name}
-            direction="owner-is-target"
-            items={relationships.opportunity ?? []}
-            editPermission="opportunity.update"
-            supportsPrimary={false}
-            canEdit={canEdit}
-          />
-        ),
-      },
+      // Pipeline-entity tabs follow the tenant's module config: Campaigns
+      // and/or Opportunities (or neither). Account is the TARGET of the
+      // *_belongs_to_account relationships (the deal is the source), so the
+      // WS2 source-scoped gate is the deal's update permission, NOT account's.
+      ...(showCampaigns
+        ? [
+            {
+              id: "campaigns",
+              label: "Campaigns",
+              content: (
+                <RelatedRecordsPanel
+                  relatedSlug="campaign"
+                  relatedPluralLabel="campaigns"
+                  owningSegment={collectionSegment}
+                  owningId={recordId}
+                  relationshipName={CAMPAIGN_BELONGS_TO_ACCOUNT.name}
+                  direction="owner-is-target"
+                  items={relationships.campaign ?? []}
+                  editPermission="campaign.update"
+                  supportsPrimary={false}
+                  canEdit={canEdit}
+                />
+              ),
+            } as DetailTab,
+          ]
+        : []),
+      ...(showOpportunities
+        ? [
+            {
+              id: "opportunities",
+              label: "Opportunities",
+              content: (
+                <RelatedRecordsPanel
+                  relatedSlug="opportunity"
+                  relatedPluralLabel="opportunities"
+                  owningSegment={collectionSegment}
+                  owningId={recordId}
+                  relationshipName={OPPORTUNITY_BELONGS_TO_ACCOUNT.name}
+                  direction="owner-is-target"
+                  items={relationships.opportunity ?? []}
+                  editPermission="opportunity.update"
+                  supportsPrimary={false}
+                  canEdit={canEdit}
+                />
+              ),
+            } as DetailTab,
+          ]
+        : []),
     ];
   } else if (isOpportunity) {
     tabs = [

@@ -304,6 +304,9 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
 
     renderDetail({
       entitySlug: "account",
+      // Both pipeline modules on → both tabs surface.
+      showCampaigns: true,
+      showOpportunities: true,
       relationships: {
         contact: [
           relatedContact({
@@ -328,6 +331,9 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
       within(tablist).queryByRole("tab", { name: "Employees" })
     ).not.toBeInTheDocument();
     expect(
+      within(tablist).getByRole("tab", { name: "Campaigns" })
+    ).toBeInTheDocument();
+    expect(
       within(tablist).getByRole("tab", { name: "Opportunities" })
     ).toBeInTheDocument();
 
@@ -343,6 +349,33 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     // The primary contact shows in the Contacts table, the related in Linked.
     expect(screen.getByRole("link", { name: "Alpha" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Bravo" })).toBeInTheDocument();
+  });
+
+  test("account pipeline tabs follow the module config", () => {
+    const tabs = () => {
+      const tablist = screen.getByRole("tablist", { name: /record sections/i });
+      return {
+        campaigns: within(tablist).queryByRole("tab", { name: "Campaigns" }),
+        opportunities: within(tablist).queryByRole("tab", { name: "Opportunities" }),
+      };
+    };
+
+    // Campaigns only (the media-first default).
+    renderDetail({ entitySlug: "account", showCampaigns: true, showOpportunities: false });
+    expect(tabs().campaigns).toBeInTheDocument();
+    expect(tabs().opportunities).not.toBeInTheDocument();
+    cleanup();
+
+    // Opportunities only.
+    renderDetail({ entitySlug: "account", showCampaigns: false, showOpportunities: true });
+    expect(tabs().campaigns).not.toBeInTheDocument();
+    expect(tabs().opportunities).toBeInTheDocument();
+    cleanup();
+
+    // Neither → no pipeline-entity tabs.
+    renderDetail({ entitySlug: "account", showCampaigns: false, showOpportunities: false });
+    expect(tabs().campaigns).not.toBeInTheDocument();
+    expect(tabs().opportunities).not.toBeInTheDocument();
   });
 
   test("contacts table sorts by name", async () => {

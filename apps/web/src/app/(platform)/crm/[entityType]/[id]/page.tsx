@@ -5,6 +5,7 @@ import {
   resolveCrmEntitySlug,
 } from "@adserve/crm";
 import { requirePermission } from "@/lib/permissions";
+import { readCrmModuleConfig } from "@/lib/crm/module-config";
 import { loadCrmDetailData } from "@/lib/crm/load-detail-data";
 import { recordTitle } from "@/lib/crm/record-title";
 import { computeRecordCapabilities } from "@/lib/crm/detail-capabilities";
@@ -57,6 +58,11 @@ export default async function CrmDetailPage({ params }: PageProps) {
   const { entity, fields, layoutConfig } = bundle;
   const { record, relationships } = loaded;
 
+  // Which pipeline-entity tabs the Account detail surfaces follows the tenant's
+  // module config (mirrors the nav/route guards): show Campaigns and/or
+  // Opportunities, or neither.
+  const moduleConfig = readCrmModuleConfig(tenant.settings);
+
   const title = recordTitle(entity, fields, record.data, record.id);
   const entityMeta = CRM_ENTITY_TYPES.find((e) => e.slug === slug);
 
@@ -99,6 +105,8 @@ export default async function CrmDetailPage({ params }: PageProps) {
       canLogActivity={canLogActivity}
       canViewActivities={canViewActivities}
       showAiSummary={slug === "account" && canViewActivities}
+      showCampaigns={moduleConfig.campaigns}
+      showOpportunities={moduleConfig.opportunities}
       locale="en-GB"
     />
   );
