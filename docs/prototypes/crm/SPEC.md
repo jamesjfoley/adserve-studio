@@ -407,6 +407,22 @@ the distinct values that actually exist in the table (as free-text columns alrea
 - Tests: select picker lists present values by label (not all choices) + no-facet → no icon; RLS
   harness covers single-value and multi-value select facets. 446 web green.
 
+## Iteration 20 — Row banding fills the whole full-height table
+
+On full-height list tables the zebra banding stopped at the last record, leaving blank space below.
+Now it continues to the bottom even when records don't fill the panel.
+- **`DynamicTable`**: in `fillHeight` mode the scroll container is a flex column; below the `<table>`
+  a striped filler `div` (`flex-1`) fills the remaining height. A body-row height is measured via
+  `ResizeObserver` (guarded with `typeof ResizeObserver` for jsdom/SSR) so the filler band size
+  matches real rows.
+- **`stripeFillStyle(renderedRowCount, rowHeight)`** (exported, pure): a repeating two-row
+  `linear-gradient` whose first band continues the row parity from the row that would follow the
+  last rendered one (Tailwind `even:` bands 0-based odd indices), so the empty area lines up with the
+  real rows. Returns undefined until a row height is known; the filler collapses to zero height when
+  records overflow (table scrolls as before).
+- Tests: `stripeFillStyle` parity (odd count → starts `--row-alt`; even → transparent) + two-row
+  period. 449 web green.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
