@@ -303,6 +303,27 @@ Re-grounded the in-product UI in `style_guides/` + codified it in `docs/design-l
   search; a dark top-bar/brand chrome. Admin/super-admin screens inherit the token/Panel foundation
   automatically; a dedicated pass can follow if wanted.
 
+## Iteration 15 — Full-bleed layout + full-height list tables + home-page search
+
+Layout re-do per design feedback on Iteration 14 ("too much white space / use the screen
+real-estate / tables full-height / search bar / sub-page table mismatch"):
+- **Shells** (platform, tenant-admin, super-admin layouts): dropped `mx-auto max-w-7xl` centring.
+  `<main>` is now a `flex flex-col overflow-hidden` column; its inner region is
+  `min-h-0 flex-1 overflow-auto px-6 py-6` (full-width against the nav, ~24px gutter). This both
+  reclaims the wasted horizontal space and gives pages a bounded height to fill.
+- **DynamicTable:** new `fillHeight` mode — toolbar + pagination stay fixed, the rows region is
+  `min-h-0 flex-1 overflow-auto` with a `sticky top-0` header band. New `searchField`/
+  `searchPlaceholder` — a free-text box that drafts locally and commits a `contains` filter on
+  that slug, composing with (not replacing) the advanced filter bar; seeded from / re-synced to the
+  committed term.
+- **CRM list pages:** root is a full-height flex column; the table `Panel` is `flex-1 min-h-0` with
+  a `flex` body, so the table fills the viewport and scrolls internally. Per-entity search box on
+  the Accounts/Contacts home pages (`findSearchField`: name → firstName → first text field).
+- **ContactsTable** (Accounts→Contacts sub-page): re-styled to match DynamicTable — tinted
+  `--table-header-bg` sticky header, sentence-case labels, `--row-alt`/`--row-hover` zebra,
+  bordered rounded scroll region.
+- All token-driven (no new palette values, lock test untouched). +4 search tests; 430 web green.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
