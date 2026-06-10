@@ -324,6 +324,27 @@ real-estate / tables full-height / search bar / sub-page table mismatch"):
   bordered rounded scroll region.
 - All token-driven (no new palette values, lock test untouched). +4 search tests; 430 web green.
 
+## Iteration 16 — Per-column filter icons (remove the global Add-filter bar)
+
+Replaced the draft-then-Apply "Add filter" bar on the list pages with inline,
+per-column filtering:
+- **Removed** the `FilterBar` component (Add-filter select + draft list + Apply/Clear) — file deleted.
+- **`ColumnFilter`** (new): a funnel icon in the header of each text-value column. Click → popover
+  with operator (Contains / Equals / Starts with) + text value + Apply/Clear. The icon renders in
+  accent when that column has an active filter; the popover seeds from the committed filter and a
+  click-away backdrop closes it.
+- **Scope:** only text-family columns get the icon — `isTextFilterable` = text/long_text/email/
+  phone/url. Numeric, currency, date, select, boolean, multi_select and relationship columns
+  deliberately get **no** filter icon (per the request: "text value, not numeric or currency").
+  Trade-off logged: those column types are no longer filterable from the list UI; the server still
+  supports their operators if a future UX wants them back.
+- **DynamicTable:** one filter per column (apply replaces any existing filter on that slug, clear
+  removes it); the global search box and a column filter targeting the same slug share a single slot
+  (last action wins). The "Include archived" toggle moved from the old bar into the toolbar and now
+  commits immediately (no Apply step).
+- Server-side filter handling (`operatorsForType`, crm-query) is unchanged. Tests: rewrote the
+  filtering suite to drive the header popovers + added `isTextFilterable` coverage; 436 web green.
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
