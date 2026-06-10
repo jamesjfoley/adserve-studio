@@ -100,6 +100,57 @@ describe("CRM list page data path under enforced RLS (adserve_app)", () => {
     expect(dataB!.total).toBe(1);
   });
 
+  test("a repeating text column yields an alphabetical facet", async () => {
+    // name appears twice for "Acme" → repetition → eligible for a value picker.
+    await seedAccount(tenantA, "Acme");
+    await seedAccount(tenantA, "Acme");
+    await seedAccount(tenantA, "Globex");
+
+    const data = await loadCrmListData({
+      tenantId: tenantA.tenantId,
+      slug: "account",
+      parsed: defaultParsed(),
+      userId: tenantA.owner.id,
+    });
+
+    expect(data!.facets.name).toEqual(["Acme", "Globex"]);
+  });
+
+  test("an always-unique text column yields NO facet", async () => {
+    // Every name distinct → no repetition → not offered as a filter.
+    await seedAccount(tenantA, "Acme");
+    await seedAccount(tenantA, "Globex");
+    await seedAccount(tenantA, "Initech");
+
+    const data = await loadCrmListData({
+      tenantId: tenantA.tenantId,
+      slug: "account",
+      parsed: defaultParsed(),
+      userId: tenantA.owner.id,
+    });
+
+    expect(data!.facets.name).toBeUndefined();
+  });
+
+  test("facets respect tenant isolation (only tenant A's values)", async () => {
+    await seedAccount(tenantA, "Acme");
+    await seedAccount(tenantA, "Acme");
+    await seedAccount(tenantA, "Globex");
+    await seedAccount(tenantB, "Beta");
+    await seedAccount(tenantB, "Beta");
+    await seedAccount(tenantB, "Zeta");
+
+    const data = await loadCrmListData({
+      tenantId: tenantA.tenantId,
+      slug: "account",
+      parsed: defaultParsed(),
+      userId: tenantA.owner.id,
+    });
+
+    // Only tenant A's distinct values — never B's "Beta"/"Zeta".
+    expect(data!.facets.name).toEqual(["Acme", "Globex"]);
+  });
+
   test("unactivated entity type → null (page 404s)", async () => {
     const data = await loadCrmListData({
       tenantId: tenantA.tenantId,

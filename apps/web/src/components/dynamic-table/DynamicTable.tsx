@@ -47,6 +47,7 @@ export function DynamicTable({
   fillHeight = false,
   searchField,
   searchPlaceholder = "Search…",
+  columnFacets,
 }: DynamicTableProps) {
   // Stable column order: declared displayOrder, then insertion order.
   const orderedFields = useMemo(
@@ -224,6 +225,7 @@ export function DynamicTable({
             onToggleAll={toggleAll}
             filters={filterState.filters}
             onColumnFilterChange={handleColumnFilterChange}
+            columnFacets={columnFacets}
           />
           <tbody className="divide-y divide-[var(--border)]">
             {records.length === 0 ? (

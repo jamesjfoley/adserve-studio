@@ -6,7 +6,7 @@ import type {
   FieldDefinitionWithLabels,
   LocalizedLabel,
 } from "@adserve/module-framework";
-import { isSortable, isTextFilterable } from "./operators";
+import { isSortable } from "./operators";
 import { ColumnFilter } from "./column-filter";
 import type { Filter, SortState } from "./types";
 
@@ -25,6 +25,8 @@ interface TableHeaderProps {
   filters?: Filter[];
   /** Commit (or clear, with null) the filter for one column. */
   onColumnFilterChange?: (slug: string, next: Filter | null) => void;
+  /** Per-column distinct values; a column is filterable iff it has an entry. */
+  columnFacets?: Record<string, string[]>;
 }
 
 /**
@@ -64,6 +66,7 @@ export function TableHeader({
   onToggleAll,
   filters = [],
   onColumnFilterChange,
+  columnFacets,
 }: TableHeaderProps) {
   const selectAllRef = useRef<HTMLInputElement>(null);
   // `indeterminate` is a DOM-only property, not an attribute.
@@ -102,10 +105,14 @@ export function TableHeader({
               : active === "desc"
                 ? "descending"
                 : "none";
-          // Text-value columns get an inline filter icon; numeric/currency/
-          // date/select columns do not (per the column-filter UX).
+          // A column gets a value-picker filter icon ONLY when the server
+          // supplied facet values for it (a repeating text column); columns
+          // with always-unique values get no icon.
+          const facetValues = columnFacets?.[f.slug];
           const filterable =
-            isTextFilterable(f.fieldType) && onColumnFilterChange != null;
+            onColumnFilterChange != null &&
+            facetValues != null &&
+            facetValues.length > 0;
           return (
             <th
               key={f.id}
@@ -131,6 +138,7 @@ export function TableHeader({
                   <ColumnFilter
                     slug={f.slug}
                     label={label}
+                    values={facetValues}
                     active={filters.find((x) => x.fieldSlug === f.slug) ?? null}
                     onChange={(next) => onColumnFilterChange(f.slug, next)}
                   />

@@ -174,18 +174,24 @@ describe("DynamicTable — sorting", () => {
   });
 });
 
-describe("DynamicTable — column filters", () => {
-  test("only text-value columns expose a filter icon (not numeric/currency)", () => {
-    render(<DynamicTable {...buildProps()} />);
+describe("DynamicTable — column value-picker filters", () => {
+  // Facets drive which columns are filterable: only columns the server lists
+  // (repeating text columns) get a filter icon and a value picklist.
+  const FACETS = {
+    name: ["Globex", "Acme", "Initech"],
+  };
 
-    // Text + email columns are filterable.
+  test("only columns with server-supplied facets expose a filter icon", () => {
+    render(<DynamicTable {...buildProps({ columnFacets: { name: FACETS.name } })} />);
+
+    // Name has a facet → filterable.
     expect(
       screen.getByRole("button", { name: "Filter by Name" })
     ).toBeInTheDocument();
+    // Email/Revenue/Tags have no facet (always-unique / non-text) → no icon.
     expect(
-      screen.getByRole("button", { name: "Filter by Email" })
-    ).toBeInTheDocument();
-    // Currency (Revenue) and multi_select (Tags) are not.
+      screen.queryByRole("button", { name: "Filter by Email" })
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Filter by Revenue" })
     ).not.toBeInTheDocument();
@@ -194,66 +200,83 @@ describe("DynamicTable — column filters", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("there is no global 'Add filter' control", () => {
+  test("no filter icons at all when no facets are supplied", () => {
     render(<DynamicTable {...buildProps()} />);
+    expect(
+      screen.queryByRole("button", { name: /^Filter by / })
+    ).not.toBeInTheDocument();
+  });
+
+  test("there is no global 'Add filter' control", () => {
+    render(<DynamicTable {...buildProps({ columnFacets: { name: FACETS.name } })} />);
     expect(screen.queryByLabelText("Add filter")).not.toBeInTheDocument();
   });
 
-  test("applying a column filter commits a single filter for that column", async () => {
-    const onFiltersChange = vi.fn();
+  test("the picklist lists every value in alphabetical order", async () => {
     const user = userEvent.setup();
-    render(<DynamicTable {...buildProps({ onFiltersChange })} />);
+    render(<DynamicTable {...buildProps({ columnFacets: { name: FACETS.name } })} />);
 
     await user.click(screen.getByRole("button", { name: "Filter by Name" }));
-    await user.type(screen.getByLabelText("Filter Name value"), "Acme");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    const options = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Acme", "Globex", "Initech"]);
+  });
+
+  test("picking a value commits an equals filter for that column", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({ onFiltersChange, columnFacets: { name: FACETS.name } })}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
+    await user.click(screen.getByRole("option", { name: "Globex" }));
 
     expect(onFiltersChange).toHaveBeenCalledTimes(1);
     expect(onFiltersChange).toHaveBeenCalledWith({
-      filters: [{ fieldSlug: "name", operator: "contains", value: "Acme" }],
+      filters: [{ fieldSlug: "name", operator: "equals", value: "Globex" }],
       includeArchived: false,
     });
   });
 
-  test("does NOT emit while typing in the popover — only on Apply", async () => {
-    const onFiltersChange = vi.fn();
+  test("typing narrows the picklist to matching values (case-insensitive)", async () => {
     const user = userEvent.setup();
-    render(<DynamicTable {...buildProps({ onFiltersChange })} />);
+    render(<DynamicTable {...buildProps({ columnFacets: { name: FACETS.name } })} />);
 
     await user.click(screen.getByRole("button", { name: "Filter by Name" }));
-    await user.type(screen.getByLabelText("Filter Name value"), "Acme");
+    await user.type(screen.getByLabelText("Filter Name value"), "in");
+
+    // "Initech" matches; "Acme"/"Globex" do not.
+    const options = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Initech"]);
+  });
+
+  test("typing does not emit until a value is picked", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({ onFiltersChange, columnFacets: { name: FACETS.name } })}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
+    await user.type(screen.getByLabelText("Filter Name value"), "ac");
     expect(onFiltersChange).not.toHaveBeenCalled();
   });
 
-  test("a chosen operator is carried into the committed filter", async () => {
-    const onFiltersChange = vi.fn();
-    const user = userEvent.setup();
-    render(<DynamicTable {...buildProps({ onFiltersChange })} />);
-
-    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
-    await user.selectOptions(
-      screen.getByLabelText("Name filter operator"),
-      "startsWith"
-    );
-    await user.type(screen.getByLabelText("Filter Name value"), "Ac");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
-
-    expect(onFiltersChange).toHaveBeenCalledWith({
-      filters: [{ fieldSlug: "name", operator: "startsWith", value: "Ac" }],
-      includeArchived: false,
-    });
-  });
-
-  test("a column filter replaces any existing filter on the same column", async () => {
+  test("picking a value replaces any existing filter on the same column", async () => {
     const onFiltersChange = vi.fn();
     const user = userEvent.setup();
     render(
       <DynamicTable
         {...buildProps({
           onFiltersChange,
+          columnFacets: { name: FACETS.name },
           filterState: {
             filters: [
-              { fieldSlug: "name", operator: "contains", value: "old" },
+              { fieldSlug: "name", operator: "equals", value: "Acme" },
               { fieldSlug: "email", operator: "contains", value: "keep" },
             ],
             includeArchived: false,
@@ -262,34 +285,34 @@ describe("DynamicTable — column filters", () => {
       />
     );
 
-    const trigger = screen.getByRole("button", { name: "Filter by Name" });
-    // The icon is active and the popover is seeded from the committed filter.
-    await user.click(trigger);
-    const input = screen.getByLabelText("Filter Name value");
-    expect(input).toHaveValue("old");
-    await user.clear(input);
-    await user.type(input, "new");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    // The icon reflects the active selection.
+    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
+    expect(screen.getByRole("option", { name: "Acme" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await user.click(screen.getByRole("option", { name: "Globex" }));
 
     expect(onFiltersChange).toHaveBeenLastCalledWith({
       filters: [
         { fieldSlug: "email", operator: "contains", value: "keep" },
-        { fieldSlug: "name", operator: "contains", value: "new" },
+        { fieldSlug: "name", operator: "equals", value: "Globex" },
       ],
       includeArchived: false,
     });
   });
 
-  test("clearing a column filter removes only that column's filter", async () => {
+  test("'All …' clears only that column's filter", async () => {
     const onFiltersChange = vi.fn();
     const user = userEvent.setup();
     render(
       <DynamicTable
         {...buildProps({
           onFiltersChange,
+          columnFacets: { name: FACETS.name },
           filterState: {
             filters: [
-              { fieldSlug: "name", operator: "contains", value: "x" },
+              { fieldSlug: "name", operator: "equals", value: "Acme" },
               { fieldSlug: "email", operator: "contains", value: "keep" },
             ],
             includeArchived: false,
@@ -299,7 +322,7 @@ describe("DynamicTable — column filters", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Filter by Name" }));
-    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await user.click(screen.getByRole("button", { name: "All name" }));
 
     expect(onFiltersChange).toHaveBeenLastCalledWith({
       filters: [{ fieldSlug: "email", operator: "contains", value: "keep" }],

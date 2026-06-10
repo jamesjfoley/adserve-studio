@@ -102,4 +102,12 @@ export interface DynamicTableProps {
    */
   searchField?: string;
   searchPlaceholder?: string;
+
+  /**
+   * Per-column distinct values for the header value-picker, keyed by field
+   * slug. A column gets a filter icon ONLY when it appears here — the server
+   * decides eligibility (a text column with repeating values; always-unique
+   * columns like email/phone are excluded). Values are alphabetical.
+   */
+  columnFacets?: Record<string, string[]>;
 }

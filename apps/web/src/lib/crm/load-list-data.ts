@@ -1,6 +1,7 @@
-import { asc, desc, sql } from "drizzle-orm";
+import { and, asc, desc, sql } from "drizzle-orm";
 import { records, withTenant } from "@adserve/database";
 import type { FieldDefinitionWithLabels, LayoutConfig } from "@adserve/module-framework";
+import { isTextFilterable } from "@/components/dynamic-table/operators";
 import {
   buildOrderBy,
   buildWhere,
@@ -10,12 +11,22 @@ import {
 import { loadEntityForm } from "./load-entity-form";
 import { listActiveMembers, type TenantMember } from "./members";
 
+/**
+ * Per-column distinct values for the header value-picker. A column appears
+ * here ONLY when it is "intelligently filterable": a text-value column with
+ * ≥2 distinct values where at least one repeats. That single rule both
+ * excludes always-unique columns (email, phone, free-text) and one-value
+ * columns, and includes repeating categorical text. Values are alphabetical.
+ */
+export type ColumnFacets = Record<string, string[]>;
+
 export interface CrmListData {
   fields: FieldDefinitionWithLabels[];
   rows: (typeof records.$inferSelect)[];
   total: number;
   layoutConfig: LayoutConfig;
   members: TenantMember[];
+  facets: ColumnFacets;
 }
 
 /**
@@ -86,6 +97,48 @@ export async function loadCrmListData(args: {
       .from(records)
       .where(where);
 
-    return { fields, rows, total: countRow?.total ?? 0, layoutConfig, members };
+    // Facets are computed over the BASE domain (tenant + entity + archived +
+    // owner) — deliberately ignoring the active column filters, so the
+    // picklist always offers the full set of values for the current view.
+    const baseWhere = buildWhere(
+      tenantId,
+      entity.id,
+      fields,
+      [],
+      parsed.includeArchived,
+      ownerFilter
+    );
+
+    const facets: ColumnFacets = {};
+    for (const field of fields) {
+      if (!isTextFilterable(field.fieldType)) continue;
+      const valExpr = sql<string>`(${records.data} ->> ${field.slug})`;
+      const groups = await tx
+        .select({ value: valExpr, count: sql<number>`count(*)::int` })
+        .from(records)
+        .where(and(baseWhere, sql`${valExpr} is not null`, sql`${valExpr} <> ''`))
+        // Group on the output ordinal: the slug is a bound parameter, so a
+        // re-stated expression would carry a different placeholder and Postgres
+        // would not match it to the SELECT target.
+        .groupBy(sql`1`);
+
+      // "Intelligently filterable": ≥2 distinct values AND at least one
+      // repeats (so always-unique columns like email/phone are excluded).
+      const repeats = groups.some((g) => g.count >= 2);
+      if (groups.length >= 2 && repeats) {
+        facets[field.slug] = groups
+          .map((g) => g.value)
+          .sort((a, b) => a.localeCompare(b));
+      }
+    }
+
+    return {
+      fields,
+      rows,
+      total: countRow?.total ?? 0,
+      layoutConfig,
+      members,
+      facets,
+    };
   });
 }

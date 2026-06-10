@@ -44,6 +44,8 @@ interface CrmListClientProps {
    * relationship field (the `account` field def), placed via the layout editor.
    */
   enableAccountPicker?: boolean;
+  /** Per-column distinct values for the header value-picker (text columns). */
+  columnFacets?: Record<string, string[]>;
   locale: string;
 }
 
@@ -98,6 +100,7 @@ export function CrmListClient({
   members,
   owner,
   enableAccountPicker = false,
+  columnFacets,
   locale,
 }: CrmListClientProps) {
   const router = useRouter();
@@ -371,6 +374,7 @@ export function CrmListClient({
           fillHeight
           searchField={searchField?.slug}
           searchPlaceholder={`Search ${entityName.toLowerCase()}s…`}
+          columnFacets={columnFacets}
         />
       </Panel>
 
