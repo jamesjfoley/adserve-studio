@@ -174,6 +174,28 @@ when either pipeline entity is enabled.
 - **Account History** reads the audit log directly; richer field-name humanisation + paging is a
   follow-up.
 
+## Platform shell — Title Bar (endures across all modules)
+
+A module-agnostic top Title Bar mounted once in the `(platform)` layout, above every module
+surface (CRM is the first module). New modules plug in with no shell changes.
+- **`lib/shell.ts`:** `getTenantModules(tenantId)` builds the candy-box catalogue from
+  `modules` × `tenant_modules` under RLS (enabled + active + routable → clickable; others "coming
+  soon"); `readShellConfig(settings)` resolves the branding logo + title-bar mode (mirrors
+  `readTenantPalette`); `userInitials()`; `MODULE_HOME` (slug → landing route); `APP_VERSION`.
+- **`components/shell/title-bar.tsx`:** candy box (module switcher) · company logo
+  (`settings.branding.logoUrl`) or the "as" wordmark · centred active module name · user roundel →
+  menu (Ask support, Workflows [soon], Version, Log out via Clerk `signOut` → `/sign-in`). Two
+  modes: **always-on** (in flow) and **auto-hide** (overlay revealed on top-edge hover).
+- **Admin:** "Branding & shell" page + `PATCH /api/admin/shell` (gated `crm.admin`/`tenant.admin`)
+  to upload a logo (data URL, ≤500 KB) + pick the title-bar mode, persisted to
+  `settings.branding` / `settings.shell` (mirrors the theme write).
+- **Production considerations:** logo stored as a data URL in tenant settings (move to object
+  storage/CDN for production); `MODULE_HOME` + the active-module name are static (CRM) — derive the
+  active module from the route once a 2nd module ships; logout/identity still also available via the
+  sidebar Clerk `UserButton` (can be retired now the roundel owns it); the shell currently mounts on
+  `(platform)` only — `(tenant-admin)` can adopt the same `<TitleBar/>` if a unified chrome is wanted
+  (super-admin stays a separate track). `APP_VERSION` is a constant kept in sync with package.json.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not
