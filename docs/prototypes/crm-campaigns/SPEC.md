@@ -136,6 +136,18 @@ when either pipeline entity is enabled.
   `detail` layout so it regenerates into the new panels (this clobber is acceptable locally — the
   skip-on-match activation never updates existing fields/layouts in prod).
 
+### Layout editor + widget panels (all Account panels manageable)
+- `LayoutSection` extended: `columns: 1|2|3|4`, `hidden?` (configured but not rendered), `widget?`
+  (a non-field panel placed in layout order). `generateDefaultLayoutConfig(widgets)` appends widget
+  sections; `validateLayoutConfig` accepts 1–4 + hidden/widget.
+- The Account default detail layout carries **Brands** + **Account History** as widget sections, so
+  they appear in `/admin/crm/layouts` next to the field panels (Account Details, Credit Approvals,
+  Financial Controls, Addresses). `DynamicForm` renders widget sections via a `widgetRenderers` map,
+  skips hidden sections, supports 4-column grids, and keeps the first VISIBLE panel always-open.
+- Layout editor UI gained: **columns 1–4**, **show/hide** per panel, **reorder** panels (move
+  up/down), and read-only handling of widget panels. So the admin can reorder/hide/columns every
+  Account panel — field panels and the Brands/History widget panels alike.
+
 ### Account-detail production considerations
 - **Required fields kept optional.** Account type / Required credit limit / Company registration are
   starred in the design but seeded OPTIONAL — Lead-convert and Campaign create-with-account
