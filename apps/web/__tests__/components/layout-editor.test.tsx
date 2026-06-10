@@ -141,10 +141,42 @@ describe("LayoutEditor", () => {
       />
     );
 
-    // Both fields remain unplaced because the only fieldIds live on a widget section.
-    const banner = screen.getByText(/Unplaced fields:/);
-    expect(within(banner).getByText(/First name/)).toBeTruthy();
-    expect(banner.textContent).toContain("Last name");
+    // Both fields remain unplaced (rendered as draggable chips in the unplaced
+    // area) because the only fieldIds live on a widget section.
+    expect(screen.getByText(/Unplaced fields:/)).toBeInTheDocument();
+    // Names appear as draggable chips (spans) in the unplaced area.
+    expect(screen.getByText("First name", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Last name", { selector: "span" })).toBeInTheDocument();
+  });
+
+  test("field grid uses the section's column count and re-renders on change", async () => {
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layoutId="l1"
+        fields={fields}
+        initialConfig={{
+          sections: [
+            { title: "Alpha", columns: 2, fieldIds: ["f1", "f2"] },
+          ],
+        }}
+      />
+    );
+
+    const grid = screen.getByTestId("grid-0");
+    // The WYSIWYG grid mirrors the panel's column count (row-major placement).
+    expect(grid.getAttribute("data-columns")).toBe("2");
+    expect(grid.style.gridTemplateColumns).toContain("repeat(2");
+    // Both placed fields are rendered as draggable chips.
+    expect(within(grid).getByText("First name")).toBeInTheDocument();
+    expect(within(grid).getByText("Last name")).toBeInTheDocument();
+
+    // Changing the Columns select re-renders the same fields in the new count.
+    const columnsLabel = screen.getByText("Columns").closest("label")!;
+    const select = within(columnsLabel).getByRole("combobox");
+    await user.selectOptions(select, "3");
+    expect(grid.getAttribute("data-columns")).toBe("3");
+    expect(grid.style.gridTemplateColumns).toContain("repeat(3");
   });
 
   test("columns selector offers 1 through 4 for normal sections", () => {

@@ -60,6 +60,8 @@ export default async function CrmFieldsPage({
           isFilterable: f.isFilterable,
           isSystem: f.isSystem,
           description: f.description ?? "",
+          // Pass options so the edit panel can pre-fill a select field's choices.
+          options: (f.options as Record<string, unknown> | null) ?? undefined,
         }))}
       />
     </div>
