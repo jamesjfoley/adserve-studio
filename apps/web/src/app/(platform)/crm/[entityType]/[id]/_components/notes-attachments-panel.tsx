@@ -10,6 +10,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { CollapsiblePanel } from "@/components/ui/collapsible-panel";
 import {
   MAX_ATTACHMENT_DATAURL_CHARS,
@@ -407,7 +408,13 @@ function ModalShell({ heading, onClose, children }: ModalShellProps) {
     };
   }, [onClose]);
 
-  return (
+  // Portal to <body>: this panel is rendered as a widget INSIDE the record's
+  // DynamicForm <form>, and the modal contains its own <form>. A nested <form>
+  // is invalid HTML — the browser drops the inner form, so the modal's submit
+  // never fires (notes appeared to "not save"). Portaling escapes the parent
+  // form so the modal's form submits normally.
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
@@ -438,7 +445,8 @@ function ModalShell({ heading, onClose, children }: ModalShellProps) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

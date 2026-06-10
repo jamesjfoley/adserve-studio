@@ -407,6 +407,20 @@ an admin/tenant one:
   localStorage is per-device; a cross-device per-user preference belongs in a server-side user-settings
   store (deferred — same note as the Contacts row-count).
 
+## Notes & Attachments — nested-form fix (add/edit worked, didn't display)
+
+**Bug:** the `NotesAttachmentsPanel` is a layout widget rendered INSIDE the record's `DynamicForm`
+`<form>`. Its Add/Edit modal contained its own `<form>`, producing an invalid **nested `<form>`** — the
+browser drops the inner form, so the modal's submit never fired and the new note/link/attachment was
+not saved/displayed (it looked like notes only worked outside edit mode).
+
+**Fix:** the panel's `ModalShell` now renders via `createPortal(…, document.body)`, so the modal (and
+its form) escapes the parent form. Adding a note/link/attachment now works and displays immediately in
+**both view and edit mode** (the panel adopts the API's returned `items`). Confirmed by an integration
+test: an account in view mode shows the panel + "+ Add Note", and an added note appears without
+entering edit mode. (Persistence and the account-save merge were already correct — the account PATCH
+merges `records.data`, preserving `notesAttachments`.)
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

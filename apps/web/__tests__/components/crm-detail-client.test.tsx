@@ -427,3 +427,56 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
   });
 });
+
+describe("CrmDetailClient — Notes & Attachments usable in VIEW mode", () => {
+  test("account in view mode shows the notes panel + add buttons and an added note displays", async () => {
+    let items: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const isNotes = String(url).endsWith("/notes");
+      if (isNotes && init?.method === "POST") {
+        items = [
+          ...items,
+          {
+            id: "n1",
+            type: "note",
+            name: "Call summary",
+            body: "Spoke with finance",
+            addedById: "u1",
+            addedByName: "Me",
+            createdAt: "2026-06-10T09:00:00.000Z",
+          },
+        ];
+        return { ok: true, status: 200, json: async () => ({ items }) };
+      }
+      if (isNotes) {
+        return { ok: true, status: 200, json: async () => ({ items }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ records: [] }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderDetail({
+      entitySlug: "account",
+      collectionSegment: "accounts",
+      layoutConfig: {
+        sections: [
+          { title: "Details", columns: 1, fieldIds: ["f-name"] },
+          { title: "Notes & Attachments", columns: 1, fieldIds: [], widget: "notes" },
+        ],
+      },
+    });
+
+    // View mode (default): the panel + add control are present without clicking Edit.
+    expect(
+      await screen.findByRole("button", { name: "+ Add Note" })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "+ Add Note" }));
+    await user.type(screen.getByRole("textbox", { name: /title/i }), "Call summary");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // The added note is displayed within the panel — no edit mode needed.
+    expect(await screen.findByText("Call summary")).toBeInTheDocument();
+  });
+});
