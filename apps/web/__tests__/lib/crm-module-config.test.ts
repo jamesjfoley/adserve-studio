@@ -6,6 +6,7 @@ import {
 } from "@/lib/crm/module-config";
 
 const settingsFor = (crm: Record<string, unknown>) => ({ modules: { crm } });
+const togglesObj: Record<string, unknown> = { ...DEFAULT_CRM_MODULE_TOGGLES };
 
 describe("readCrmModuleConfig — defaults", () => {
   test("absent key → media-first default profile", () => {
@@ -19,7 +20,7 @@ describe("readCrmModuleConfig — defaults", () => {
   });
 
   test("default profile is exported and self-consistent", () => {
-    const c = readCrmModuleConfig(settingsFor(DEFAULT_CRM_MODULE_TOGGLES));
+    const c = readCrmModuleConfig(settingsFor(togglesObj));
     expect(c.campaigns).toBe(true);
     expect(c.opportunities).toBe(false);
     expect(c.showPipeline).toBe(true);

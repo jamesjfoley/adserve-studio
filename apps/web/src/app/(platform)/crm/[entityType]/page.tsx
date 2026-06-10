@@ -76,6 +76,9 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
       // WS3 — the contact create flow gains an account multi-select that
       // routes create+link through the combined endpoint atomically.
       enableAccountPicker={slug === "contact"}
+      // Campaign create routes through /api/crm/campaigns/with-account so the
+      // required account link is written atomically with the record.
+      enableCampaignCreate={slug === "campaign"}
       locale="en-GB"
     />
   );

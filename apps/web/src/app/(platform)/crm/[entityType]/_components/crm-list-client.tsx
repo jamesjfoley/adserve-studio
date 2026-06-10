@@ -44,6 +44,13 @@ interface CrmListClientProps {
    * relationship field (the `account` field def), placed via the layout editor.
    */
   enableAccountPicker?: boolean;
+  /**
+   * When true (the campaign list), create routes through
+   * /api/crm/campaigns/with-account so the campaign + its REQUIRED account link
+   * (and optional primary contact) are written atomically. `account` and
+   * `primaryContact` render inline as relationship fields.
+   */
+  enableCampaignCreate?: boolean;
   /** Per-column distinct values for the header value-picker (text columns). */
   columnFacets?: Record<string, string[]>;
   locale: string;
@@ -100,6 +107,7 @@ export function CrmListClient({
   members,
   owner,
   enableAccountPicker = false,
+  enableCampaignCreate = false,
   columnFacets,
   locale,
 }: CrmListClientProps) {
@@ -177,17 +185,32 @@ export function CrmListClient({
       hasReportsTo && mgr?.kind === "existing"
         ? { reportsTo: { contactId: mgr.id } }
         : {};
-    const res = enableAccountPicker
-      ? await fetch(`/api/crm/contacts/with-accounts`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: validated, ...accountBody, ...reportsToBody }),
-        })
-      : await fetch(`/api/crm/${collectionSegment}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: validated }),
-        });
+    // Campaign: `primaryContact` is an existing-only relationship field.
+    const pc = (validated.primaryContact as AccountSelection | null | undefined) ?? null;
+    delete validated.primaryContact;
+    const primaryContactBody =
+      pc?.kind === "existing" ? { primaryContactId: pc.id } : {};
+
+    let res: Response;
+    if (enableCampaignCreate) {
+      res = await fetch(`/api/crm/campaigns/with-account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: validated, ...accountBody, ...primaryContactBody }),
+      });
+    } else if (enableAccountPicker) {
+      res = await fetch(`/api/crm/contacts/with-accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: validated, ...accountBody, ...reportsToBody }),
+      });
+    } else {
+      res = await fetch(`/api/crm/${collectionSegment}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: validated }),
+      });
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setCreateError(body.error ?? `Create failed (${res.status})`);
