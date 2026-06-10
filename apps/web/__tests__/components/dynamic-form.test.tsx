@@ -90,6 +90,33 @@ describe("DynamicForm — structure", () => {
   });
 });
 
+describe("DynamicForm — widget + hidden sections", () => {
+  test("renders a widget section's node and skips hidden sections", () => {
+    const a = fieldDef({ id: "f1", slug: "a", name: "Alpha", fieldType: "text" });
+    const h = fieldDef({ id: "f2", slug: "h", name: "HiddenField", fieldType: "text" });
+    const layout: LayoutConfig = {
+      sections: [
+        { title: "Visible", columns: 2, fieldIds: ["f1"] },
+        { title: "Brands", columns: 1, fieldIds: [], widget: "brands" },
+        { title: "Secret", columns: 2, fieldIds: ["f2"], hidden: true },
+      ],
+    };
+    render(
+      <DynamicForm
+        layoutConfig={layout}
+        fields={[a, h]}
+        initialData={null}
+        mode="create"
+        widgetRenderers={{ brands: <div>BRANDS_WIDGET_CONTENT</div> }}
+      />
+    );
+    // Field section renders; widget section renders its node; hidden skipped.
+    expect(screen.getByLabelText("Alpha")).toBeInTheDocument();
+    expect(screen.getByText("BRANDS_WIDGET_CONTENT")).toBeInTheDocument();
+    expect(screen.queryByLabelText("HiddenField")).not.toBeInTheDocument();
+  });
+});
+
 describe("DynamicForm — collapsible sections", () => {
   test("first section is not collapsible; later sections are collapsible and open by default, and can be toggled closed", async () => {
     const user = userEvent.setup();
