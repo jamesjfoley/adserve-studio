@@ -112,6 +112,42 @@ when either pipeline entity is enabled.
 
 ---
 
+## Iteration — Rich Account detail (panels, Brand child entity, accordions, history)
+
+- **Account field set** regrouped (via `groupName`) into the design's panels: **Account Details**
+  (first panel, always open), **Credit Approvals**, **Financial Controls**, **Addresses** — ~35
+  fields (account type/rating, parent account [text], station exclusions [multi_select], default
+  category, the three boolean flags, credit status/type, required credit limit, read-only credit
+  limit/balance, payment terms, commission %, VAT code, billing currency, company reg / VAT / IBAN,
+  suppress invoice, Site + Billing addresses with a "Billing same as site" toggle via `disabledWhen`).
+  `generateDefaultLayoutConfig` turns the groups into the default panels; the admin reorders/adds/
+  removes panels + fields via the EXISTING `/admin/crm/fields` + `/admin/crm/layouts` editors.
+- **Accordion panels:** new `CollapsiblePanel` client wrapper (Panel stays server-safe); `DynamicForm`
+  renders section 0 static and the rest collapsible (open by default). Brands + Account History
+  panels are collapsible too.
+- **Brand CHILD ENTITY:** `brand` entity + `brand.{read,create,update,delete}` (member read) +
+  `brand_belongs_to_account` (M2O). No standalone nav/list — created/listed/deleted via the Account
+  **Brands** panel (`BrandsPanel`, inline add + delete) backed by `POST /api/crm/brands/with-account`.
+- **Account History panel:** `GET /api/crm/[entityType]/[id]/history` (RLS-scoped audit read) +
+  `RecordHistoryPanel`, in the account Details tab.
+- **Local dev demo:** fresh tenants/tests get the full design automatically. Existing local tenants
+  were reprovisioned (adds Brand + new Account fields); a one-off local SQL re-synced the
+  pre-existing Account fields' `group_name`/`display_order`/label and cleared the stored Account
+  `detail` layout so it regenerates into the new panels (this clobber is acceptable locally — the
+  skip-on-match activation never updates existing fields/layouts in prod).
+
+### Account-detail production considerations
+- **Required fields kept optional.** Account type / Required credit limit / Company registration are
+  starred in the design but seeded OPTIONAL — Lead-convert and Campaign create-with-account
+  auto-create accounts with minimal data, so enforcing them would break those flows. Production
+  needs a create-vs-quick-create distinction before enforcing.
+- **Parent account is a text field**, not a true account→account relationship picker (a relationship
+  would need its own registry entry + inline create/edit persistence). Follow-up.
+- **Brand edit** is add + delete only in the panel; inline edit of an existing brand is a follow-up.
+- **Read-only credit limit/balance** use the form `readOnly` option (no computed-field engine yet).
+- **Account History** reads the audit log directly; richer field-name humanisation + paging is a
+  follow-up.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not
