@@ -93,16 +93,8 @@ export function CrmCreateClient({
       setError(body.error ?? `Create failed (${res.status})`);
       return;
     }
-    const body = await res.json().catch(() => ({}));
-    const newId = body.record?.id as string | undefined;
-    // Land on the new record's detail page (or back to the list as a fallback).
-    startTransition(() =>
-      router.push(
-        newId
-          ? `/crm/${collectionSegment}/${newId}`
-          : `/crm/${collectionSegment}`
-      )
-    );
+    // Saved → return to the collection home page (the list).
+    startTransition(() => router.push(`/crm/${collectionSegment}`));
   }
 
   return (

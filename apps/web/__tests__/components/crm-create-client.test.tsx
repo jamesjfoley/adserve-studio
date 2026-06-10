@@ -76,7 +76,7 @@ describe("CrmCreateClient", () => {
     expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
   });
 
-  test("blocks save until the mandatory field is filled, then POSTs + lands on the detail page", async () => {
+  test("blocks save until the mandatory field is filled, then POSTs + returns to the list", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ record: { id: "acc-1" } }),
@@ -97,8 +97,8 @@ describe("CrmCreateClient", () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/crm/accounts");
     expect(JSON.parse(init.body as string)).toEqual({ data: { name: "Acme" } });
-    // Lands on the new record's detail page.
-    expect(push).toHaveBeenCalledWith("/crm/accounts/acc-1");
+    // Returns to the Accounts home page (the list).
+    expect(push).toHaveBeenCalledWith("/crm/accounts");
   });
 
   test("Cancel returns to the list", async () => {

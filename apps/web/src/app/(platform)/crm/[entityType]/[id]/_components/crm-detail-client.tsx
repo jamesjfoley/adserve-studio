@@ -743,6 +743,8 @@ export function CrmDetailClient({
         eyebrow={entityName}
         title={title}
         status={headerStatus}
+        backHref={`/crm/${collectionSegment}`}
+        backLabel={`Back to ${entityName}s`}
         actions={
           <>
             {canLogActivity ? (
