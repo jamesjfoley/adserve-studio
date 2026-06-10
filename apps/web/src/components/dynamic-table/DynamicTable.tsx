@@ -64,6 +64,10 @@ export function DynamicTable({
   visibleColumns,
   defaultVisibleColumns,
   onVisibleColumnsChange,
+  columnOrder,
+  onColumnOrderChange,
+  columnWidths,
+  onColumnWidthsChange,
   selectable = false,
   selectedIds,
   defaultSelectedIds,
@@ -80,12 +84,45 @@ export function DynamicTable({
   searchPlaceholder = "Search…",
   columnFacets,
 }: DynamicTableProps) {
-  // Stable column order: declared displayOrder, then insertion order.
-  const orderedFields = useMemo(
-    () =>
-      [...fields].sort((a, b) => a.displayOrder - b.displayOrder),
-    [fields]
-  );
+  // Column order: an explicit `columnOrder` (slugs) wins, with any unlisted
+  // fields appended by `displayOrder`; otherwise pure `displayOrder`.
+  const orderedFields = useMemo(() => {
+    const byDisplay = [...fields].sort((a, b) => a.displayOrder - b.displayOrder);
+    if (!columnOrder || columnOrder.length === 0) return byDisplay;
+    const bySlug = new Map(byDisplay.map((f) => [f.slug, f]));
+    const ordered: typeof byDisplay = [];
+    for (const slug of columnOrder) {
+      const f = bySlug.get(slug);
+      if (f) {
+        ordered.push(f);
+        bySlug.delete(slug);
+      }
+    }
+    // Remaining (new/unordered) fields keep their displayOrder sequence.
+    for (const f of byDisplay) if (bySlug.has(f.slug)) ordered.push(f);
+    return ordered;
+  }, [fields, columnOrder]);
+
+  // Full slug order (incl. hidden), the basis for reorder mutations.
+  const fullOrder = useMemo(() => orderedFields.map((f) => f.slug), [orderedFields]);
+
+  // Move `fromSlug` to just before `toSlug` in the full column order.
+  function moveColumn(fromSlug: string, toSlug: string) {
+    if (!onColumnOrderChange || fromSlug === toSlug) return;
+    const next = fullOrder.filter((s) => s !== fromSlug);
+    const at = next.indexOf(toSlug);
+    if (at < 0) return;
+    next.splice(at, 0, fromSlug);
+    onColumnOrderChange(next);
+  }
+
+  function setColumnWidth(slug: string, width: number) {
+    onColumnWidthsChange?.({
+      ...(columnWidths ?? {}),
+      [slug]: Math.max(64, Math.min(720, Math.round(width))),
+    });
+  }
+  const widthsActive = columnWidths !== undefined && onColumnWidthsChange !== undefined;
 
   // Controllable column visibility: controlled when `visibleColumns` is
   // provided, otherwise internal state seeded from defaults / all fields.
@@ -276,7 +313,18 @@ export function DynamicTable({
             : "overflow-x-auto"
         )}
       >
-        <table className="w-full text-sm">
+        <table className={cn("w-full text-sm", widthsActive && "table-fixed")}>
+          {widthsActive ? (
+            <colgroup>
+              {selectable ? <col style={{ width: 40 }} /> : null}
+              {visibleFields.map((f) => (
+                <col
+                  key={f.id}
+                  style={columnWidths?.[f.slug] ? { width: columnWidths[f.slug] } : undefined}
+                />
+              ))}
+            </colgroup>
+          ) : null}
           <TableHeader
             fields={visibleFields}
             sort={sort}
@@ -290,6 +338,8 @@ export function DynamicTable({
             filters={filterState.filters}
             onColumnFilterChange={handleColumnFilterChange}
             columnFacets={columnFacets}
+            onReorder={onColumnOrderChange ? moveColumn : undefined}
+            onResize={widthsActive ? setColumnWidth : undefined}
           />
           <tbody ref={bodyRef} className="divide-y divide-[var(--border)]">
             {records.length === 0 ? (

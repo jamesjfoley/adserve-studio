@@ -61,6 +61,7 @@ function renderClient(overrides: Record<string, unknown> = {}) {
       pagination={{ offset: 0, limit: 50, total: 0 }}
       members={[]}
       owner={null}
+      entitySlug="account"
       locale="en-GB"
       {...overrides}
     />

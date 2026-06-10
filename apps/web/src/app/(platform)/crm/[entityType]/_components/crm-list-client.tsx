@@ -11,6 +11,7 @@ import type {
   SortState,
 } from "@/components/dynamic-table";
 import { stateToQuery, type ListState } from "@/lib/crm/list-params";
+import { usePersistentState } from "@/lib/use-persistent-state";
 import type { TenantMember } from "@/lib/crm/members";
 import { Panel } from "@/components/ui/panel";
 import { PageHeader } from "@/components/ui/page-header";
@@ -33,7 +34,17 @@ interface CrmListClientProps {
   owner?: string | null;
   /** Per-column distinct values for the header value-picker (text columns). */
   columnFacets?: Record<string, string[]>;
+  /** Entity slug + current user — namespace the persisted column prefs. */
+  entitySlug: string;
+  userId?: string;
   locale: string;
+}
+
+/** Per-user, per-entity column preferences (persisted across logins). */
+interface ColumnPrefs {
+  visible?: string[];
+  order?: string[];
+  widths?: Record<string, number>;
 }
 
 function titleCase(segment: string): string {
@@ -86,11 +97,20 @@ export function CrmListClient({
   members,
   owner,
   columnFacets,
+  entitySlug,
+  userId,
   locale,
 }: CrmListClientProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Persisted column layout (visibility, order, widths) per user + entity.
+  const [columnPrefs, setColumnPrefs] = usePersistentState<ColumnPrefs>(
+    userId ? `adserve:crm:columns:${userId}:${entitySlug}` : null,
+    {},
+    (v): v is ColumnPrefs => typeof v === "object" && v !== null
+  );
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
 
@@ -306,6 +326,18 @@ export function CrmListClient({
           pagination={pagination}
           onPageChange={handlePageChange}
           onRowClick={handleRowClick}
+          visibleColumns={columnPrefs.visible ?? defaultVisibleColumns}
+          onVisibleColumnsChange={(visible) =>
+            setColumnPrefs((p) => ({ ...p, visible }))
+          }
+          columnOrder={columnPrefs.order}
+          onColumnOrderChange={(order) =>
+            setColumnPrefs((p) => ({ ...p, order }))
+          }
+          columnWidths={columnPrefs.widths ?? {}}
+          onColumnWidthsChange={(widths) =>
+            setColumnPrefs((p) => ({ ...p, widths }))
+          }
           defaultVisibleColumns={defaultVisibleColumns}
           selectable
           selectedIds={selectedIds}

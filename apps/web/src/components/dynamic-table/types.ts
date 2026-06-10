@@ -73,6 +73,23 @@ export interface DynamicTableProps {
   onVisibleColumnsChange?: (slugs: string[]) => void;
 
   /**
+   * Column display order, as an ordered list of field slugs. When provided it
+   * overrides each field's `displayOrder`; slugs not listed fall to the end (by
+   * `displayOrder`). With `onColumnOrderChange`, the header exposes a drag grip
+   * to reorder columns.
+   */
+  columnOrder?: string[];
+  onColumnOrderChange?: (order: string[]) => void;
+
+  /**
+   * Per-column pixel widths, keyed by field slug. When provided the table uses
+   * a fixed layout and each header gets a resize grab-handle (via
+   * `onColumnWidthsChange`).
+   */
+  columnWidths?: Record<string, number>;
+  onColumnWidthsChange?: (widths: Record<string, number>) => void;
+
+  /**
    * Row selection. Opt in with `selectable`; selection is then
    * controllable-with-default (same seam as column visibility): pass
    * `selectedIds` to control it, or omit for internal state seeded from

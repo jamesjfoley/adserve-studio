@@ -442,6 +442,26 @@ saved values) stays on screen — the view reflects the latest values immediatel
 `router.refresh()` still re-feeds sibling panels (Audit History etc.). Tests cover both: save shows the
 new value; Cancel restores the original.
 
+## Home-page table — Columns menu fix + resize/reorder + persisted layout
+
+Three changes to the list `DynamicTable` (home pages):
+
+- **Columns menu no longer clipped.** The `ColumnToggle` dropdown was inside the panel
+  (`overflow:hidden`) so it was cut off and unscrollable. It now portals to `document.body` (fixed,
+  anchored under the button) with `max-height: min(70vh,420px)` + `overflow-y-auto` and a click-away
+  backdrop — all options are reachable and scroll.
+- **Resize + reorder columns.** New opt-in `DynamicTable` props: `columnOrder`/`onColumnOrderChange`
+  (a drag **grip** ⠿ on each header reorders; the order is a full slug list, new fields append) and
+  `columnWidths`/`onColumnWidthsChange` (table switches to `table-fixed` with a `<colgroup>`; a
+  right-edge **resize handle** drags the width, clamped 64–720px). Both are off unless the host wires
+  the handlers, so other tables (e.g. the Contacts tab) are unaffected.
+- **Per-user persistence across logins.** The home list persists `{ visible, order, widths }` to
+  `localStorage` keyed `adserve:crm:columns:<userId>:<entitySlug>` (via `usePersistentState`,
+  threaded `userId` + `entitySlug` from the page). Visibility, order and widths all survive
+  logout/login. **Production consideration:** localStorage is per-device; a cross-device per-user
+  preference belongs in a server-side user-settings store (deferred — same note as row-count /
+  title-bar).
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { resolveLabel } from "@adserve/module-framework/client";
 import type {
   FieldDefinitionWithLabels,
@@ -61,6 +61,10 @@ interface TableHeaderProps {
   columnFacets?: Record<string, string[]>;
   /** Compact header cells (matches DynamicTable's `dense`). */
   dense?: boolean;
+  /** Enable drag-to-reorder: move `fromSlug` to before `toSlug`. */
+  onReorder?: (fromSlug: string, toSlug: string) => void;
+  /** Enable drag-to-resize: set a column's pixel width. */
+  onResize?: (slug: string, width: number) => void;
 }
 
 /**
@@ -102,9 +106,29 @@ export function TableHeader({
   onColumnFilterChange,
   columnFacets,
   dense = false,
+  onReorder,
+  onResize,
 }: TableHeaderProps) {
   const cellPad = dense ? "px-3 py-1.5" : "px-4 py-3";
+  const dragSlug = useRef<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
+
+  function startResize(e: ReactMouseEvent, slug: string) {
+    if (!onResize) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const th = (e.currentTarget as HTMLElement).closest("th");
+    const startX = e.clientX;
+    const startW = th?.getBoundingClientRect().width ?? 120;
+    const onMove = (ev: MouseEvent) =>
+      onResize(slug, startW + (ev.clientX - startX));
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
   // `indeterminate` is a DOM-only property, not an attribute.
   useEffect(() => {
     if (selectAllRef.current) {
@@ -153,9 +177,31 @@ export function TableHeader({
               key={f.id}
               scope="col"
               aria-sort={ariaSort}
-              className={`${cellPad} font-medium`}
+              className={`relative ${cellPad} font-medium`}
+              onDragOver={onReorder ? (e) => e.preventDefault() : undefined}
+              onDrop={
+                onReorder
+                  ? (e) => {
+                      e.preventDefault();
+                      if (dragSlug.current) onReorder(dragSlug.current, f.slug);
+                      dragSlug.current = null;
+                    }
+                  : undefined
+              }
             >
               <span className="inline-flex items-center gap-1">
+                {onReorder ? (
+                  <span
+                    draggable
+                    onDragStart={() => (dragSlug.current = f.slug)}
+                    onDragEnd={() => (dragSlug.current = null)}
+                    aria-label={`Reorder ${label}`}
+                    title="Drag to reorder column"
+                    className="cursor-grab select-none px-0.5 text-[var(--muted-foreground)]/60 hover:text-[var(--foreground)]"
+                  >
+                    ⠿
+                  </span>
+                ) : null}
                 {sortable ? (
                   <button
                     type="button"
@@ -180,6 +226,14 @@ export function TableHeader({
                   />
                 ) : null}
               </span>
+              {onResize ? (
+                <span
+                  role="separator"
+                  aria-label={`Resize ${label}`}
+                  onMouseDown={(e) => startResize(e, f.slug)}
+                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-[var(--accent)]/40"
+                />
+              ) : null}
             </th>
           );
         })}

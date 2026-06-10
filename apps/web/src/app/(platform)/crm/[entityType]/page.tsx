@@ -84,6 +84,8 @@ export default async function CrmListPage({ params, searchParams }: PageProps) {
       members={data.members}
       owner={parsed.owner}
       columnFacets={data.facets}
+      entitySlug={slug}
+      userId={user.id}
       locale="en-GB"
     />
   );

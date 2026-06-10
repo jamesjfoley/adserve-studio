@@ -2,7 +2,7 @@
 import "../setup/jest-dom";
 
 import { describe, expect, test, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   FieldDefinitionWithLabels,
@@ -681,5 +681,56 @@ describe("DynamicTable — search box", () => {
       />
     );
     expect(screen.getByRole("searchbox")).toHaveValue("globex");
+  });
+});
+
+describe("DynamicTable — column reorder + resize", () => {
+  test("reorder/resize affordances appear only when their handlers are given", () => {
+    const { container, rerender } = render(<DynamicTable {...buildProps()} />);
+    expect(screen.queryByLabelText(/^Reorder /)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Resize /)).not.toBeInTheDocument();
+    expect(container.querySelector("table")?.className).not.toContain("table-fixed");
+
+    rerender(
+      <DynamicTable
+        {...buildProps({
+          onColumnOrderChange: vi.fn(),
+          columnWidths: {},
+          onColumnWidthsChange: vi.fn(),
+        })}
+      />
+    );
+    expect(screen.getAllByLabelText(/^Reorder /).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText(/^Resize /).length).toBeGreaterThan(0);
+    expect(container.querySelector("table")?.className).toContain("table-fixed");
+  });
+
+  test("dragging a column grip onto another column emits the new order", () => {
+    const onColumnOrderChange = vi.fn();
+    render(<DynamicTable {...buildProps({ onColumnOrderChange })} />);
+    fireEvent.dragStart(screen.getByLabelText("Reorder Email"));
+    fireEvent.drop(screen.getByLabelText("Reorder Name"));
+    // Email moved to just before Name; the rest keep order.
+    expect(onColumnOrderChange).toHaveBeenCalledWith([
+      "email",
+      "name",
+      "revenue",
+      "tags",
+    ]);
+  });
+
+  test("dragging the resize handle emits a clamped width for that column", () => {
+    const onColumnWidthsChange = vi.fn();
+    render(
+      <DynamicTable
+        {...buildProps({ columnWidths: {}, onColumnWidthsChange })}
+      />
+    );
+    fireEvent.mouseDown(screen.getByLabelText("Resize Name"), { clientX: 0 });
+    fireEvent.mouseMove(window, { clientX: 150 });
+    fireEvent.mouseUp(window);
+    expect(onColumnWidthsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 150 })
+    );
   });
 });
