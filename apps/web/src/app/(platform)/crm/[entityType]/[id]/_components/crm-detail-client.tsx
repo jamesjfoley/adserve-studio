@@ -121,6 +121,11 @@ export function CrmDetailClient({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [mode, setMode] = useState<"view" | "edit">("view");
+  // Remount key for the form. Bumped ONLY to discard edits (Cancel) — NOT on
+  // save, so a successful save keeps the just-entered values on screen (the
+  // form's state already holds the saved values; remounting would re-seed from
+  // the not-yet-refreshed `record` prop and show stale data).
+  const [formKey, setFormKey] = useState(0);
   const [editError, setEditError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
@@ -385,7 +390,7 @@ export function CrmDetailClient({
   const formNode: ReactNode = (
     <div className="space-y-6">
       <DynamicForm
-        key={mode}
+        key={formKey}
         layoutConfig={layoutConfig}
         fields={fields}
         initialData={formInitialData}
@@ -402,6 +407,8 @@ export function CrmDetailClient({
           onClick={() => {
             setEditError(null);
             setMode("view");
+            // Discard unsaved edits → remount the form from `record`.
+            setFormKey((k) => k + 1);
           }}
           className="mt-2 text-sm text-[var(--muted-foreground)] hover:underline"
         >

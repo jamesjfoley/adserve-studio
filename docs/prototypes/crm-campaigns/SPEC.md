@@ -429,6 +429,19 @@ infinite scroll); fewer than 15 rows show without scroll. The cap height is meas
 header + first row (estimate fallback ~26px/row when unmeasured), and the sticky header stays pinned
 while scrolling.
 
+## Detail form — saved value now shown (stale-after-save fix)
+
+**Bug:** editing a field (e.g. Account Name) and saving showed the OLD value afterwards. The detail
+`DynamicForm` was keyed `key={mode}`, so switching edit→view on save REMOUNTED it and re-seeded its
+state from the `record` prop — which `router.refresh()` (async) hadn't updated yet — discarding the
+just-entered value.
+
+**Fix:** the form is now keyed by an explicit `formKey` that is bumped ONLY on **Cancel** (to discard
+edits and re-seed from `record`). On **Save** the form is not remounted, so its state (already the
+saved values) stays on screen — the view reflects the latest values immediately, no stale flash.
+`router.refresh()` still re-feeds sibling panels (Audit History etc.). Tests cover both: save shows the
+new value; Cancel restores the original.
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

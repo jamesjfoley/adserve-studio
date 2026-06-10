@@ -156,6 +156,43 @@ describe("CrmDetailClient", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  test("after saving an edited field, the view shows the NEW value (not the stale one)", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ record: { id: "r1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const input = screen.getByLabelText("Name");
+    await user.clear(input);
+    await user.type(input, "Acme Corp");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    // Back in view mode, the field reflects the just-saved value immediately —
+    // even though router.refresh() (mocked) hasn't re-fed the `record` prop.
+    expect(await screen.findByText("Acme Corp")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+
+  test("Cancel discards unsaved edits and restores the original value", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const input = screen.getByLabelText("Name");
+    await user.clear(input);
+    await user.type(input, "Throwaway");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // The typed value is gone; the form is back in view mode.
+    expect(screen.queryByText("Throwaway")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+
   test("Log activity → submit POSTs to /api/crm/activities then refreshes", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
