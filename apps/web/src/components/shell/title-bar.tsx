@@ -4,7 +4,8 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useClerk } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
-import type { ShellModule } from "@/lib/shell";
+import { usePersistentState } from "@/lib/use-persistent-state";
+import type { ShellModule, TitleBarMode } from "@/lib/shell";
 
 export interface TitleBarProps {
   /** The tenant's module catalogue (candy box). */
@@ -17,7 +18,59 @@ export interface TitleBarProps {
   initials: string;
   userName: string;
   version: string;
-  mode: "always" | "auto-hide";
+  /**
+   * Tenant/admin default display mode. The USER can override it (lock/unlock),
+   * persisted per user — this is only the starting value.
+   */
+  defaultMode: TitleBarMode;
+  /** Current user's id — namespaces the per-user title-bar preference. */
+  storageScope?: string;
+}
+
+function isTitleBarMode(v: unknown): v is TitleBarMode {
+  return v === "always" || v === "auto-hide";
+}
+
+/** Lock (pinned/always) vs unlock (floating/auto-hide) toggle. */
+function LockToggle({
+  locked,
+  onToggle,
+}: {
+  locked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={locked}
+      aria-label={
+        locked
+          ? "Unlock title bar (auto-hide)"
+          : "Lock title bar (keep visible)"
+      }
+      title={
+        locked
+          ? "Title bar locked — click to let it auto-hide"
+          : "Title bar floating — click to keep it visible"
+      }
+      className={cn(
+        "flex h-9 w-9 items-center justify-center rounded-md hover:bg-[var(--muted)]",
+        locked
+          ? "text-[var(--accent)]"
+          : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+      )}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="7" width="10" height="6.5" rx="1.5" fill={locked ? "currentColor" : "none"} />
+        {locked ? (
+          <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+        ) : (
+          <path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7" />
+        )}
+      </svg>
+    </button>
+  );
 }
 
 /** 3×3 "candy box" dot grid. */
@@ -160,7 +213,18 @@ function BarContent({
   initials,
   userName,
   version,
-}: Omit<TitleBarProps, "mode">): ReactNode {
+  locked,
+  onToggleLock,
+}: {
+  modules: ShellModule[];
+  logoUrl: string | null;
+  moduleName: string;
+  initials: string;
+  userName: string;
+  version: string;
+  locked: boolean;
+  onToggleLock: () => void;
+}): ReactNode {
   return (
     <div className="flex h-12 w-full items-center gap-3 border-b border-[var(--border)] bg-[var(--panel-bg)] px-3">
       <CandyBox modules={modules} />
@@ -175,25 +239,37 @@ function BarContent({
       <div className="flex flex-1 items-center justify-center">
         <span className="text-sm font-semibold tracking-tight">{moduleName}</span>
       </div>
+      <LockToggle locked={locked} onToggle={onToggleLock} />
       <UserMenu initials={initials} userName={userName} version={version} />
     </div>
   );
 }
 
 /**
- * Platform title bar — sits above every module surface. In "always" mode it
- * occupies the top of the layout (in flow). In "auto-hide" mode it overlays the
- * top, hidden until the cursor enters a thin reveal strip (and re-hides on
- * leave), so it reserves no vertical space.
+ * Platform title bar — sits above every module surface. Each USER chooses
+ * whether it's locked (permanently visible, "always") or floating ("auto-hide":
+ * hidden until the cursor enters a thin reveal strip, re-hiding on leave). The
+ * choice persists per user (localStorage), seeded from the tenant/admin default.
+ *
+ * Locked mode occupies the top of the layout in flow; floating mode overlays
+ * the top and reserves no vertical space.
  */
-export function TitleBar(props: TitleBarProps) {
+export function TitleBar({ defaultMode, storageScope, ...rest }: TitleBarProps) {
   const [revealed, setRevealed] = useState(false);
+  const [mode, setMode] = usePersistentState<TitleBarMode>(
+    storageScope ? `adserve:shell:titleBarMode:${storageScope}` : null,
+    defaultMode,
+    isTitleBarMode
+  );
+  const locked = mode === "always";
+  const toggleLock = () => setMode(locked ? "auto-hide" : "always");
+  const bar = (
+    <BarContent {...rest} locked={locked} onToggleLock={toggleLock} />
+  );
 
-  if (props.mode !== "auto-hide") {
+  if (locked) {
     return (
-      <header className="relative z-30 shrink-0">
-        <BarContent {...props} />
-      </header>
+      <header className="relative z-30 shrink-0">{bar}</header>
     );
   }
 
@@ -212,7 +288,7 @@ export function TitleBar(props: TitleBarProps) {
           revealed ? "translate-y-0" : "-translate-y-full"
         )}
       >
-        <BarContent {...props} />
+        {bar}
       </header>
     </>
   );

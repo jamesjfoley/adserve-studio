@@ -24,13 +24,16 @@ function renderBar(overrides: Partial<Parameters<typeof TitleBar>[0]> = {}) {
       initials="AA"
       userName="Alice Anderson"
       version="0.1.0"
-      mode="always"
+      defaultMode="always"
       {...overrides}
     />
   );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  window.localStorage.clear();
+  cleanup();
+});
 
 describe("TitleBar", () => {
   test("shows the active module name + user initials roundel", () => {
@@ -68,6 +71,43 @@ describe("TitleBar", () => {
       "src",
       "data:image/png;base64,AAA"
     );
+    cleanup();
+  });
+
+  test("the lock toggle flips the user's mode (locked ↔ floating)", async () => {
+    const user = userEvent.setup();
+    renderBar({ defaultMode: "always", storageScope: "user-1" });
+    // Starts locked → the control offers to unlock (auto-hide).
+    const unlock = screen.getByRole("button", {
+      name: /unlock title bar/i,
+    });
+    expect(unlock).toHaveAttribute("aria-pressed", "true");
+    await user.click(unlock);
+    // Now floating → the control offers to lock (keep visible).
+    expect(
+      screen.getByRole("button", { name: /lock title bar/i })
+    ).toHaveAttribute("aria-pressed", "false");
+    cleanup();
+  });
+
+  test("the chosen mode persists per user across remounts", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderBar({ defaultMode: "always", storageScope: "user-1" });
+    await user.click(screen.getByRole("button", { name: /unlock title bar/i }));
+    unmount();
+
+    // Fresh mount for the same user restores the floating choice…
+    renderBar({ defaultMode: "always", storageScope: "user-1" });
+    expect(
+      await screen.findByRole("button", { name: /lock title bar/i })
+    ).toBeInTheDocument();
+    cleanup();
+
+    // …while a different user falls back to the admin default (locked).
+    renderBar({ defaultMode: "always", storageScope: "user-2" });
+    expect(
+      await screen.findByRole("button", { name: /unlock title bar/i })
+    ).toBeInTheDocument();
     cleanup();
   });
 });

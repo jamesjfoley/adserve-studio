@@ -392,6 +392,21 @@ Four refinements (mostly generic, in `DynamicForm` / the layout generator):
   ungrouped); existing local-dev contact layouts had the "More" section stripped + `group_name`
   cleared.
 
+## Title bar — per-user lock/unlock
+
+The title-bar display mode (permanent vs floating/auto-hide) is now a **per-user** setting, not just
+an admin/tenant one:
+
+- A **lock toggle** (padlock icon) in the title bar flips between **locked** (`always` — permanently
+  visible, in flow) and **floating** (`auto-hide` — overlays the top, hidden until the cursor hits the
+  reveal strip). To lock from floating, hover to reveal the bar, then click the padlock.
+- The choice **persists per user** via `localStorage` (`adserve:shell:titleBarMode:<userId>`, reusing
+  `usePersistentState`), keyed off the signed-in user's id. The admin/tenant `titleBarMode` now seeds
+  the **default** for users who haven't chosen; each user can override and it survives logout/login.
+- `TitleBar` prop `mode` → `defaultMode` (+ `storageScope` = userId). **Production consideration:**
+  localStorage is per-device; a cross-device per-user preference belongs in a server-side user-settings
+  store (deferred — same note as the Contacts row-count).
+
 ## Production Considerations log (deferred — handoff to the production rebuild)
 
 1. **Real `opsCampaignId` wiring.** Currently a nullable stub string in `records.data` (no FK, not

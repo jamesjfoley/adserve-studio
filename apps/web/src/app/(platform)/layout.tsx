@@ -99,7 +99,8 @@ export default async function PlatformLayout({
         initials={userInitials(shellUser?.fullName, shellUser?.email)}
         userName={shellUser?.fullName ?? shellUser?.email ?? ""}
         version={APP_VERSION}
-        mode={shell.titleBarMode}
+        defaultMode={shell.titleBarMode}
+        storageScope={shellUser?.id}
       />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <PrimaryNav
