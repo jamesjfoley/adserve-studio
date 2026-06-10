@@ -339,16 +339,13 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
 
     await user.click(within(tablist).getByRole("tab", { name: "Contacts" }));
 
-    // Two table panels, and the table columns are present.
+    // The Contacts tab wires up two panels — "Contacts" (primary) and "Linked
+    // Contacts" (related). The table internals (DynamicTable sort/filter/banding
+    // + the contact columns) are covered in contacts-table.test.tsx.
     expect(screen.getByRole("heading", { name: "Contacts" })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Linked Contacts" })
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Telephone").length).toBeGreaterThan(0);
-
-    // The primary contact shows in the Contacts table, the related in Linked.
-    expect(screen.getByRole("link", { name: "Alpha" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Bravo" })).toBeInTheDocument();
   });
 
   test("account pipeline tabs follow the module config", () => {
@@ -378,38 +375,6 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     expect(tabs().opportunities).not.toBeInTheDocument();
   });
 
-  test("contacts table sorts by name", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ records: [] }),
-    })));
-    const user = userEvent.setup();
-
-    renderDetail({
-      entitySlug: "account",
-      relationships: {
-        contact: [
-          relatedContact({
-            id: "cb",
-            data: { name: "Bravo" },
-            relationshipName: "contact_belongs_to_account",
-          }),
-          relatedContact({
-            id: "ca",
-            data: { name: "Alpha" },
-            relationshipName: "contact_belongs_to_account",
-          }),
-        ],
-      },
-    });
-
-    await user.click(screen.getByRole("tab", { name: "Contacts" }));
-    const links = screen.getAllByRole("link", { name: /Alpha|Bravo/ });
-    expect(links[0]).toHaveTextContent("Alpha");
-    expect(links[1]).toHaveTextContent("Bravo");
-  });
-
   test("empty Contacts tab shows the explicit empty state for both tables", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
@@ -422,51 +387,6 @@ describe("CrmDetailClient — account/opportunity tabs (WS3)", () => {
     await user.click(screen.getByRole("tab", { name: "Contacts" }));
     // Both the Contacts and Linked Contacts tables show the empty state.
     expect(screen.getAllByText(/no contacts here yet/i)).toHaveLength(2);
-  });
-
-  test("inactive contacts are hidden by default; the checkbox reveals them", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ records: [] }),
-    })));
-    const user = userEvent.setup();
-
-    renderDetail({
-      entitySlug: "account",
-      relationships: {
-        contact: [
-          relatedContact({
-            id: "active1",
-            data: { name: "ActiveOne" },
-            relationshipName: "contact_belongs_to_account",
-          }),
-          relatedContact({
-            id: "inact1",
-            data: { name: "InactiveOne" },
-            isArchived: true,
-            relationshipName: "contact_belongs_to_account",
-          }),
-        ],
-      },
-    });
-
-    await user.click(screen.getByRole("tab", { name: "Contacts" }));
-
-    // Active shown; inactive hidden by default.
-    expect(screen.getByRole("link", { name: "ActiveOne" })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "InactiveOne" })
-    ).not.toBeInTheDocument();
-
-    // The Contacts panel's "Show inactive" checkbox is first; toggling reveals it.
-    const checkboxes = screen.getAllByRole("checkbox", {
-      name: /show inactive/i,
-    });
-    await user.click(checkboxes[0]);
-    expect(
-      screen.getByRole("link", { name: "InactiveOne" })
-    ).toBeInTheDocument();
   });
 
   test("opportunity variant shows Account and Contacts tabs", async () => {

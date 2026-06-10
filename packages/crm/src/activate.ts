@@ -165,9 +165,13 @@ export async function activateCrmForTenant(
   const widgetsByEntity: Record<string, { title: string; widget: string }[]> = {
     account: [
       { title: "Brands", widget: "brands" },
+      { title: "Notes & Attachments", widget: "notes" },
       { title: "Audit History", widget: "history" },
     ],
-    contact: [{ title: "Audit History", widget: "history" }],
+    contact: [
+      { title: "Notes & Attachments", widget: "notes" },
+      { title: "Audit History", widget: "history" },
+    ],
   };
   for (const [entitySlug, widgets] of Object.entries(widgetsByEntity)) {
     const entityId = entityTypeIds[entitySlug];
@@ -193,14 +197,19 @@ export async function activateCrmForTenant(
       });
     } else {
       const config = existingLayout.config as LayoutConfig;
-      if (!config.sections.some((s) => s.widget)) {
+      // Append only the widgets that aren't already present (idempotent +
+      // additive — so a new widget reaches layouts that already have others).
+      const missing = widgets.filter(
+        (w) => !config.sections.some((s) => s.widget === w.widget)
+      );
+      if (missing.length > 0) {
         await updateLayoutConfig(tx, {
           layoutId: existingLayout.id,
           tenantId,
           config: {
             sections: [
               ...config.sections,
-              ...widgets.map((w) => ({
+              ...missing.map((w) => ({
                 title: w.title,
                 columns: 1 as const,
                 fieldIds: [],

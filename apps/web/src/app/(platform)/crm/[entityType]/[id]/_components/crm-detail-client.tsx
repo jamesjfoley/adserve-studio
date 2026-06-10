@@ -31,6 +31,7 @@ import { RelatedRecordsPanel } from "./related-records-panel";
 import { ContactsTable } from "./contacts-table";
 import { BrandsPanel } from "./brands-panel";
 import { RecordHistoryPanel } from "./record-history-panel";
+import { NotesAttachmentsPanel } from "./notes-attachments-panel";
 
 interface CrmDetailClientProps {
   entitySlug: string;
@@ -354,6 +355,13 @@ export function CrmDetailClient({
   const historyWidget: ReactNode = (
     <RecordHistoryPanel entitySegment={collectionSegment} recordId={recordId} />
   );
+  const notesWidget: ReactNode = (
+    <NotesAttachmentsPanel
+      entitySegment={collectionSegment}
+      recordId={recordId}
+      canEdit={canEdit}
+    />
+  );
   const widgetRenderers: Record<string, ReactNode> | undefined =
     entitySlug === "account"
       ? {
@@ -364,10 +372,11 @@ export function CrmDetailClient({
               canEdit={canEdit}
             />
           ),
+          notes: notesWidget,
           history: historyWidget,
         }
       : entitySlug === "contact"
-        ? { history: historyWidget }
+        ? { notes: notesWidget, history: historyWidget }
         : undefined;
 
   const formNode: ReactNode = (
@@ -518,6 +527,7 @@ export function CrmDetailClient({
           <div className="flex h-[calc(100vh-16rem)] min-h-[32rem] flex-col gap-6">
             <ContactsTable
               title="Contacts"
+              fields={contactForm?.fields ?? []}
               items={(relationships.contact ?? []).filter(
                 (c) => c.relationshipName === CONTACT_BELONGS_TO_ACCOUNT.name
               )}
@@ -543,6 +553,7 @@ export function CrmDetailClient({
             />
             <ContactsTable
               title="Linked Contacts"
+              fields={contactForm?.fields ?? []}
               items={(relationships.contact ?? []).filter(
                 (c) => c.relationshipName === CONTACT_RELATED_TO_ACCOUNT.name
               )}

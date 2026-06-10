@@ -9,6 +9,18 @@ import type {
 } from "@adserve/module-framework";
 import type { RelatedRecord } from "@/lib/crm/relationships";
 import { DynamicForm } from "@/components/dynamic-form";
+import { DynamicTable } from "@/components/dynamic-table";
+import type {
+  DynamicTableRecord,
+  Filter,
+  FilterState,
+  SortState,
+} from "@/components/dynamic-table";
+import {
+  isSortable,
+  isTextFilterable,
+  operatorsForType,
+} from "@/components/dynamic-table/operators";
 import { PermissionGate } from "@/lib/permissions-client";
 import { Panel } from "@/components/ui/panel";
 import { RecordPicker, recordSearchConfig } from "@/components/crm/record-picker";
@@ -32,6 +44,11 @@ export interface ContactCreateContext {
 interface ContactsTableProps {
   title: string;
   items: RelatedRecord[];
+  /**
+   * Contact field definitions — drive the DynamicTable's columns, sortable
+   * headers, per-column filters and facets (mirrors the home-page list).
+   */
+  fields: FieldDefinitionWithLabels[];
   primaryAccountById: Record<string, { id: string; name: string }>;
   owningSegment: string;
   owningId: string;
@@ -45,26 +62,159 @@ interface ContactsTableProps {
   createContext?: ContactCreateContext;
 }
 
-function str(data: Record<string, unknown>, key: string): string {
-  const v = data[key];
-  return typeof v === "string" ? v : "";
+/** The home-page contact columns we surface by default (when present in `fields`). */
+const DEFAULT_CONTACT_COLUMNS = [
+  "firstName",
+  "lastName",
+  "email",
+  "phone",
+  "status",
+];
+
+const TEXT_TYPES: ReadonlySet<string> = new Set([
+  "text",
+  "long_text",
+  "email",
+  "phone",
+  "url",
+]);
+
+/** Stable string view of a stored value, mirroring `data ->> slug` semantics. */
+function asScalarString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return null;
 }
 
-function contactName(rec: RelatedRecord): string {
-  const fn = str(rec.data, "firstName");
-  const ln = str(rec.data, "lastName");
-  const full = `${fn} ${ln}`.trim();
-  if (full !== "") return full;
-  const name = str(rec.data, "name");
-  return name !== "" ? name : rec.id;
+/**
+ * Client-side mirror of {@link buildFilterCondition} in `lib/crm/query.ts`.
+ * Returns whether `record` satisfies `filter` for `field`. Unknown
+ * operator/type combinations fall through to `true` (no-op), matching the
+ * server's "ineligible filter is dropped" behaviour at the call site.
+ */
+function recordMatchesFilter(
+  field: FieldDefinitionWithLabels,
+  filter: Filter,
+  data: Record<string, unknown>
+): boolean {
+  const ft = field.fieldType;
+  const op = filter.operator;
+  const v = filter.value;
+
+  if (TEXT_TYPES.has(ft)) {
+    const cell = (asScalarString(data[field.slug]) ?? "").toLowerCase();
+    if (typeof v !== "string") return true;
+    const needle = v.toLowerCase();
+    if (op === "contains") return cell.includes(needle);
+    if (op === "equals") return cell === needle;
+    if (op === "startsWith") return cell.startsWith(needle);
+    return true;
+  }
+
+  if (ft === "select") {
+    const cell = asScalarString(data[field.slug]);
+    if (typeof v !== "string") return true;
+    if (op === "is") return cell === v;
+    if (op === "isNot") return cell !== v;
+    return true;
+  }
+
+  if (ft === "number" || ft === "currency") {
+    const raw =
+      ft === "currency"
+        ? (data[field.slug] as { amount?: unknown } | null)?.amount
+        : data[field.slug];
+    const n = raw == null ? NaN : Number(raw);
+    if (op === "equals") return Number.isFinite(n) && n === Number(v);
+    if (op === "gt") return Number.isFinite(n) && n > Number(v);
+    if (op === "lt") return Number.isFinite(n) && n < Number(v);
+    if (op === "between" && Array.isArray(v)) {
+      const lo = Number(v[0]);
+      const hi = Number(v[1]);
+      return Number.isFinite(n) && n >= lo && n <= hi;
+    }
+    return true;
+  }
+
+  if (ft === "date" || ft === "datetime") {
+    const cellStr = asScalarString(data[field.slug]);
+    const cell = cellStr ? Date.parse(cellStr) : NaN;
+    if (!Number.isFinite(cell)) return false;
+    if ((op === "before" || op === "after") && typeof v === "string") {
+      const bound = Date.parse(v);
+      if (!Number.isFinite(bound)) return true;
+      return op === "before" ? cell < bound : cell > bound;
+    }
+    if (op === "between" && Array.isArray(v)) {
+      const lo = Date.parse(v[0]);
+      const hi = Date.parse(v[1]);
+      return cell >= lo && cell <= hi;
+    }
+    return true;
+  }
+
+  if (ft === "boolean") {
+    const cell = data[field.slug];
+    const b = cell === true || cell === "true";
+    if (op === "isTrue") return b;
+    if (op === "isFalse") return !b;
+    return true;
+  }
+
+  if (ft === "multi_select") {
+    const arr = Array.isArray(data[field.slug])
+      ? (data[field.slug] as unknown[]).map(String)
+      : [];
+    if (typeof v !== "string") return true;
+    if (op === "has") return arr.includes(v);
+    if (op === "hasNot") return !arr.includes(v);
+    return true;
+  }
+
+  return true;
 }
 
-const EMPTY = "—";
+/** Comparable value for sorting, mirroring the server's per-type cast. */
+function sortValue(
+  field: FieldDefinitionWithLabels,
+  data: Record<string, unknown>
+): string | number | null {
+  const ft = field.fieldType;
+  if (ft === "number" || ft === "currency") {
+    const raw =
+      ft === "currency"
+        ? (data[field.slug] as { amount?: unknown } | null)?.amount
+        : data[field.slug];
+    const n = raw == null ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (ft === "date" || ft === "datetime") {
+    const s = asScalarString(data[field.slug]);
+    const t = s ? Date.parse(s) : NaN;
+    return Number.isFinite(t) ? t : null;
+  }
+  if (ft === "boolean") {
+    const cell = data[field.slug];
+    if (cell === true || cell === "true") return 1;
+    if (cell === false || cell === "false") return 0;
+    return null;
+  }
+  return asScalarString(data[field.slug]);
+}
 
 export function ContactsTable({
   title,
   items,
-  primaryAccountById,
+  // Runtime-defaulted to [] so the component degrades gracefully before the
+  // detail client wires `fields`; the prop stays required on the type so the
+  // wiring site is surfaced by the typechecker.
+  fields = [],
+  // `primaryAccountById` is retained on the prop contract for drop-in
+  // compatibility, but the shared DynamicTable renders the account via its
+  // own field column rather than a bespoke cell, so it is no longer read here.
   owningSegment,
   owningId,
   relationshipName,
@@ -81,22 +231,122 @@ export function ContactsTable({
   const [createError, setCreateError] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
 
+  // Client-side table state — there is no server round-trip: the related
+  // contacts are already in memory, so sort/filter run locally (mirroring the
+  // server semantics in lib/crm/query.ts so behaviour matches the list page).
+  const [sort, setSort] = useState<SortState | null>(null);
+  const [filterState, setFilterState] = useState<FilterState>({
+    filters: [],
+    includeArchived: false,
+  });
+
   const contactSegment = crmCollectionSegment("contact") ?? "contacts";
-  const accountSegment = crmCollectionSegment("account") ?? "accounts";
-  const sorted = useMemo(
-    () => [...items].sort((a, b) => contactName(a).localeCompare(contactName(b))),
+
+  const fieldBySlug = useMemo(
+    () => new Map(fields.map((f) => [f.slug, f])),
+    [fields]
+  );
+
+  // Archived rows are hidden unless EITHER the panel's "Show inactive" control
+  // OR the table's own "Include archived" toggle is on. Contacts are never
+  // deleted — only marked inactive.
+  const includeArchived = showInactive || filterState.includeArchived;
+
+  const inactiveCount = useMemo(
+    () => items.filter((r) => r.isArchived).length,
     [items]
   );
-  // Inactive (archived) contacts are hidden by default; the checkbox reveals
-  // them. Contacts are never deleted — only marked inactive.
-  const visible = useMemo(
-    () => (showInactive ? sorted : sorted.filter((r) => !r.isArchived)),
-    [sorted, showInactive]
+
+  // items → DynamicTableRecord (RelatedRecord already carries id/data/isArchived).
+  const allRecords = useMemo<DynamicTableRecord[]>(
+    () =>
+      items.map((r) => ({
+        id: r.id,
+        data: r.data,
+        isArchived: r.isArchived,
+      })),
+    [items]
   );
-  const inactiveCount = useMemo(
-    () => sorted.filter((r) => r.isArchived).length,
-    [sorted]
+
+  // Apply: archived gate → column filters → sort.
+  const displayed = useMemo<DynamicTableRecord[]>(() => {
+    let rows = includeArchived
+      ? allRecords
+      : allRecords.filter((r) => !r.isArchived);
+
+    for (const filter of filterState.filters) {
+      const field = fieldBySlug.get(filter.fieldSlug);
+      if (!field) continue;
+      const eligible = operatorsForType(field.fieldType).some(
+        (o) => o.value === filter.operator
+      );
+      if (!eligible) continue;
+      rows = rows.filter((r) => recordMatchesFilter(field, filter, r.data));
+    }
+
+    if (sort) {
+      const field = fieldBySlug.get(sort.fieldSlug);
+      if (field && isSortable(field.fieldType)) {
+        const dir = sort.direction === "desc" ? -1 : 1;
+        rows = [...rows].sort((a, b) => {
+          const av = sortValue(field, a.data);
+          const bv = sortValue(field, b.data);
+          // NULLs last regardless of direction (matches `nulls last`).
+          if (av === null && bv === null) return 0;
+          if (av === null) return 1;
+          if (bv === null) return -1;
+          let cmp: number;
+          if (typeof av === "number" && typeof bv === "number") {
+            cmp = av - bv;
+          } else {
+            cmp = String(av).localeCompare(String(bv));
+          }
+          return cmp * dir;
+        });
+      }
+    }
+
+    return rows;
+  }, [allRecords, includeArchived, filterState.filters, sort, fieldBySlug]);
+
+  // Per-column facets — mirror loadCrmListData's eligibility rule, computed
+  // over the BASE domain (archived gate only, ignoring active column filters).
+  const columnFacets = useMemo<Record<string, string[]>>(() => {
+    const baseRows = includeArchived
+      ? allRecords
+      : allRecords.filter((r) => !r.isArchived);
+
+    const facets: Record<string, string[]> = {};
+    for (const field of fields) {
+      const isSelect = field.fieldType === "select";
+      if (!isTextFilterable(field.fieldType) && !isSelect) continue;
+
+      const counts = new Map<string, number>();
+      for (const r of baseRows) {
+        const val = asScalarString(r.data[field.slug]);
+        if (val === null || val === "") continue;
+        counts.set(val, (counts.get(val) ?? 0) + 1);
+      }
+
+      const distinct = [...counts.keys()];
+      const eligible = isSelect
+        ? distinct.length >= 1
+        : distinct.length >= 2 && [...counts.values()].some((c) => c >= 2);
+      if (eligible) {
+        facets[field.slug] = distinct.sort((a, b) => a.localeCompare(b));
+      }
+    }
+    return facets;
+  }, [allRecords, fields, includeArchived]);
+
+  const defaultVisibleColumns = useMemo(
+    () =>
+      DEFAULT_CONTACT_COLUMNS.filter((slug) => fieldBySlug.has(slug)),
+    [fieldBySlug]
   );
+
+  const locale = createContext?.locale ?? "en-GB";
+
   const excludeIds = useMemo(() => items.map((i) => i.id), [items]);
   const pickerCfg = useMemo(() => recordSearchConfig("contact"), []);
 
@@ -152,11 +402,6 @@ export function ContactsTable({
     setCreating(false);
     router.refresh();
   }
-
-  // Match the DynamicTable list pattern: tinted sticky header band,
-  // sentence-case labels, zebra rows, token hover.
-  const cellClass = "px-4 py-3 text-sm align-top";
-  const headClass = "px-4 py-3 text-left text-xs font-medium";
 
   return (
     <Panel
@@ -237,101 +482,34 @@ export function ContactsTable({
         </PermissionGate>
       ) : null}
 
-      {visible.length === 0 ? (
-        <p className="mt-3 text-sm text-[var(--muted-foreground)]">
-          {inactiveCount > 0 && !showInactive
-            ? "No active contacts — tick “Show inactive” to see inactive ones."
-            : "No contacts here yet."}
-        </p>
-      ) : (
-        <div
-          className={
-            fillHeight
-              ? "mt-3 min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--border)]"
-              : "mt-3 overflow-x-auto rounded-lg border border-[var(--border)]"
+      <div className={fillHeight ? "mt-3 flex min-h-0 flex-1 flex-col" : "mt-3"}>
+        <DynamicTable
+          fields={fields}
+          records={displayed}
+          sort={sort}
+          onSortChange={setSort}
+          filterState={filterState}
+          onFiltersChange={setFilterState}
+          pagination={{
+            offset: 0,
+            limit: Math.max(1, items.length),
+            total: displayed.length,
+          }}
+          onPageChange={() => {}}
+          onRowClick={(record) =>
+            router.push(`/crm/${contactSegment}/${record.id}`)
           }
-        >
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--table-header-bg)] text-left text-xs font-medium text-[var(--muted-foreground)]">
-              <tr>
-                <th className={headClass}>Name</th>
-                <th className={headClass}>Title</th>
-                <th className={headClass}>Account</th>
-                <th className={headClass}>Email</th>
-                <th className={headClass}>Telephone</th>
-                <th className={headClass}>LinkedIn</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {visible.map((rec) => {
-                const primary = primaryAccountById[rec.id];
-                const email = str(rec.data, "email");
-                const phone = str(rec.data, "phone");
-                const linkedin = str(rec.data, "linkedinUrl");
-                return (
-                  <tr
-                    key={rec.id}
-                    className="even:bg-[var(--row-alt)] hover:bg-[var(--row-hover)]"
-                  >
-                    <td className={cellClass}>
-                      <a
-                        href={`/crm/${contactSegment}/${rec.id}`}
-                        className={
-                          rec.isArchived
-                            ? "text-[var(--muted-foreground)] line-through hover:underline"
-                            : "text-[var(--accent)] hover:underline"
-                        }
-                      >
-                        {contactName(rec)}
-                      </a>
-                    </td>
-                    <td className={cellClass}>{str(rec.data, "title") || EMPTY}</td>
-                    <td className={cellClass}>
-                      {primary ? (
-                        <a
-                          href={`/crm/${accountSegment}/${primary.id}`}
-                          className="text-[var(--accent)] hover:underline"
-                        >
-                          {primary.name}
-                        </a>
-                      ) : (
-                        EMPTY
-                      )}
-                    </td>
-                    <td className={cellClass}>
-                      {email ? (
-                        <a
-                          href={`mailto:${email}`}
-                          className="text-[var(--accent)] hover:underline"
-                        >
-                          {email}
-                        </a>
-                      ) : (
-                        EMPTY
-                      )}
-                    </td>
-                    <td className={cellClass}>{phone || EMPTY}</td>
-                    <td className={cellClass}>
-                      {linkedin ? (
-                        <a
-                          href={linkedin}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[var(--accent)] hover:underline"
-                        >
-                          Profile
-                        </a>
-                      ) : (
-                        EMPTY
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+          defaultVisibleColumns={defaultVisibleColumns}
+          columnFacets={columnFacets}
+          locale={locale}
+          emptyMessage={
+            inactiveCount > 0 && !includeArchived
+              ? "No active contacts — tick “Show inactive” to see inactive ones."
+              : "No contacts here yet."
+          }
+          fillHeight={fillHeight}
+        />
+      </div>
 
       {/* Create-new-contact modal (account-inherited, read-only account). */}
       {creating && createContext ? (
