@@ -60,8 +60,14 @@ interface ContactsTableProps {
   createContext?: ContactCreateContext;
 }
 
-/** Minimum rows of zebra-banding height — the table reads as a full surface. */
-const MIN_TABLE_ROWS = 10;
+/**
+ * Default / bounds for the user-adjustable row count. The count sets the
+ * minimum banded height of the table (and therefore the panel size) — more
+ * contacts than this still all render (page scroll); fewer pad with banding.
+ */
+const DEFAULT_TABLE_ROWS = 8;
+const MIN_TABLE_ROWS = 3;
+const MAX_TABLE_ROWS = 50;
 
 /** The home-page contact columns we surface by default (when present in `fields`). */
 const DEFAULT_CONTACT_COLUMNS = [
@@ -353,6 +359,14 @@ export function ContactsTable({
   const [visibleColumns, setVisibleColumns] =
     useState<string[]>(defaultVisibleColumns);
 
+  // User-controlled row count → drives the table's minimum banded height, so
+  // the user effectively resizes the panel by the number of rows shown.
+  const [rowCount, setRowCount] = useState(DEFAULT_TABLE_ROWS);
+  const stepRows = (delta: number) =>
+    setRowCount((n) =>
+      Math.min(MAX_TABLE_ROWS, Math.max(MIN_TABLE_ROWS, n + delta))
+    );
+
   const locale = createContext?.locale ?? "en-GB";
 
   const excludeIds = useMemo(() => items.map((i) => i.id), [items]);
@@ -441,6 +455,35 @@ export function ContactsTable({
             onChange={setVisibleColumns}
             locale={locale}
           />
+          {/* Row-count stepper: resizes the panel by the number of rows shown. */}
+          <div
+            className="flex items-center gap-1 text-xs text-[var(--muted-foreground)]"
+            role="group"
+            aria-label="Rows shown"
+          >
+            <span>Rows</span>
+            <button
+              type="button"
+              aria-label="Fewer rows"
+              onClick={() => stepRows(-1)}
+              disabled={rowCount <= MIN_TABLE_ROWS}
+              className="flex h-5 w-5 items-center justify-center rounded border border-[var(--border)] leading-none hover:bg-[var(--muted)] disabled:opacity-40"
+            >
+              −
+            </button>
+            <span className="w-5 text-center tabular-nums text-[var(--foreground)]">
+              {rowCount}
+            </span>
+            <button
+              type="button"
+              aria-label="More rows"
+              onClick={() => stepRows(1)}
+              disabled={rowCount >= MAX_TABLE_ROWS}
+              className="flex h-5 w-5 items-center justify-center rounded border border-[var(--border)] leading-none hover:bg-[var(--muted)] disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
           {canEdit && createContext ? (
             // Primary Contacts table: create a NEW contact (account inherited).
             <PermissionGate permission="contact.create">
@@ -530,7 +573,8 @@ export function ContactsTable({
           }
           hideToolbar
           hidePagination
-          minRows={MIN_TABLE_ROWS}
+          dense
+          minRows={rowCount}
         />
       </div>
 

@@ -184,6 +184,20 @@ describe("ContactsTable (client-side DynamicTable)", () => {
     expect(screen.getByText("Dave")).toBeInTheDocument();
   });
 
+  test("the row-count stepper defaults to 8 and is user-adjustable", async () => {
+    const user = userEvent.setup();
+    renderTable();
+    const group = screen.getByRole("group", { name: /rows shown/i });
+    expect(within(group).getByText("8")).toBeInTheDocument();
+
+    await user.click(within(group).getByRole("button", { name: /more rows/i }));
+    expect(within(group).getByText("9")).toBeInTheDocument();
+
+    await user.click(within(group).getByRole("button", { name: /fewer rows/i }));
+    await user.click(within(group).getByRole("button", { name: /fewer rows/i }));
+    expect(within(group).getByText("7")).toBeInTheDocument();
+  });
+
   test("the 'New contact' action shows only when a create context is given", () => {
     // Primary Contacts table → create new.
     const { unmount } = renderTable({

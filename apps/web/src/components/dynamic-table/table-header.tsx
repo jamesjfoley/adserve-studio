@@ -59,6 +59,8 @@ interface TableHeaderProps {
   onColumnFilterChange?: (slug: string, next: Filter | null) => void;
   /** Per-column distinct values; a column is filterable iff it has an entry. */
   columnFacets?: Record<string, string[]>;
+  /** Compact header cells (matches DynamicTable's `dense`). */
+  dense?: boolean;
 }
 
 /**
@@ -99,7 +101,9 @@ export function TableHeader({
   filters = [],
   onColumnFilterChange,
   columnFacets,
+  dense = false,
 }: TableHeaderProps) {
+  const cellPad = dense ? "px-3 py-1.5" : "px-4 py-3";
   const selectAllRef = useRef<HTMLInputElement>(null);
   // `indeterminate` is a DOM-only property, not an attribute.
   useEffect(() => {
@@ -112,7 +116,7 @@ export function TableHeader({
     <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--table-header-bg)] text-left text-xs font-medium text-[var(--muted-foreground)]">
       <tr>
         {selectable ? (
-          <th scope="col" className="w-10 px-4 py-3">
+          <th scope="col" className={`w-10 ${cellPad}`}>
             <input
               ref={selectAllRef}
               type="checkbox"
@@ -149,7 +153,7 @@ export function TableHeader({
               key={f.id}
               scope="col"
               aria-sort={ariaSort}
-              className="px-4 py-3 font-medium"
+              className={`${cellPad} font-medium`}
             >
               <span className="inline-flex items-center gap-1">
                 {sortable ? (

@@ -257,6 +257,12 @@ contacts):
   "Show inactive".
 - **Demoted lifecycle action** — "Mark inactive" / "Reactivate" moved off the prominent page header
   into a low-key bottom-left page footer (subtle muted text button), since it's rarely used.
+- **Compact rows** — `DynamicTable` gained `dense` (trims header/body cell padding, `px-3 py-1.5`);
+  the contacts tables use it. The estimated row height tracks the density so empty/sparse banding
+  still lines up.
+- **User-adjustable row count** — the panel header has a `Rows` stepper (−/+, default **8**, bounds
+  3–50) that drives the table's `minRows`. The user resizes the Contacts / Linked Contacts panels by
+  the number of rows shown; more contacts than the count still all render (page scroll).
 
 ## Production Considerations log (deferred — handoff to the production rebuild)
 

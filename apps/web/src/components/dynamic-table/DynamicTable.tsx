@@ -74,6 +74,7 @@ export function DynamicTable({
   fillHeight = false,
   hideToolbar = false,
   hidePagination = false,
+  dense = false,
   minRows,
   searchField,
   searchPlaceholder = "Search…",
@@ -199,8 +200,11 @@ export function DynamicTable({
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
   const [rowHeight, setRowHeight] = useState(0);
-  const EST_ROW_HEIGHT = 41;
+  // Estimated row height (used until a real row is measured) tracks the cell
+  // padding so empty/sparse banding lines up with rendered rows.
+  const EST_ROW_HEIGHT = dense ? 30 : 41;
   const effRowHeight = rowHeight > 0 ? rowHeight : EST_ROW_HEIGHT;
+  const cellPad = dense ? "px-3 py-1.5" : "px-4 py-3";
 
   useLayoutEffect(() => {
     if (!banded) return;
@@ -278,6 +282,7 @@ export function DynamicTable({
             sort={sort}
             onSortChange={onSortChange}
             locale={locale}
+            dense={dense}
             selectable={selectable}
             allSelected={allSelected}
             someSelected={someSelected}
@@ -292,10 +297,10 @@ export function DynamicTable({
                 <td
                   colSpan={colCount}
                   className={cn(
-                    "px-4 text-center text-[var(--muted-foreground)]",
+                    "text-center text-[var(--muted-foreground)]",
                     // A slim empty row when min-rows banding fills the rest;
                     // otherwise the roomier standalone empty state.
-                    minRows != null ? "py-3" : "py-8"
+                    minRows != null ? cellPad : "px-4 py-8"
                   )}
                 >
                   {emptyMessage}
@@ -316,7 +321,7 @@ export function DynamicTable({
                     )}
                   >
                     {selectable ? (
-                      <td className="w-10 px-4 py-3 align-top">
+                      <td className={cn("w-10 align-top", cellPad)}>
                         <input
                           type="checkbox"
                           aria-label={`Select row ${record.id}`}
@@ -329,7 +334,10 @@ export function DynamicTable({
                       </td>
                     ) : null}
                     {visibleFields.map((f, colIdx) => (
-                      <td key={f.id} className="px-4 py-3 align-top">
+                      <td
+                        key={f.id}
+                        className={cn("align-top", cellPad)}
+                      >
                         <div className="line-clamp-2">
                           {formatFieldValue(f, record.data[f.slug], locale)}
                         </div>

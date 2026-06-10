@@ -108,6 +108,12 @@ export interface DynamicTableProps {
   hidePagination?: boolean;
 
   /**
+   * Compact row density — trims the vertical padding on header and body cells
+   * for data-dense lists where many rows should fit on screen.
+   */
+  dense?: boolean;
+
+  /**
    * Guarantee at least this many rows of height: when fewer records are shown,
    * the empty space below the last row is zebra-banded to reach `minRows`, so
    * the table reads as a full, available surface even when sparse or empty.
