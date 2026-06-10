@@ -372,6 +372,25 @@ Made list filtering data-driven instead of present on every text column:
   filter until a value repeats. Per-column query (one GROUP BY per text column) is fine at prototype
   scale; a single lateral/aggregate query is the optimisation if column counts grow.
 
+## Iteration 18 — Select columns are filterable too (Status / Industry / Source / Stage)
+
+Bug from Iteration 17: the column filter only covered free-text field types, so `select` columns
+(Status, Industry, Source, Stage) showed **no** filter icon. A select is categorical by definition
+(never row-unique), so it must always be filterable — and a purely data-driven rule wouldn't help
+here anyway (the dev accounts are all `prospect`, a single distinct value).
+
+- **`TableHeader.resolveColumnFilter`**: select columns are filterable from their **declared
+  choices** (operator `is`), independent of facets and data distribution; free-text columns stay
+  facet-driven (operator `equals`). Columns that are neither get no icon.
+- **`ColumnFilter`** now takes `{ value, label }[]` options + the operator to emit, so the picklist
+  shows human-readable labels (e.g. "Active") while committing the stored value (`active`).
+- Server free-text facet computation is unchanged; selects need no server facet.
+- Tests: added select-column coverage (icon appears from choices with no facet; picking commits
+  `{operator: "is", value}`). 443 web green.
+- **Design note:** for selects the picklist lists ALL declared choices (not just values currently
+  present), which guarantees the filter is always available and useful for a known enumeration. If
+  present-only is preferred later, it's a small change (intersect choices with a server facet).
+
 ## Data model touched
 
 Prototype-local only: the spec cardinality change + a **local** SQL flip of the dev tenant's
