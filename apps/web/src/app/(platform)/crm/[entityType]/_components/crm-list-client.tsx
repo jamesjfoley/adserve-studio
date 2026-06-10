@@ -2,10 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type {
-  FieldDefinitionWithLabels,
-  LayoutConfig,
-} from "@adserve/module-framework";
+import type { FieldDefinitionWithLabels } from "@adserve/module-framework";
 import { DynamicTable } from "@/components/dynamic-table";
 import type {
   DynamicTableRecord,
@@ -13,12 +10,10 @@ import type {
   PaginationState,
   SortState,
 } from "@/components/dynamic-table";
-import { DynamicForm } from "@/components/dynamic-form";
 import { stateToQuery, type ListState } from "@/lib/crm/list-params";
 import type { TenantMember } from "@/lib/crm/members";
 import { Panel } from "@/components/ui/panel";
 import { PageHeader } from "@/components/ui/page-header";
-import type { AccountSelection } from "@/components/crm/account-picker";
 
 interface Choice {
   value: string;
@@ -34,23 +29,8 @@ interface CrmListClientProps {
   sort: SortState | null;
   filterState: FilterState;
   pagination: PaginationState;
-  createLayoutConfig: LayoutConfig;
   members: TenantMember[];
   owner?: string | null;
-  /**
-   * When true (the contact list), create routes through the combined
-   * contacts/with-accounts endpoint so the contact + its account link are
-   * written atomically. The account itself renders inline as a normal
-   * relationship field (the `account` field def), placed via the layout editor.
-   */
-  enableAccountPicker?: boolean;
-  /**
-   * When true (the campaign list), create routes through
-   * /api/crm/campaigns/with-account so the campaign + its REQUIRED account link
-   * (and optional primary contact) are written atomically. `account` and
-   * `primaryContact` render inline as relationship fields.
-   */
-  enableCampaignCreate?: boolean;
   /** Per-column distinct values for the header value-picker (text columns). */
   columnFacets?: Record<string, string[]>;
   locale: string;
@@ -103,18 +83,13 @@ export function CrmListClient({
   sort,
   filterState,
   pagination,
-  createLayoutConfig,
   members,
   owner,
-  enableAccountPicker = false,
-  enableCampaignCreate = false,
   columnFacets,
   locale,
 }: CrmListClientProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [newOpen, setNewOpen] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -160,64 +135,6 @@ export function CrmListClient({
     startTransition(() =>
       router.push(`/crm/${collectionSegment}/${record.id}`)
     );
-  }
-
-  async function handleCreate(validated: Record<string, unknown>) {
-    setCreateError(null);
-    // The `account` relationship is rendered inline by the form (an
-    // AccountSelection), but it isn't a records.data field — pull it out and
-    // route it as accountId/newAccountName so the contact + its account link
-    // are written atomically by the combined endpoint (all-or-nothing).
-    const sel = (validated.account as AccountSelection | null | undefined) ?? null;
-    delete validated.account;
-    const accountBody =
-      sel?.kind === "existing"
-        ? { accountId: sel.id }
-        : sel?.kind === "new"
-          ? { newAccountName: sel.name }
-          : {};
-    // `reportsTo` (manager) is a relationship field too — route it to the
-    // reportsTo directive (existing contact only).
-    const mgr = (validated.reportsTo as AccountSelection | null | undefined) ?? null;
-    const hasReportsTo = "reportsTo" in validated;
-    delete validated.reportsTo;
-    const reportsToBody =
-      hasReportsTo && mgr?.kind === "existing"
-        ? { reportsTo: { contactId: mgr.id } }
-        : {};
-    // Campaign: `primaryContact` is an existing-only relationship field.
-    const pc = (validated.primaryContact as AccountSelection | null | undefined) ?? null;
-    delete validated.primaryContact;
-    const primaryContactBody =
-      pc?.kind === "existing" ? { primaryContactId: pc.id } : {};
-
-    let res: Response;
-    if (enableCampaignCreate) {
-      res = await fetch(`/api/crm/campaigns/with-account`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: validated, ...accountBody, ...primaryContactBody }),
-      });
-    } else if (enableAccountPicker) {
-      res = await fetch(`/api/crm/contacts/with-accounts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: validated, ...accountBody, ...reportsToBody }),
-      });
-    } else {
-      res = await fetch(`/api/crm/${collectionSegment}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: validated }),
-      });
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setCreateError(body.error ?? `Create failed (${res.status})`);
-      return;
-    }
-    setNewOpen(false);
-    startTransition(() => router.refresh());
   }
 
   async function runBulk(payload: Record<string, unknown>) {
@@ -274,10 +191,11 @@ export function CrmListClient({
             </label>
             <button
               type="button"
-              onClick={() => {
-                setCreateError(null);
-                setNewOpen(true);
-              }}
+              onClick={() =>
+                startTransition(() =>
+                  router.push(`/crm/${collectionSegment}/new`)
+                )
+              }
               className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:brightness-95"
             >
               New {entityName.toLowerCase()}
@@ -400,44 +318,6 @@ export function CrmListClient({
           columnFacets={columnFacets}
         />
       </Panel>
-
-      {newOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setNewOpen(false)}
-        >
-          <div
-            className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-[var(--panel-bg)] p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold tracking-tight">
-                New {entityName.toLowerCase()}
-              </h2>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setNewOpen(false)}
-                className="rounded-md px-2 py-1 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="mt-4 space-y-4">
-              <DynamicForm
-                layoutConfig={createLayoutConfig}
-                fields={fields}
-                initialData={null}
-                mode="create"
-                onSubmit={handleCreate}
-                submitError={createError}
-                submitLabel={`Create ${entityName.toLowerCase()}`}
-                locale={locale}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

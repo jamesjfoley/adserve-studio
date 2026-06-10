@@ -7,7 +7,6 @@ import userEvent from "@testing-library/user-event";
 import type {
   FieldDefinitionWithLabels,
   FieldType,
-  LayoutConfig,
 } from "@adserve/module-framework";
 import { CrmListClient } from "@/app/(platform)/crm/[entityType]/_components/crm-list-client";
 
@@ -48,9 +47,6 @@ function fieldDef(args: {
 }
 
 const NAME = fieldDef({ id: "f-name", slug: "name", name: "Name", fieldType: "text", isRequired: true });
-const LAYOUT: LayoutConfig = {
-  sections: [{ title: "Details", columns: 1, fieldIds: ["f-name"] }],
-};
 
 function renderClient(overrides: Record<string, unknown> = {}) {
   return render(
@@ -63,7 +59,6 @@ function renderClient(overrides: Record<string, unknown> = {}) {
       sort={null}
       filterState={{ filters: [], includeArchived: false }}
       pagination={{ offset: 0, limit: 50, total: 0 }}
-      createLayoutConfig={LAYOUT}
       members={[]}
       owner={null}
       locale="en-GB"
@@ -102,29 +97,12 @@ describe("CrmListClient", () => {
     expect(url).not.toContain("offset="); // reset to 0 → omitted
   });
 
-  test("New → fill → submit POSTs to the plural collection URL then refreshes", async () => {
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ record: { id: "r1" } }),
-    }));
-    vi.stubGlobal("fetch", fetchMock);
+  test("New navigates to the full-page create form", async () => {
     const user = userEvent.setup();
     renderClient();
 
     await user.click(screen.getByRole("button", { name: /new account/i }));
-    await user.type(screen.getByLabelText("Name"), "Acme");
-    await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [calledUrl, init] = fetchMock.mock.calls[0] as unknown as [
-      string,
-      RequestInit,
-    ];
-    expect(calledUrl).toBe("/api/crm/accounts");
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ data: { name: "Acme" } });
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    vi.unstubAllGlobals();
+    expect(push).toHaveBeenCalledWith("/crm/accounts/new");
   });
 });
