@@ -147,3 +147,21 @@ export function isSortable(fieldType: FieldType): boolean {
 export function isFilterable(fieldType: FieldType): boolean {
   return operatorsForType(fieldType).length > 0;
 }
+
+/**
+ * Field types that hold a free-text value and therefore get an inline
+ * per-column filter icon in the table header (Contains / Equals / Starts
+ * with). Numeric, currency, date, select, boolean and relationship columns
+ * are deliberately excluded — they are not "text values".
+ */
+const TEXT_FILTER_TYPES: ReadonlySet<FieldType> = new Set<FieldType>([
+  "text",
+  "long_text",
+  "email",
+  "phone",
+  "url",
+]);
+
+export function isTextFilterable(fieldType: FieldType): boolean {
+  return TEXT_FILTER_TYPES.has(fieldType);
+}

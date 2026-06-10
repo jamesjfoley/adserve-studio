@@ -3,6 +3,7 @@ import type { FieldType } from "@adserve/module-framework";
 import {
   isFilterable,
   isSortable,
+  isTextFilterable,
   operatorsForType,
 } from "@/components/dynamic-table/operators";
 
@@ -94,5 +95,28 @@ describe("isSortable", () => {
   test("multi_select and relationship are NOT sortable (no scalar cast)", () => {
     expect(isSortable("multi_select")).toBe(false);
     expect(isSortable("relationship")).toBe(false);
+  });
+});
+
+describe("isTextFilterable", () => {
+  test("text-value columns are text-filterable (get a header filter icon)", () => {
+    for (const t of ["text", "long_text", "email", "phone", "url"] as FieldType[]) {
+      expect(isTextFilterable(t)).toBe(true);
+    }
+  });
+
+  test("numeric, currency, date, select, boolean, multi_select are NOT", () => {
+    for (const t of [
+      "number",
+      "currency",
+      "date",
+      "datetime",
+      "select",
+      "boolean",
+      "multi_select",
+      "relationship",
+    ] as FieldType[]) {
+      expect(isTextFilterable(t)).toBe(false);
+    }
   });
 });

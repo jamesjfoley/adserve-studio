@@ -6,8 +6,9 @@ import type {
   FieldDefinitionWithLabels,
   LocalizedLabel,
 } from "@adserve/module-framework";
-import { isSortable } from "./operators";
-import type { SortState } from "./types";
+import { isSortable, isTextFilterable } from "./operators";
+import { ColumnFilter } from "./column-filter";
+import type { Filter, SortState } from "./types";
 
 interface TableHeaderProps {
   /** Visible columns, already ordered. */
@@ -20,6 +21,10 @@ interface TableHeaderProps {
   allSelected?: boolean;
   someSelected?: boolean;
   onToggleAll?: (checked: boolean) => void;
+  /** Committed filters — used to light up active column-filter icons. */
+  filters?: Filter[];
+  /** Commit (or clear, with null) the filter for one column. */
+  onColumnFilterChange?: (slug: string, next: Filter | null) => void;
 }
 
 /**
@@ -57,6 +62,8 @@ export function TableHeader({
   allSelected = false,
   someSelected = false,
   onToggleAll,
+  filters = [],
+  onColumnFilterChange,
 }: TableHeaderProps) {
   const selectAllRef = useRef<HTMLInputElement>(null);
   // `indeterminate` is a DOM-only property, not an attribute.
@@ -95,6 +102,10 @@ export function TableHeader({
               : active === "desc"
                 ? "descending"
                 : "none";
+          // Text-value columns get an inline filter icon; numeric/currency/
+          // date/select columns do not (per the column-filter UX).
+          const filterable =
+            isTextFilterable(f.fieldType) && onColumnFilterChange != null;
           return (
             <th
               key={f.id}
@@ -102,19 +113,29 @@ export function TableHeader({
               aria-sort={ariaSort}
               className="px-4 py-3 font-medium"
             >
-              {sortable ? (
-                <button
-                  type="button"
-                  onClick={() => onSortChange(nextSort(sort, f.slug))}
-                  aria-label={`Sort by ${label}`}
-                  className="inline-flex items-center gap-1 hover:text-[var(--foreground)]"
-                >
+              <span className="inline-flex items-center gap-1">
+                {sortable ? (
+                  <button
+                    type="button"
+                    onClick={() => onSortChange(nextSort(sort, f.slug))}
+                    aria-label={`Sort by ${label}`}
+                    className="inline-flex items-center gap-1 hover:text-[var(--foreground)]"
+                  >
+                    <span>{label}</span>
+                    <SortIcon direction={active} />
+                  </button>
+                ) : (
                   <span>{label}</span>
-                  <SortIcon direction={active} />
-                </button>
-              ) : (
-                <span>{label}</span>
-              )}
+                )}
+                {filterable ? (
+                  <ColumnFilter
+                    slug={f.slug}
+                    label={label}
+                    active={filters.find((x) => x.fieldSlug === f.slug) ?? null}
+                    onChange={(next) => onColumnFilterChange(f.slug, next)}
+                  />
+                ) : null}
+              </span>
             </th>
           );
         })}

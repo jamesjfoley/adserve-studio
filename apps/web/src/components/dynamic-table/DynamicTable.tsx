@@ -10,10 +10,9 @@ import {
 import { cn } from "@/lib/utils";
 import { formatFieldValue } from "../dynamic-form/format-field-value";
 import { ColumnToggle } from "./column-toggle";
-import { FilterBar } from "./filter-bar";
 import { Pagination } from "./pagination";
 import { TableHeader } from "./table-header";
-import type { DynamicTableProps, DynamicTableRecord } from "./types";
+import type { DynamicTableProps, DynamicTableRecord, Filter } from "./types";
 
 export type {
   DynamicTableProps,
@@ -124,9 +123,9 @@ export function DynamicTable({
   function commitSearch(term: string) {
     if (!searchField) return;
     const trimmed = term.trim();
-    const rest = filterState.filters.filter(
-      (x) => !(x.fieldSlug === searchField && x.operator === "contains")
-    );
+    // The search box and the search field's own column filter share a single
+    // slot, so drop ANY existing filter on that slug before re-adding.
+    const rest = filterState.filters.filter((x) => x.fieldSlug !== searchField);
     onFiltersChange({
       ...filterState,
       filters:
@@ -139,6 +138,16 @@ export function DynamicTable({
   function handleSearchSubmit(e: FormEvent) {
     e.preventDefault();
     commitSearch(searchDraft);
+  }
+
+  // One filter per column: replace any existing filter on that slug (or remove
+  // it when `next` is null). Reuses the same `onFiltersChange` commit seam.
+  function handleColumnFilterChange(slug: string, next: Filter | null) {
+    const rest = filterState.filters.filter((x) => x.fieldSlug !== slug);
+    onFiltersChange({
+      ...filterState,
+      filters: next ? [...rest, next] : rest,
+    });
   }
 
   function handleRowClick(
@@ -159,8 +168,8 @@ export function DynamicTable({
         className
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-1 items-start gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-1 items-center gap-4">
           {searchField ? (
             <form onSubmit={handleSearchSubmit} className="relative">
               <input
@@ -174,12 +183,20 @@ export function DynamicTable({
               />
             </form>
           ) : null}
-          <FilterBar
-            fields={orderedFields}
-            filterState={filterState}
-            onFiltersChange={onFiltersChange}
-            locale={locale}
-          />
+          <label className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={filterState.includeArchived}
+              onChange={(e) =>
+                onFiltersChange({
+                  ...filterState,
+                  includeArchived: e.target.checked,
+                })
+              }
+            />
+            Include archived
+          </label>
         </div>
         <ColumnToggle
           fields={orderedFields}
@@ -205,6 +222,8 @@ export function DynamicTable({
             allSelected={allSelected}
             someSelected={someSelected}
             onToggleAll={toggleAll}
+            filters={filterState.filters}
+            onColumnFilterChange={handleColumnFilterChange}
           />
           <tbody className="divide-y divide-[var(--border)]">
             {records.length === 0 ? (

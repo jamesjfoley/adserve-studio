@@ -174,17 +174,38 @@ describe("DynamicTable — sorting", () => {
   });
 });
 
-describe("DynamicTable — filtering", () => {
-  test("adding a text filter and applying emits the committed filter state", async () => {
+describe("DynamicTable — column filters", () => {
+  test("only text-value columns expose a filter icon (not numeric/currency)", () => {
+    render(<DynamicTable {...buildProps()} />);
+
+    // Text + email columns are filterable.
+    expect(
+      screen.getByRole("button", { name: "Filter by Name" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Filter by Email" })
+    ).toBeInTheDocument();
+    // Currency (Revenue) and multi_select (Tags) are not.
+    expect(
+      screen.queryByRole("button", { name: "Filter by Revenue" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Filter by Tags" })
+    ).not.toBeInTheDocument();
+  });
+
+  test("there is no global 'Add filter' control", () => {
+    render(<DynamicTable {...buildProps()} />);
+    expect(screen.queryByLabelText("Add filter")).not.toBeInTheDocument();
+  });
+
+  test("applying a column filter commits a single filter for that column", async () => {
     const onFiltersChange = vi.fn();
     const user = userEvent.setup();
     render(<DynamicTable {...buildProps({ onFiltersChange })} />);
 
-    await user.selectOptions(
-      screen.getByLabelText("Add filter"),
-      "name"
-    );
-    await user.type(screen.getByLabelText("Name value"), "Acme");
+    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
+    await user.type(screen.getByLabelText("Filter Name value"), "Acme");
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(onFiltersChange).toHaveBeenCalledTimes(1);
@@ -194,52 +215,104 @@ describe("DynamicTable — filtering", () => {
     });
   });
 
-  test("does NOT emit while typing — only on Apply", async () => {
+  test("does NOT emit while typing in the popover — only on Apply", async () => {
     const onFiltersChange = vi.fn();
     const user = userEvent.setup();
     render(<DynamicTable {...buildProps({ onFiltersChange })} />);
 
-    await user.selectOptions(screen.getByLabelText("Add filter"), "name");
-    await user.type(screen.getByLabelText("Name value"), "Acme");
+    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
+    await user.type(screen.getByLabelText("Filter Name value"), "Acme");
     expect(onFiltersChange).not.toHaveBeenCalled();
   });
 
-  test("between filter blocks Apply and shows an alert when from > to", async () => {
+  test("a chosen operator is carried into the committed filter", async () => {
     const onFiltersChange = vi.fn();
     const user = userEvent.setup();
     render(<DynamicTable {...buildProps({ onFiltersChange })} />);
 
-    await user.selectOptions(screen.getByLabelText("Add filter"), "revenue");
+    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
     await user.selectOptions(
-      screen.getByLabelText("Revenue operator"),
-      "between"
+      screen.getByLabelText("Name filter operator"),
+      "startsWith"
     );
-    await user.type(screen.getByLabelText("Revenue from"), "100");
-    await user.type(screen.getByLabelText("Revenue to"), "50");
-
-    expect(screen.getByRole("alert")).toHaveTextContent(/From must be/i);
-    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
-
-    // Fix the order → valid, emits the tuple.
-    await user.clear(screen.getByLabelText("Revenue to"));
-    await user.type(screen.getByLabelText("Revenue to"), "200");
-    expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+    await user.type(screen.getByLabelText("Filter Name value"), "Ac");
     await user.click(screen.getByRole("button", { name: "Apply" }));
+
     expect(onFiltersChange).toHaveBeenCalledWith({
+      filters: [{ fieldSlug: "name", operator: "startsWith", value: "Ac" }],
+      includeArchived: false,
+    });
+  });
+
+  test("a column filter replaces any existing filter on the same column", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({
+          onFiltersChange,
+          filterState: {
+            filters: [
+              { fieldSlug: "name", operator: "contains", value: "old" },
+              { fieldSlug: "email", operator: "contains", value: "keep" },
+            ],
+            includeArchived: false,
+          },
+        })}
+      />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Filter by Name" });
+    // The icon is active and the popover is seeded from the committed filter.
+    await user.click(trigger);
+    const input = screen.getByLabelText("Filter Name value");
+    expect(input).toHaveValue("old");
+    await user.clear(input);
+    await user.type(input, "new");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onFiltersChange).toHaveBeenLastCalledWith({
       filters: [
-        { fieldSlug: "revenue", operator: "between", value: ["100", "200"] },
+        { fieldSlug: "email", operator: "contains", value: "keep" },
+        { fieldSlug: "name", operator: "contains", value: "new" },
       ],
       includeArchived: false,
     });
   });
 
-  test("include-archived toggle is committed through Apply", async () => {
+  test("clearing a column filter removes only that column's filter", async () => {
+    const onFiltersChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DynamicTable
+        {...buildProps({
+          onFiltersChange,
+          filterState: {
+            filters: [
+              { fieldSlug: "name", operator: "contains", value: "x" },
+              { fieldSlug: "email", operator: "contains", value: "keep" },
+            ],
+            includeArchived: false,
+          },
+        })}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Filter by Name" }));
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+
+    expect(onFiltersChange).toHaveBeenLastCalledWith({
+      filters: [{ fieldSlug: "email", operator: "contains", value: "keep" }],
+      includeArchived: false,
+    });
+  });
+
+  test("include-archived toggle commits immediately", async () => {
     const onFiltersChange = vi.fn();
     const user = userEvent.setup();
     render(<DynamicTable {...buildProps({ onFiltersChange })} />);
 
     await user.click(screen.getByLabelText("Include archived"));
-    await user.click(screen.getByRole("button", { name: "Apply" }));
     expect(onFiltersChange).toHaveBeenCalledWith({
       filters: [],
       includeArchived: true,
