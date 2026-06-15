@@ -1,0 +1,17 @@
+{
+  "image": "181194339452.dkr.ecr.eu-west-2.amazonaws.com/adserve-studio:__IMAGE_TAG__",
+  "containerPort": 3000,
+  "awsLogsConfiguration": {
+    "logGroup": "/ecs/adserve-studio-preview",
+    "logStreamPrefix": "web"
+  },
+  "environment": [
+    { "name": "NODE_ENV", "value": "production" }
+  ],
+  "secrets": [
+    { "name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/preview-database-url-NL0qYQ" },
+    { "name": "CLERK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-secret-key-gtyEbe" },
+    { "name": "CLERK_WEBHOOK_SECRET", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-webhook-secret-rT5wow" },
+    { "name": "ANTHROPIC_API_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/anthropic-api-key-RVEmVq" }
+  ]
+}

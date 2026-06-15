@@ -2,6 +2,9 @@
 # Push the latest prototype code to the hosted preview AND sync data.
 # This is THE command behind "push the latest prototype to the hosted platform".
 #
+# Compute is Amazon ECS Express Mode (service 'adserve-studio-preview' in cluster
+# adserve-prod) — AWS's recommended managed container service, same as production.
+#
 #   scripts/deploy-preview.sh              # build+deploy code, then bidirectional data sync
 #   scripts/deploy-preview.sh --no-sync    # code only, skip the data sync
 #   scripts/deploy-preview.sh --data-mode push   # use 'push' (local->hosted full replace) instead of 'sync'
@@ -29,6 +32,8 @@ cd "$REPO_ROOT"
 ACCOUNT=181194339452
 REG="$ACCOUNT.dkr.ecr.eu-west-2.amazonaws.com"
 CLERK_PK="pk_test_Y2xlYXItYW5jaG92eS0yOC5jbGVyay5hY2NvdW50cy5kZXYk"
+CLUSTER="adserve-prod"
+SERVICE="adserve-studio-preview"
 SHA="$(git rev-parse --short HEAD)"
 TAG="preview-$SHA"
 
@@ -45,23 +50,25 @@ docker build --platform linux/amd64 \
 docker push "$REG/adserve-studio:$TAG"
 docker push "$REG/adserve-studio:preview-latest"
 
-echo "==> [2/4] Updating App Runner service to $TAG…"
-ARN="$(aws apprunner list-services \
-  --query "ServiceSummaryList[?ServiceName=='adserve-studio-preview'].ServiceArn | [0]" --output text)"
+echo "==> [2/4] Updating ECS Express service to $TAG…"
+ARN="$(aws ecs describe-express-gateway-service \
+  --service-arn "arn:aws:ecs:eu-west-2:$ACCOUNT:service/$CLUSTER/$SERVICE" \
+  --query 'service.serviceArn' --output text 2>/dev/null || true)"
 if [[ -z "$ARN" || "$ARN" == "None" ]]; then
-  echo "❌ preview service 'adserve-studio-preview' not found." >&2; exit 1
+  echo "❌ ECS Express service '$SERVICE' not found in cluster '$CLUSTER'." >&2; exit 1
 fi
 SRC="$(mktemp)"
-sed "s|__IMAGE_TAG__|$TAG|" scripts/apprunner-source.json > "$SRC"
-aws apprunner update-service --service-arn "$ARN" --source-configuration "file://$SRC" >/dev/null
+sed "s|__IMAGE_TAG__|$TAG|" scripts/ecs-express-source.json > "$SRC"
+aws ecs update-express-gateway-service --service-arn "$ARN" --primary-container "file://$SRC" >/dev/null
 rm -f "$SRC"
 
-echo "==> [3/4] Waiting for deployment to go live…"
+echo "==> [3/4] Waiting for the ECS rollout to complete…"
 for i in $(seq 1 80); do
-  S="$(aws apprunner describe-service --service-arn "$ARN" --query 'Service.Status' --output text)"
-  echo "    [$i] $S"
-  [[ "$S" == "RUNNING" ]] && break
-  case "$S" in *FAILED*) echo "❌ deployment failed — check App Runner logs." >&2; exit 1 ;; esac
+  STATE="$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+    --query 'services[0].deployments[0].rolloutState' --output text 2>/dev/null || echo PENDING)"
+  echo "    [$i] rollout: $STATE"
+  [[ "$STATE" == "COMPLETED" ]] && break
+  [[ "$STATE" == "FAILED" ]] && { echo "❌ rollout failed — check ECS/CloudWatch logs." >&2; exit 1; }
   sleep 15
 done
 
@@ -72,6 +79,7 @@ else
   echo "==> [4/4] Skipping data sync (--no-sync)."
 fi
 
-URL="$(aws apprunner describe-service --service-arn "$ARN" --query 'Service.ServiceUrl' --output text)"
+EP="$(aws ecs describe-express-gateway-service --service-arn "$ARN" \
+  --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' --output text 2>/dev/null || true)"
 echo ""
-echo "✅ Preview updated to $TAG — https://$URL"
+echo "✅ Preview updated to $TAG — https://$EP"
