@@ -50,8 +50,6 @@ existing ECR repo with a `preview-*` tag. All in account `181194339452`, `eu-wes
   the local `pnpm dev` (superuser, RLS-bypassed) experience, so the preview behaves
   exactly like the prototype does locally. This is deliberate; the preview is NOT a
   prod-RLS-fidelity test.
-- **PROTOTYPE banner** renders only when the image is built with
-  `--build-arg NEXT_PUBLIC_PROTOTYPE=true` (committed `9069759`).
 - Tasks run in public subnets (ECS Express default for an internet-facing gateway);
   the RDS SG only admits the task SG and your IP.
 

@@ -45,7 +45,6 @@ echo "==> [1/4] Building image $TAG (linux/amd64)…"
 aws ecr get-login-password | docker login --username AWS --password-stdin "$REG" >/dev/null
 docker build --platform linux/amd64 \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PK" \
-  --build-arg NEXT_PUBLIC_PROTOTYPE=true \
   -t "$REG/adserve-studio:$TAG" -t "$REG/adserve-studio:preview-latest" .
 docker push "$REG/adserve-studio:$TAG"
 docker push "$REG/adserve-studio:preview-latest"
