@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -8,6 +9,18 @@ import { defineConfig } from "vitest/config";
 export const sharedConfig = defineConfig({
   test: {
     environment: "node",
+    // Safety net against leaked fixture data: after every run, purge any
+    // committed test tenants/users (scoped strictly to the fixture naming
+    // patterns — never real data). Prevents the accumulation that once left
+    // ~26k orphaned test users in the shared dev DB.
+    globalSetup: [
+      fileURLToPath(
+        new URL(
+          "./packages/database/src/test-helpers/global-teardown.ts",
+          import.meta.url
+        )
+      ),
+    ],
     // RLS parity (hardening step 1): the test-helpers' privileged `testDb`
     // (fixture seeding + engine tests) connects as the owner/superuser, exactly
     // as prod seeds run as the privileged migrator. The application's own
