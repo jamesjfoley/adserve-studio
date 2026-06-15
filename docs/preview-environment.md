@@ -54,6 +54,18 @@ provides a free HTTPS `*.awsapprunner.com` URL out of the box. Image is built lo
 
 ## Redeploy (after new prototype commits)
 
+**One command — this is what "push the latest prototype to the hosted platform" runs.**
+It rebuilds the image from current HEAD, updates App Runner, waits for the rollout,
+then runs a **bidirectional data sync** so local and hosted converge:
+
+```bash
+scripts/deploy-preview.sh                 # code + bidirectional data sync (default)
+scripts/deploy-preview.sh --no-sync       # code only
+scripts/deploy-preview.sh --data-mode push  # code, then local->hosted full-replace
+```
+
+<details><summary>Equivalent manual steps</summary>
+
 ```bash
 export AWS_PROFILE=adserve-admin AWS_DEFAULT_REGION=eu-west-2
 REG=181194339452.dkr.ecr.eu-west-2.amazonaws.com
@@ -68,6 +80,7 @@ docker push $REG/adserve-studio:preview-$SHA && docker push $REG/adserve-studio:
 aws apprunner update-service --service-arn <service-arn> \
   --source-configuration "ImageRepository={ImageIdentifier=$REG/adserve-studio:preview-$SHA,ImageRepositoryType=ECR}"
 ```
+</details>
 
 ## Data sync (local ⇄ hosted)
 

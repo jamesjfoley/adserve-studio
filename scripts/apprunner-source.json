@@ -1,0 +1,24 @@
+{
+  "AuthenticationConfiguration": {
+    "AccessRoleArn": "arn:aws:iam::181194339452:role/adserve-preview-apprunner-access"
+  },
+  "AutoDeploymentsEnabled": false,
+  "ImageRepository": {
+    "ImageIdentifier": "181194339452.dkr.ecr.eu-west-2.amazonaws.com/adserve-studio:__IMAGE_TAG__",
+    "ImageRepositoryType": "ECR",
+    "ImageConfiguration": {
+      "Port": "3000",
+      "RuntimeEnvironmentVariables": {
+        "NODE_ENV": "production",
+        "HOSTNAME": "0.0.0.0",
+        "PORT": "3000"
+      },
+      "RuntimeEnvironmentSecrets": {
+        "DATABASE_URL": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/preview-database-url-NL0qYQ",
+        "CLERK_SECRET_KEY": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-secret-key-gtyEbe",
+        "CLERK_WEBHOOK_SECRET": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/clerk-webhook-secret-rT5wow",
+        "ANTHROPIC_API_KEY": "arn:aws:secretsmanager:eu-west-2:181194339452:secret:adserve/anthropic-api-key-RVEmVq"
+      }
+    }
+  }
+}
