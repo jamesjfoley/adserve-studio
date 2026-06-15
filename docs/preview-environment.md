@@ -69,6 +69,34 @@ aws apprunner update-service --service-arn <service-arn> \
   --source-configuration "ImageRepository={ImageIdentifier=$REG/adserve-studio:preview-$SHA,ImageRepositoryType=ECR}"
 ```
 
+## Data sync (local ⇄ hosted)
+
+On-demand sync of "My Organization" CRM content (`records` + `record_relationships`,
+auto-ensuring referenced users). Does NOT touch tenants/roles/memberships (the hosted
+demo login survives) or schema. **Dry-run by default — add `--apply` to write.**
+
+```bash
+scripts/sync-preview.sh sync          # preview a bidirectional merge (no writes)
+scripts/sync-preview.sh sync  --apply # bidirectional: additive + newest-updated_at-wins
+scripts/sync-preview.sh push  --apply # local  -> hosted, FULL REPLACE within tenant
+scripts/sync-preview.sh pull  --apply # hosted -> local,  FULL REPLACE within tenant
+```
+
+Implemented in `packages/database/src/scripts/sync-preview.ts` (wrapper fetches the
+hosted URL from Secrets Manager). **Semantics & limits — read before relying on it:**
+- `sync` propagates adds in both directions and edits via newest `updated_at`
+  (incl. `is_archived` archive/restore "deletes"). It does **not** propagate *hard*
+  deletes, and if the same record was edited on both sides since the last sync, the
+  older edit is lost (last-write-wins). Verified bidirectional 2026-06-15.
+- `push`/`pull` are a tenant-scoped **full replace** — they propagate hard deletes too,
+  but overwrite any independent changes on the target side. Pick the source of truth.
+- Schema changes (new entity type / field) are out of scope — the tool errors clearly
+  if a referenced entity type/relationship is missing in the target; full-refresh or
+  re-seed that side first.
+- This is on-demand, not continuous. True multi-master sync was deliberately not built
+  (Postgres has no native multi-master; conflict/delete semantics can't be made safe
+  automatically for a throwaway env).
+
 ## Teardown (stops all preview cost)
 
 ```bash
