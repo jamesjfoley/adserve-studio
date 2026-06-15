@@ -36,6 +36,34 @@ export default function RootLayout({
           />
         </head>
         <body className="min-h-screen antialiased">
+          {process.env.NEXT_PUBLIC_PROTOTYPE === "true" && (
+            <div
+              role="note"
+              aria-label="Prototype environment notice"
+              style={{
+                position: "sticky",
+                top: 0,
+                zIndex: 9999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                width: "100%",
+                padding: "4px 12px",
+                fontSize: "12px",
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "#451a03",
+                background:
+                  "repeating-linear-gradient(45deg,#fbbf24,#fbbf24 12px,#f59e0b 12px,#f59e0b 24px)",
+                borderBottom: "1px solid #b45309",
+              }}
+            >
+              Prototype — not production · dummy data · do not enter real
+              customer information
+            </div>
+          )}
           <PermissionsProvider>{children}</PermissionsProvider>
         </body>
       </html>

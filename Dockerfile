@@ -28,6 +28,11 @@ WORKDIR /app
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 
+# Marks the build as the colleague-facing prototype preview (Stage 2). Renders
+# the "PROTOTYPE — not production" banner. Unset/false for all prod builds.
+ARG NEXT_PUBLIC_PROTOTYPE
+ENV NEXT_PUBLIC_PROTOTYPE=$NEXT_PUBLIC_PROTOTYPE
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
